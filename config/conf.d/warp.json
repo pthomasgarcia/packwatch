@@ -1,0 +1,11 @@
+{
+  "app_key": "Warp",
+  "enabled": true,
+  "application": {
+    "name": "Warp",
+    "type": "custom",
+    "package_name": "warp-terminal",
+    "custom_checker_script": "warp.sh",
+    "custom_checker_func": "check_warp"
+  }
+}

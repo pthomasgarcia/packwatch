@@ -1,0 +1,11 @@
+{
+    "app_key": "Cursor",
+    "enabled": true,
+    "application": {
+        "name": "Cursor",
+        "type": "custom",
+        "install_path": "$HOME/Applications/cursor",
+        "custom_checker_script": "cursor.sh",
+        "custom_checker_func": "check_cursor"
+    }
+}

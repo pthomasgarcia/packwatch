@@ -1,0 +1,12 @@
+{
+  "app_key": "WaveTerm",
+  "enabled": true,
+  "application": {
+    "name": "WaveTerm",
+    "type": "github_deb",
+    "package_name": "waveterm",
+    "repo_owner": "wavetermdev",
+    "repo_name": "waveterm",
+    "filename_pattern_template": "waveterm-linux-amd64-%s.deb"
+  }
+}

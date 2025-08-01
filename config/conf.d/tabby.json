@@ -1,0 +1,12 @@
+{
+  "app_key": "Tabby",
+  "enabled": true,
+  "application": {
+    "name": "Tabby",
+    "type": "github_deb",
+    "package_name": "tabby-terminal",
+    "repo_owner": "Eugeny",
+    "repo_name": "tabby",
+    "filename_pattern_template": "tabby-%s-linux-x64.deb"
+  }
+}

@@ -1,0 +1,12 @@
+{
+    "app_key": "Fastfetch",
+    "enabled": true,
+    "application": {
+        "name": "Fastfetch",
+        "type": "github_deb",
+        "package_name": "fastfetch",
+        "repo_owner": "fastfetch-cli",
+        "repo_name": "fastfetch",
+        "filename_pattern_template": "fastfetch-linux-amd64.deb"
+    }
+}

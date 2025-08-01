@@ -1,0 +1,6 @@
+{
+  "github_deb": "name,package_name,repo_owner,repo_name,filename_pattern_template",
+  "direct_deb": "name,package_name,download_url",
+  "appimage": "name,install_path,download_url",
+  "custom": "name,custom_checker_script,custom_checker_func"
+}

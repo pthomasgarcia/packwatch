@@ -1,0 +1,10 @@
+{
+    "app_key": "Ollama",
+    "enabled": true,
+    "application": {
+        "name": "Ollama",
+        "type": "custom",
+        "custom_checker_script": "ollama.sh",
+        "custom_checker_func": "check_ollama_updates"
+    }
+}
