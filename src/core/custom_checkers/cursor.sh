@@ -25,7 +25,7 @@ check_cursor() {
     latest_version=$(echo "$api_json" | jq -r '.version // empty')
 
     if [[ -z "$actual_download_url" ]] || [[ -z "$latest_version" ]]; then
-        jq -n --arg name "$name" '{status: "error", error_message: "Failed to extract version or download URL for \($name).", error_code: "VALIDATION_ERROR"}'
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to extract version or download URL for $name." "cursor"
         return 1
     fi
 

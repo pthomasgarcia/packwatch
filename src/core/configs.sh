@@ -46,7 +46,7 @@ configs::load_schema() {
     fi
 
     local schema_content
-    schema_content=$(cat "$schema_file")
+    schema_content=$(<"$schema_file")
     if ! jq -e . "$schema_file" >/dev/null 2>&1; then
         errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in schema file: '$schema_file'"
         return 1
@@ -75,7 +75,7 @@ configs::validate_single_config_file() {
     local filename
     filename="$(basename "$config_file_path")"
     local file_content
-    file_content=$(cat "$config_file_path")
+    file_content=$(<"$config_file_path")
 
     if ! jq -e . "$config_file_path" >/dev/null 2>&1; then
         errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in: '$filename'"
@@ -176,7 +176,7 @@ configs::get_validated_apps_json() {
     for file in "${config_files[@]}"; do
         if configs::validate_single_config_file "$file"; then
             local file_content
-            file_content=$(cat "$file")
+            file_content=$(<"$file")
             local enabled_status_check
             enabled_status_check=$(systems::get_json_value "$file_content" '.enabled' "$(basename "$file")")
             if [[ "$enabled_status_check" == "true" ]]; then
@@ -212,34 +212,32 @@ configs::populate_globals_from_json() {
     local apps_to_check_json="[]"
     local applications_json="{}"
 
-    while IFS= read -r app_json; do
-        local app_key
-        app_key=$(systems::get_json_value "$app_json" '.app_key' "Config transformation") || continue
-        apps_to_check_json=$(echo "$apps_to_check_json" | jq --arg key "$app_key" '. + [$key]')
+    local extracted_data
+    extracted_data=$(echo "$merged_json_array" | jq -c '
+        reduce .[] as $item ({
+            apps_to_check: [],
+            applications: {}
+        };
+        .apps_to_check += [$item.app_key] |
+        .applications += {($item.app_key): $item.application}
+        )
+    ')
 
-        local app_details_json
-        app_details_json=$(echo "$app_json" | jq '.application' 2>/dev/null)
-        if [[ $? -ne 0 ]]; then
-            loggers::log_message "ERROR" "Failed to extract application block for key: '$app_key'. Skipping."
-            counters::inc_failed
-            continue
-        fi
-        applications_json=$(echo "$applications_json" | jq --arg key "$app_key" --argjson details "$app_details_json" '. + {($key): $details}')
-    done < <(echo "$merged_json_array" | jq -c '.[]')
-
-    mapfile -t CUSTOM_APP_KEYS < <(echo "$apps_to_check_json" | jq -r '.[]')
+    mapfile -t CUSTOM_APP_KEYS < <(echo "$extracted_data" | jq -r '.apps_to_check[]')
+    applications_json=$(echo "$extracted_data" | jq -c '.applications')
 
     local app_key prop_key prop_value
-    while IFS= read -r app_key; do
-        [[ -z "$app_key" ]] && continue
-        while IFS= read -r prop_key; do
-            [[ -z "$prop_key" || "$prop_key" == "_comment"* ]] && continue
-            prop_value=$(systems::get_json_value "$applications_json" ".\"$app_key\".\"$prop_key\"" "Property '$prop_key' for '$app_key'")
-            if [[ $? -eq 0 && -n "$prop_value" ]]; then
-                ALL_APP_CONFIGS["${app_key}_${prop_key}"]="$prop_value"
-            fi
-        done < <(echo "$applications_json" | jq -r --arg app_key "$app_key" '.[$app_key] | keys[]')
-    done < <(echo "$applications_json" | jq -r 'keys[]')
+    while IFS=$'\t' read -r app_key prop_key prop_value; do
+        [[ -z "$app_key" || -z "$prop_key" || "$prop_key" == "_comment"* ]] && continue
+        ALL_APP_CONFIGS["${app_key}_${prop_key}"]="$prop_value"
+    done < <(echo "$applications_json" | jq -r '
+        to_entries[] |
+        .key as $app_key |
+        .value |
+        to_entries[] |
+        select(.key | startswith("_comment") | not) |
+        [$app_key, .key, .value] | @tsv
+    ')
 }
 
 # ------------------------------------------------------------------------------

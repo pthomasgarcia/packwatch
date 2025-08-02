@@ -17,6 +17,11 @@ check_zed() {
         awk -F: '/Version:/ {print $2}' | xargs
     )
 
+    if [[ -z "$latest_version" ]]; then
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to retrieve latest version for $name." "zed"
+        return 1
+    fi
+
     # STRIP LEADING 'v'
     installed_version="${installed_version#v}"
     latest_version="${latest_version#v}"

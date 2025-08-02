@@ -1,19 +1,16 @@
-feat: Refactor core logic for modularity and robustness
+feat: Add script-based installer and refactor Ollama
 
-This commit introduces a major refactoring of the application's core logic to improve modularity, robustness, and maintainability.
+This commit introduces a new `script` application type to handle installations that are performed by executing a shell script. This provides a more generic and secure way to handle applications like Ollama, removing the need for special-cased logic in the `custom` handler.
 
-Key changes include:
+Key changes:
 
-- **Modularization:** The main script has been broken down into smaller, more focused modules with clear responsibilities (e.g., `cli.sh`, `configs.sh`, `updates.sh`). This improves code organization and makes it easier to understand and maintain.
+- **New `script` type:**
+  - Added a new `script` type to `updates.sh` with a corresponding `check_script` handler and `process_script_installation` function.
+  - The new type is defined in `config/schema.json` and requires `download_url`, `version_url`, and `version_regex` to be specified.
 
-- **Improved Error Handling:** The error handling has been centralized and made more consistent across the application.
+- **Ollama Refactoring:**
+  - The Ollama configuration in `config/conf.d/ollama.json` has been updated to use the new `script` type.
+  - The custom checker script `src/core/custom_checkers/ollama.sh` has been deleted as it is no longer needed.
 
-- **CLI Enhancements:** The command-line interface has been improved to allow specifying which applications to check.
-
-- **New `script` Installation Type:** A new `script` installation type has been added to support applications that are installed via a shell script (e.g., Ollama).
-
-- **Bug Fixes:**
-  - Fixed a bug where UI messages were being captured into variables during the download process, causing installation failures.
-  - Corrected the `jq` expression for finding assets in GitHub releases.
-
-- **Code Cleanup:** The codebase has been cleaned up to improve readability and consistency.
+- **Minor Improvements:**
+  - The discovery of configuration files in `src/core/configs.sh` is now sorted to ensure a consistent order of execution.

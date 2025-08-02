@@ -13,14 +13,14 @@ check_veracrypt() {
     local url="https://veracrypt.fr/en/Downloads.html"
     local page_content
     if ! page_content=$(networks::fetch_cached_data "$url" "html"); then
-        jq -n --arg name "$name" '{status: "error", error_message: "Failed to fetch download page for \($name).", error_code: "NETWORK_ERROR"}'
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to fetch download page for $name." "veracrypt"
         return 1
     fi
 
     local latest_version
     latest_version=$(echo "$page_content" | grep -oP 'VeraCrypt \K\d+\.\d+\.\d+' | head -n1)
     if [[ -z "$latest_version" ]]; then
-        jq -n --arg name "$name" '{status: "error", error_message: "Failed to detect latest version for \($name).", error_code: "VALIDATION_ERROR"}'
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to detect latest version for $name." "veracrypt"
         return 1
     fi
 
@@ -51,7 +51,7 @@ check_veracrypt() {
     fi
 
     if [[ -z "$download_url_final" ]] || ! validators::check_url_format "$download_url_final"; then
-        jq -n --arg name "$name" '{status: "error", error_message: "No compatible DEB package found for \($name).", error_code: "NETWORK_ERROR"}'
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "No compatible DEB package found for $name." "veracrypt"
         return 1
     fi
 

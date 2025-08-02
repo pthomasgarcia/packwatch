@@ -12,7 +12,7 @@ check_warp() {
     local html_content
     html_content=$(systems::reattempt_command 3 5 curl -s -L -A "${NETWORK_CONFIG[USER_AGENT]}" "$url")
     if [ $? -ne 0 ] || [ -z "$html_content" ]; then
-        jq -n --arg name "$name" '{status: "error", error_message: "Failed to fetch download page for \($name).", error_code: "NETWORK_ERROR"}'
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to fetch download page for $name." "warp"
         return 1
     fi
 
@@ -22,7 +22,7 @@ check_warp() {
     latest_version=$(echo "$latest_version_raw" | sed 's/^v//')
 
     if [[ -z "$latest_version" ]]; then
-        jq -n --arg name "$name" '{status: "error", error_message: "Failed to extract version for \($name).", error_code: "VALIDATION_ERROR"}'
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to extract version for $name." "warp"
         return 1
     fi
 
@@ -35,7 +35,7 @@ check_warp() {
         "https://app.warp.dev/download?package=deb" | tr -d '\r')
 
     if [[ -z "$actual_deb_url" ]] || ! validators::check_url_format "$actual_deb_url"; then
-        jq -n --arg name "$name" '{status: "error", error_message: "Failed to resolve download URL for \($name).", error_code: "NETWORK_ERROR"}'
+        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to resolve download URL for $name." "warp"
         return 1
     fi
 
