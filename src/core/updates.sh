@@ -25,6 +25,7 @@ declare -A UPDATE_HANDLERS
 UPDATE_HANDLERS["github_deb"]="updates::check_github_deb"
 UPDATE_HANDLERS["direct_deb"]="updates::check_direct_deb"
 UPDATE_HANDLERS["appimage"]="updates::check_appimage"
+UPDATE_HANDLERS["script"]="updates::check_script" # New type for script-based installations
 UPDATE_HANDLERS["flatpak"]="updates::check_flatpak" # Renamed for consistency as it also checks
 UPDATE_HANDLERS["custom"]="updates::handle_custom_check"
 
@@ -34,8 +35,166 @@ declare -A APP_TYPE_VALIDATIONS
 APP_TYPE_VALIDATIONS["github_deb"]="name,package_name,repo_owner,repo_name,filename_pattern_template"
 APP_TYPE_VALIDATIONS["direct_deb"]="name,package_name,download_url"
 APP_TYPE_VALIDATIONS["appimage"]="name,install_path,download_url"
+APP_TYPE_VALIDATIONS["script"]="name,download_url,version_url,version_regex" # New type for script-based installations
 APP_TYPE_VALIDATIONS["flatpak"]="name,flatpak_app_id"
 APP_TYPE_VALIDATIONS["custom"]="name,custom_checker_script,custom_checker_func"
+
+# ------------------------------------------------------------------------------
+# SECTION: Script-based Update Flow
+# ------------------------------------------------------------------------------
+
+updates::process_script_installation() {
+    local app_name="$1"
+    local latest_version="$2"
+    local download_url="$3"
+    local app_key="$4"
+
+    if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$app_key" ]]; then
+        errors::handle_error "VALIDATION_ERROR" "Invalid parameters for script update flow (version, URL, or app_key missing)" "$app_name"
+        return 1
+    fi
+
+    local temp_script_path
+    local base_filename_for_tmp
+    base_filename_for_tmp="$(basename "$download_url" | cut -d'?' -f1 | sed 's/\.sh$//')"
+    base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
+    temp_script_path=$(mktemp "/tmp/${base_filename_for_tmp}.XXXXXX.sh")
+    if [[ $? -ne 0 ]]; then
+        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file for script: '${base_filename_for_tmp}.XXXXXX.sh'" "$app_name"
+        return 1
+    fi
+    TEMP_FILES+=("$temp_script_path")
+
+    updates::on_download_start "$app_name" "unknown" # Hook
+    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_script_path" ""; then # DI applied
+        errors::handle_error "NETWORK_ERROR" "Failed to download script" "$app_name"
+        return 1
+    fi
+    updates::on_download_complete "$app_name" "$temp_script_path" # Hook
+
+    if ! chmod +x "$temp_script_path"; then
+        errors::handle_error "PERMISSION_ERROR" "Failed to make script executable: '$temp_script_path'" "$app_name"
+        return 1
+    fi
+
+    local prompt_msg="Do you want to install $(_bold "$app_name") (v$latest_version)?"
+    local current_installed_version
+    current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
+    if [[ "$current_installed_version" != "0.0.0" ]]; then
+        prompt_msg="Do you want to update $(_bold "$app_name") to (v$latest_version)?"
+    fi
+
+    notifiers::send_notification "${app_name} Update Available" "New script downloaded" "normal"
+
+    updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name" # Pre-install hook
+
+    if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
+        updates::on_install_start "$app_name" # Hook
+        if [[ $DRY_RUN -eq 1 ]]; then
+            loggers::log_message "DEBUG" "  [DRY RUN] Would execute script: 'sudo bash $temp_script_path'."
+            if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
+                loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name' in dry run."
+            fi
+            loggers::print_ui_line "  " "[DRY RUN] " "Script-based update simulated for $(_bold "$app_name")." _color_yellow
+            return 0
+        fi
+
+        loggers::print_ui_line "  " "→ " "Executing installation script for $(_bold "$app_name")..."
+        if sudo bash "$temp_script_path"; then
+            systems::unregister_temp_file "$temp_script_path"
+            if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
+                loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
+            fi
+            updates::on_install_complete "$app_name" # Hook
+            counters::inc_updated
+            return 0
+        else
+            errors::handle_error "INSTALLATION_ERROR" "Script execution failed for '$app_name'" "$app_name"
+            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}" # Error hook
+            return 1
+        fi
+    else
+        updates::on_install_skipped "$app_name" # Hook
+        counters::inc_skipped
+        return 0
+    fi
+}
+
+# Updates module; checks for updates for a script-based application.
+updates::check_script() {
+    local -n app_config_ref=$1
+    local name="${app_config_ref[name]}"
+    local app_key="${app_config_ref[app_key]}"
+    local download_url="${app_config_ref[download_url]}"
+    local version_url="${app_config_ref[version_url]}"
+    local version_regex="${app_config_ref[version_regex]}"
+    local source="Script Download"
+
+    if ! validators::check_url_format "$download_url"; then
+        errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
+        loggers::print_ui_line "  " "✗ " "Invalid download URL configured." _color_red
+        return 1
+    fi
+    if ! validators::check_url_format "$version_url"; then
+        errors::handle_error "CONFIG_ERROR" "Invalid version URL in configuration" "$name"
+        loggers::print_ui_line "  " "✗ " "Invalid version URL configured." _color_red
+        return 1
+    fi
+    if [[ -z "$version_regex" ]]; then
+        errors::handle_error "CONFIG_ERROR" "Missing version regex in configuration" "$name"
+        loggers::print_ui_line "  " "✗ " "Missing version regex configured." _color_red
+        return 1
+    fi
+
+    local installed_version
+    installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
+
+    loggers::print_ui_line "  " "→ " "Checking $(_bold "$name") for latest version..."
+
+    local latest_version="0.0.0"
+    local api_response
+    api_response=$(curl -s -m 30 "$version_url")
+    if [[ $? -eq 0 && -n "$api_response" ]]; then
+        # Attempt to parse as JSON first, then fall back to regex
+        local parsed_version
+        parsed_version=$(echo "$api_response" | jq -r ".tag_name" 2>/dev/null | sed 's/^v//')
+        if [[ -n "$parsed_version" && "$parsed_version" != "null" ]]; then
+            latest_version=$(versions::normalize "$parsed_version")
+            source="GitHub Releases (via script type)"
+        else
+            # Fallback to regex if JSON parsing fails or is not applicable
+            latest_version=$(echo "$api_response" | grep -oE "$version_regex" | head -n1)
+            latest_version=$(versions::normalize "$latest_version")
+            source="URL Regex (via script type)"
+        fi
+
+        if [[ -z "$latest_version" || "$latest_version" == "0.0.0" ]]; then
+            loggers::log_message "WARN" "Could not extract version from '$version_url' using regex '$version_regex' for '$name'. Defaulting to 0.0.0."
+        fi
+    else
+        errors::handle_error "NETWORK_ERROR" "Failed to fetch version from '$version_url' for '$name'." "$name"
+        loggers::print_ui_line "  " "✗ " "Failed to fetch version from '$version_url' for '$name'." _color_red
+        return 1
+    fi
+
+    loggers::print_ui_line "  " "Installed: " "$installed_version"
+    loggers::print_ui_line "  " "Source:    " "$source"
+    loggers::print_ui_line "  " "Latest:    " "$latest_version"
+
+    if updates::is_needed "$installed_version" "$latest_version"; then
+        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" _color_yellow
+        updates::process_script_installation \
+            "${name}" \
+            "${latest_version}" \
+            "${download_url}" \
+            "${app_key}"
+    else
+        loggers::print_ui_line "  " "✓ " "Up to date." _color_green
+        counters::inc_up_to_date
+    fi
+
+    return 0
+}
 
 # 7. Progress Tracking Callbacks
 # Helper function for formatting bytes for progress tracking
@@ -495,7 +654,7 @@ updates::check_github_deb() {
     loggers::print_ui_line "  " "Installed: " "$installed_version"
     loggers::print_ui_line "  " "Source:    " "$source"
     loggers::print_ui_line "  " "Latest:    " "$latest_version"
-
+ 
     if updates::is_needed "$installed_version" "$latest_version"; then
         loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" _color_yellow
         local download_filename
@@ -577,7 +736,6 @@ updates::check_direct_deb() {
     updates::on_download_start "$name" "unknown" # Hook
     if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_download_file" ""; then # DI applied
         errors::handle_error "NETWORK_ERROR" "Failed to download package for '$name'." "$name"
-        loggers::print_ui_line "  " "✗ " "Failed to download package for '$name'." _color_red
         return 1
     fi
     updates::on_download_complete "$name" "$temp_download_file" # Hook
@@ -1071,50 +1229,7 @@ updates::handle_custom_check() {
     loggers::print_ui_line "  " "Source:    " "$source"
     loggers::print_ui_line "  " "Latest:    " "$latest_version"
 
-    # Special handling for Ollama
-    if [[ "$app_display_name" == "Ollama" ]] && [[ "$status" == "success" ]] && updates::is_needed "$installed_version" "$latest_version"; then
-        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" _color_yellow
-        
-        local prompt_msg="Do you want to install $(_bold "$app_display_name") v$latest_version?"
-        if [[ "$installed_version" != "0.0.0" ]]; then
-            prompt_msg="Do you want to update $(_bold "$app_display_name") to v$latest_version?"
-        fi
-        
-        notifiers::send_notification "$app_display_name Update Available" "v$latest_version available" "normal"
-        updates::trigger_hooks PRE_INSTALL_HOOKS "$app_display_name"
-        
-        if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then
-            updates::on_install_start "$app_display_name"
-            if [[ $DRY_RUN -eq 1 ]]; then
-                loggers::print_ui_line "    " "[DRY RUN] " "Would install Ollama v$latest_version" _color_yellow
-                updates::on_install_complete "$app_display_name"
-                counters::inc_updated
-                return 0
-            fi
-            
-            # Install Ollama using the official script
-            loggers::print_ui_line "  " "→ " "Installing Ollama v$latest_version..."
-            if curl -fsSL https://ollama.com/install.sh | sudo sh; then
-                updates::on_install_complete "$app_display_name"
-                counters::inc_updated
-                
-                # Update the installed version in JSON
-                if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then
-                    loggers::log_message "WARN" "Failed to update installed version JSON for '$app_display_name', but installation was successful."
-                fi
-                
-                return 0
-            else
-                errors::handle_error "INSTALLATION_ERROR" "Ollama installation failed" "$app_display_name"
-                updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}"
-                return 1
-            fi
-        else
-            updates::on_install_skipped "$app_display_name"
-            counters::inc_skipped
-            return 0
-        fi
-    elif [[ "$status" == "success" ]] && updates::is_needed "$installed_version" "$latest_version"; then
+    if [[ "$status" == "success" ]] && updates::is_needed "$installed_version" "$latest_version"; then
         local install_type
         install_type=$(echo "$custom_checker_output" | jq -r '.install_type // "unknown"')
         
@@ -1126,8 +1241,8 @@ updates::handle_custom_check() {
                 download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
                 local gpg_key_id_from_output
                 gpg_key_id_from_output=$(echo "$custom_checker_output" | jq -r '.gpg_key_id // empty')
-                local gpg_fingerprint_from_output  
-                gpg_fingerprint_from_output=$(echo "$custom_checker_output" | jq -r '.gpg_fingerprint // empty')
+                local gpg_fingerprint_from_output
+                gpg_fingerprint_from_output=$(echo "$custom_checker_output" | jq -r '.gpg_fingerprint')
                 
                 updates::process_deb_package \
                     "${app_config_ref[name]}" \

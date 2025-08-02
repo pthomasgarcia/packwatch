@@ -163,7 +163,7 @@ configs::get_validated_apps_json() {
     local config_files=()
     while IFS= read -r -d '' file; do
         config_files+=("$file")
-    done < <(find "$conf_dir" -maxdepth 1 -name "*.json" -not -name ".*" -not -name "_*" -type f -print0)
+    done < <(find "$conf_dir" -maxdepth 1 -name "*.json" -not -name ".*" -not -name "_*" -type f -print0 | sort -z)
 
     if [[ ${#config_files[@]} -eq 0 ]]; then
         errors::handle_error "CONFIG_ERROR" "No config files found in: '$conf_dir'."
