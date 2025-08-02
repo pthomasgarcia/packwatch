@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-# Custom checker for VeraCrypt.
-# This script will now output JSON to stdout upon success.
-
+# Custom checker for VeraCrypt
 check_veracrypt() {
     local -n app_config_ref=$1
     local name="${app_config_ref[name]}"
@@ -55,10 +53,8 @@ check_veracrypt() {
         return 1
     fi
 
-    local output_status="success"
-    if ! updates::is_needed "$installed_version" "$latest_version"; then
-        output_status="no_update"
-    fi
+    local output_status
+    output_status=$(checker_utils::determine_status "$installed_version" "$latest_version")
     
     local gpg_key_id="${app_config_ref[gpg_key_id]:-}"
     local gpg_fingerprint="${app_config_ref[gpg_fingerprint]:-}"

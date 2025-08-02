@@ -35,6 +35,8 @@ source "$CORE_DIR/../lib/systems.sh"
 source "$CORE_DIR/../lib/validators.sh"
 source "$CORE_DIR/../lib/versions.sh"
 
+source "$CORE_DIR/../lib/checker_utils.sh"
+
 # Core logic modules
 source "$CORE_DIR/networks.sh"
 source "$CORE_DIR/repositories.sh"

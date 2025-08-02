@@ -18,8 +18,10 @@ check_warp() {
 
     local latest_version_raw
     latest_version_raw=$(echo "$html_content" | grep -oP 'window\.warp_app_version="v\K[^"]+' | head -1)
+    
+    # Use the new utility function for consistency
     local latest_version
-    latest_version=$(echo "$latest_version_raw" | sed 's/^v//')
+    latest_version=$(checker_utils::strip_version_prefix "$latest_version_raw")
 
     if [[ -z "$latest_version" ]]; then
         errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to extract version for $name." "warp"
@@ -39,10 +41,8 @@ check_warp() {
         return 1
     fi
 
-    local output_status="success"
-    if ! updates::is_needed "$installed_version" "$latest_version"; then
-        output_status="no_update"
-    fi
+    local output_status
+    output_status=$(checker_utils::determine_status "$installed_version" "$latest_version")
 
     jq -n \
         --arg status "$output_status" \
