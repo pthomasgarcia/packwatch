@@ -3,7 +3,7 @@
 # MODULE: interfaces.sh
 # ==============================================================================
 # Responsibilities:
-#   - User interaction (headers, prompts)
+#   - User interaction (headers, prompts, summaries)
 #
 # Usage:
 #   Source this file in your main script:
@@ -64,6 +64,50 @@ interfaces::confirm_prompt() {
         "") [[ "$default_resp_char" == "Y" ]] && return 0 || return 1 ;;
         *) return 1 ;;
     esac
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: Main Application Header
+# ------------------------------------------------------------------------------
+
+# Display the main application header
+interfaces::print_application_header() {
+    loggers::print_message ""
+    loggers::print_message "$(_bold "🔄 $APP_NAME: $APP_DESCRIPTION")"
+    loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: Execution Summary Display
+# ------------------------------------------------------------------------------
+
+# Display the update summary
+interfaces::print_summary() {
+    loggers::print_message ""
+    loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
+    loggers::print_message "$(_bold "Update Summary:")"
+    loggers::print_message "  $(_color_green "✓ Up to date:")    $(counters::get_up_to_date)"
+    loggers::print_message "  $(_color_yellow "⬆ Updated:")       $(counters::get_updated)"
+    loggers::print_message "  $(_color_red "✗ Failed:")        $(counters::get_failed)"
+    if [[ $(counters::get_skipped) -gt 0 ]]; then
+        loggers::print_message "  $(_color_cyan "🞨 Skipped/Disabled:") $(counters::get_skipped)"
+    fi
+    loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: Installation Help Display
+# ------------------------------------------------------------------------------
+
+# Display installation help information
+interfaces::print_installation_help() {
+    loggers::print_message ""
+    loggers::print_message "$(_bold "To install core dependencies:")"
+    loggers::print_message "  $(_color_cyan "$INSTALL_CMD")"
+    loggers::print_message ""
+    loggers::print_message "Additional notes:"
+    loggers::print_message "  • For 'notify-send': install 'libnotify-bin'"
+    loggers::print_message "  • For 'flatpak': see https://flatpak.org/setup/"
 }
 
 # ==============================================================================

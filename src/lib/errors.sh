@@ -27,10 +27,12 @@ declare -A ERROR_CODES=(
     ["GPG_ERROR"]=15
     ["CUSTOM_CHECKER_ERROR"]=16
     ["INSTALLATION_ERROR"]=17
+    ["INITIALIZATION_ERROR"]=18
+    ["CLI_ERROR"]=19
 )
 
 # ------------------------------------------------------------------------------
-# SECTION: Error Handling Function
+# SECTION: Error Handling Functions
 # ------------------------------------------------------------------------------
 
 # Centralized error handler.
@@ -65,6 +67,32 @@ errors::handle_error() {
     esac
 
     return "$exit_code"
+}
+
+# Centralized error handler that exits immediately.
+# Usage: errors::handle_error_and_exit TYPE MESSAGE [APP_NAME]
+#   TYPE      - One of the keys in ERROR_CODES
+#   MESSAGE   - Error message to log
+#   APP_NAME  - (Optional) Application name for context
+errors::handle_error_and_exit() {
+    local error_type="$1"
+    local error_message="$2"
+    local app_name="${3:-unknown}"
+    
+    errors::handle_error "$error_type" "$error_message" "$app_name"
+    exit "${ERROR_CODES[$error_type]:-1}"
+}
+
+# Helper for module-specific initialization errors.
+# Usage: errors::handle_module_error MODULE FUNCTION [ERROR_TYPE]
+#   MODULE      - Module name (e.g., "packages", "configs")
+#   FUNCTION    - Function name (e.g., "initialize_installed_versions_file")
+#   ERROR_TYPE  - (Optional) Error type, defaults to VALIDATION_ERROR
+errors::handle_module_error() {
+    local module="$1"
+    local function="$2"
+    local error_type="${3:-VALIDATION_ERROR}"
+    errors::handle_error_and_exit "$error_type" "Failed to initialize $module::$function" "core"
 }
 
 # ==============================================================================
