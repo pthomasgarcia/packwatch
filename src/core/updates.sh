@@ -4,14 +4,15 @@
 # ==============================================================================
 # Responsibilities:
 #   - Update logic for each app type
-#   - Orchestration of update flows
+#   - Orchestration of individual and overall update flows
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/updates.sh"
+#     source "$CORE_DIR/updates.sh"
 #
 #   Then use:
 #     updates::check_application "AppKey" 1 5
+#     updates::perform_all_checks "${apps_to_check[@]}"
 # ==============================================================================
 
 # --- GLOBAL DECLARATIONS FOR EXTENSIBILITY ---
@@ -911,19 +912,19 @@ updates::process_flatpak_app() {
             fi
             loggers::print_ui_line "  " "[DRY RUN] " "Flatpak update simulated for $(_bold "$app_name")." _color_yellow
             return 0
-        else
-            if flatpak install --or-update -y flathub "$flatpak_app_id"; then
-                if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-                    loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but Flatpak installation was successful."
-                fi
-                updates::on_install_complete "$app_name" # Hook
-                counters::inc_updated
-                return 0
-            else
-                errors::handle_error "INSTALLATION_ERROR" "Failed to install/update $app_name via Flatpak" "$app_name"
-                updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}" # Recommendation 10: Error hook
-                return 1
+        fi
+
+        if flatpak install --or-update -y flathub "$flatpak_app_id"; then
+            if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
+                loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but Flatpak installation was successful."
             fi
+            updates::on_install_complete "$app_name" # Hook
+            counters::inc_updated
+            return 0
+        else
+            errors::handle_error "INSTALLATION_ERROR" "Failed to install/update $app_name via Flatpak" "$app_name"
+            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}" # Recommendation 10: Error hook
+            return 1
         fi
     else
         updates::on_install_skipped "$app_name" # Hook
@@ -1009,7 +1010,7 @@ updates::handle_custom_check() {
         return 1
     fi
 
-    local custom_checkers_dir="${SCRIPT_DIR}/custom_checkers"
+    local custom_checkers_dir="${CORE_DIR}/custom_checkers"
     local script_path="${custom_checkers_dir}/${custom_checker_script}"
 
     # Export functions and variables for custom checker subshell
@@ -1213,7 +1214,7 @@ updates::_validate_app_config() {
 }
 
 # ------------------------------------------------------------------------------
-# SECTION: Main Application Update Dispatcher
+# SECTION: Main Application Update Dispatcher (Individual App)
 # ------------------------------------------------------------------------------
 
 # Updates module; checks for updates for a single application defined in config.
@@ -1280,6 +1281,23 @@ updates::check_application() {
     fi
     loggers::print_message "" # Blank line after each app block
     return "$app_check_status"
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: Overall Update Orchestration
+# ------------------------------------------------------------------------------
+
+# Orchestrates the update checks for a list of applications.
+# Usage: updates::perform_all_checks "${apps_to_check_array[@]}"
+updates::perform_all_checks() {
+  local -a apps_to_check=("$@")
+  local total_apps=${#apps_to_check[@]}
+  local current_index=1
+  
+  for app_key in "${apps_to_check[@]}"; do
+    updates::check_application "$app_key" "$current_index" "$total_apps" || true
+    ((current_index++))
+  done
 }
 
 # ==============================================================================

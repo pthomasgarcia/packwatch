@@ -3,16 +3,34 @@
 # MODULE: interfaces.sh
 # ==============================================================================
 # Responsibilities:
-#   - User interaction (headers, prompts, summaries)
+#   - User interaction (headers, prompts, summaries, notifications)
+#   - Informing user about execution modes
+#   - User-facing error and debug messages
+#
+# Dependencies:
+#   - loggers.sh (for internal logging)
+#   - counters.sh (for summary statistics)
+#   - globals.sh (for APP_NAME, APP_DESCRIPTION, DRY_RUN)
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/interfaces.sh"
+#     source "$CORE_DIR/interfaces.sh"
 #
 #   Then use:
 #     interfaces::display_header "AppName" 1 5
 #     interfaces::confirm_prompt "Proceed?" "Y"
+#     interfaces::notify_execution_mode
 # ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION: Color and Formatting Helpers
+# ------------------------------------------------------------------------------
+
+_color_cyan() { echo -e "\033[36m$1\033[0m"; }
+_color_green() { echo -e "\033[32m$1\033[0m"; }
+_color_yellow() { echo -e "\033[33m$1\033[0m"; }
+_color_red() { echo -e "\033[31m$1\033[0m"; }
+_bold() { echo -e "\033[1m$1\033[0m"; }
 
 # ------------------------------------------------------------------------------
 # SECTION: Application Header Display
@@ -108,6 +126,52 @@ interfaces::print_installation_help() {
     loggers::print_message "Additional notes:"
     loggers::print_message "  • For 'notify-send': install 'libnotify-bin'"
     loggers::print_message "  • For 'flatpak': see https://flatpak.org/setup/"
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: Execution Mode Notification
+# ------------------------------------------------------------------------------
+
+# Notify the user if the script is running in dry-run mode.
+# Usage: interfaces::notify_execution_mode
+interfaces::notify_execution_mode() {
+  if [[ "${DRY_RUN:-0}" -eq 1 ]]; then # Use default value for DRY_RUN for robustness
+    loggers::print_message ""
+    loggers::print_message "$(_color_yellow "🚀 Running in DRY RUN mode - no installations or file modifications will be performed.")"
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: User-Facing Error Messages
+# ------------------------------------------------------------------------------
+
+# Display home determination error to user
+interfaces::print_home_determination_error() {
+  local error_msg="$1"
+  loggers::print_message "$(_color_red "⚠️  $error_msg")" >&2
+}
+
+# Display general error to user
+interfaces::print_error_to_user() {
+  local error_msg="$1"
+  loggers::print_message "$(_color_red "❌ Error: $error_msg")" >&2
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: Debug Information Display
+# ------------------------------------------------------------------------------
+
+# Display debug state snapshot to user
+interfaces::print_debug_state_snapshot() {
+  loggers::print_message "$(_color_cyan "🔍 Debug Information:")" >&2
+  loggers::print_message "   CORE_DIR: $CORE_DIR" >&2
+  loggers::print_message "   CONFIG_ROOT: $CONFIG_ROOT" >&2
+  loggers::print_message "   CONFIG_DIR: $CONFIG_DIR" >&2
+  loggers::print_message "   CACHE_DIR: $CACHE_DIR" >&2
+  loggers::print_message "   ORIGINAL_USER: $ORIGINAL_USER" >&2
+  loggers::print_message "   ORIGINAL_HOME: $ORIGINAL_HOME" >&2
+  loggers::print_message "   DRY_RUN: $DRY_RUN" >&2
+  loggers::print_message "   VERBOSE: $VERBOSE" >&2
 }
 
 # ==============================================================================

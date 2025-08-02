@@ -4,15 +4,30 @@
 # ==============================================================================
 # Responsibilities:
 #   - CLI argument parsing and usage/help output
+#   - Validation and filtering of CLI-provided application keys
+#   - Determination of applications to check based on CLI input
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/cli.sh"
+#     source "$CORE_DIR/cli.sh"
 #
 #   Then use:
 #     cli::parse_arguments "$@"
 #     cli::show_usage
+#     cli::determine_apps_to_check apps_array_ref "${input_app_keys[@]}"
 # ==============================================================================
+
+# Private module state - CLI arguments
+declare -g -a _CLI_APP_KEYS=()
+
+# Public accessor function
+cli::get_app_keys() {
+    printf '%s\n' "${_CLI_APP_KEYS[@]}"
+}
+
+cli::has_app_keys() {
+    [[ ${#_CLI_APP_KEYS[@]} -gt 0 ]]
+}
 
 # ------------------------------------------------------------------------------
 # SECTION: Available App Keys for Display
@@ -97,11 +112,10 @@ EOF
 # SECTION: CLI Argument Parsing
 # ------------------------------------------------------------------------------
 
-# Parse command-line arguments.
+# Parse command-line arguments and populate global input_app_keys_from_cli.
 # Usage: cli::parse_arguments "$@"
 cli::parse_arguments() {
     local apps_specified_on_cmdline=0
-    local input_app_keys_from_cli_temp=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -119,8 +133,7 @@ cli::parse_arguments() {
             ;;
         --cache-duration)
             if [[ -z "$2" ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
-                errors::handle_error "VALIDATION_ERROR" "Option --cache-duration requires a positive integer."
-                exit 1
+                errors::handle_error_and_exit "CLI_ERROR" "Option --cache-duration requires a positive integer." "cli"
             fi
             CACHE_DURATION="$2"
             shift 2
@@ -135,22 +148,74 @@ cli::parse_arguments() {
             exit 0
             ;;
         -*)
-            errors::handle_error "VALIDATION_ERROR" "Unknown option: '$1'"
-            cli::show_usage >&2
-            exit 1
+            errors::handle_error_and_exit "CLI_ERROR" "Unknown option: '$1'" "cli"
             ;;
         *)
-            input_app_keys_from_cli_temp+=("$1")
+            _CLI_APP_KEYS+=("$1")  # Direct assignment to module state
             apps_specified_on_cmdline=1
             shift
             ;;
         esac
     done
+}
 
-    if [[ "$apps_specified_on_cmdline" -eq 1 ]]; then
-        input_app_keys_from_cli=("${input_app_keys_from_cli_temp[@]}")
+# ------------------------------------------------------------------------------
+# SECTION: Application Key Filtering & Determination
+# ------------------------------------------------------------------------------
+
+# Validate and filter CLI apps against enabled configurations.
+# Usage: cli::validate_and_filter_apps apps_ref "${cli_apps[@]}"
+#   apps_ref  - Nameref to the array that will store the valid filtered apps
+#   cli_apps  - Array of app keys specified on the command line
+cli::validate_and_filter_apps() {
+  local -n apps_ref=$1
+  local -a cli_apps=("${@:2}")
+  
+  # Create associative array of enabled apps for fast lookup
+  declare -A enabled_apps_assoc
+  for key in "${CUSTOM_APP_KEYS[@]}"; do # CUSTOM_APP_KEYS is populated by configs::load_modular_directory
+    enabled_apps_assoc["$key"]=1
+  done
+
+  # Filter CLI apps to only include enabled ones
+  local -a valid_cli_apps=()
+  for cli_app in "${cli_apps[@]}"; do
+    if [[ -n "${enabled_apps_assoc[$cli_app]:-}" ]]; then
+      valid_cli_apps+=("$cli_app")
+    else
+      loggers::log_message "WARN" \
+        "Application '$cli_app' specified on command line not found or not enabled in configurations. Skipping."
+    fi
+  done
+
+  # Update apps array or exit if no valid apps
+  if [[ ${#valid_cli_apps[@]} -gt 0 ]]; then
+    apps_ref=("${valid_cli_apps[@]}")
+  else
+    errors::handle_error_and_exit "CLI_ERROR" \
+      "No valid application keys specified on command line found in enabled configurations. Exiting." "cli"
+  fi
+}
+
+# Determine the final list of applications to check.
+# This defaults to all enabled apps unless specific keys are provided via CLI.
+# Usage: cli::determine_apps_to_check apps_ref "${input_app_keys_from_cli[@]}"
+#   apps_ref                 - Nameref to the array that will store the final list of apps
+#   input_app_keys_from_cli  - Array of app keys parsed from the command line
+cli::determine_apps_to_check() {
+    local -n apps_ref=$1
+    
+    # Default to all enabled apps
+    apps_ref=("${CUSTOM_APP_KEYS[@]}")
+    
+    # Override with CLI apps if provided
+    if cli::has_app_keys; then
+        local -a cli_apps
+        readarray -t cli_apps < <(cli::get_app_keys)
+        cli::validate_and_filter_apps apps_ref "${cli_apps[@]}"
     fi
 }
+
 
 # ==============================================================================
 # END OF MODULE

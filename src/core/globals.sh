@@ -3,26 +3,29 @@
 # Packwatch: Global Variables
 # ==============================================================================
 # This file contains global variables and simple state helpers.
-# Assumes SCRIPT_DIR is defined by the caller before sourcing.
+# Assumes CORE_DIR is defined by the caller before sourcing.
 # ==============================================================================
 
-# --- Script and Path Configuration ---
-SCRIPT_NAME="$(basename "$0")"
+# --- Application Metadata ---
+readonly APP_NAME="Packwatch"
+readonly APP_DESCRIPTION="Application Update Checker"
+readonly SCRIPT_VERSION="2.0.0"
+readonly SCRIPT_NAME="$(basename "$0")"
 export SCRIPT_NAME
-readonly SCRIPT_NAME
 
-CONFIG_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")/config"
-readonly CONFIG_ROOT
+# --- Path Configuration ---
+readonly CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
+readonly CONFIG_DIR="$CONFIG_ROOT/conf.d"
 
-CONFIG_DIR="$CONFIG_ROOT/conf.d"
-readonly CONFIG_DIR
-
-# Export only variables that subprocesses may need to see
+# Cache directory - exported for subprocesses that may need it
 export CACHE_DIR="/tmp/app-updater-cache"
 readonly CACHE_DIR
 
-SCRIPT_VERSION="2.0.0"
-readonly SCRIPT_VERSION
+# --- Required System Dependencies ---
+readonly -a REQUIRED_COMMANDS=(
+  "wget" "curl" "gpg" "jq" "dpkg"
+  "sha256sum" "lsb_release" "getent"
+)
 
 # --- User Context ---
 readonly ORIGINAL_USER="${SUDO_USER:-$USER}"
@@ -62,18 +65,21 @@ declare -A NETWORK_CONFIG=(
   ["RETRY_DELAY"]=2
 )
 
-# --- UI/Reporting Counters ---
-# This state is now managed by the counters.sh module.
-# The old declarations have been removed from this file.
+# --- Exit Codes ---
+readonly EXIT_SUCCESS=0
+readonly EXIT_FAILURE=1
+readonly EXIT_VALIDATION_ERROR=2
+readonly EXIT_INITIALIZATION_ERROR=3
+readonly EXIT_CONFIG_ERROR=4
 
 # ==============================================================================
 # Helpers
 # ==============================================================================
 
 globals::validate_state() {
-  # SCRIPT_DIR must be set by caller
-  if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    echo "SCRIPT_DIR is not set" >&2
+  # CORE_DIR must be set by caller
+  if [[ -z "${CORE_DIR:-}" ]]; then
+    echo "CORE_DIR is not set" >&2
     return 1
   fi
   # Config directories
@@ -85,7 +91,7 @@ globals::validate_state() {
     echo "CONFIG_DIR does not exist: $CONFIG_DIR" >&2
     return 1
   fi
-  # Cache directory can be created lazily by systems::perform_housekeeping, but ensure it’s a valid path
+  # Cache directory can be created lazily by systems::perform_housekeeping, but ensure it's a valid path
   if [[ -z "${CACHE_DIR:-}" ]]; then
     echo "CACHE_DIR is empty" >&2
     return 1

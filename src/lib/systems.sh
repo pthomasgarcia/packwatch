@@ -4,16 +4,18 @@
 # ==============================================================================
 # Responsibilities:
 #   - System-level helpers (temp files, cleanup, background processes, file sanitization, etc.)
+#   - System dependency validation
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/systems.sh"
+#     source "$CORE_DIR/systems.sh"
 #
 #   Then use:
 #     systems::create_temp_file "prefix"
 #     systems::delete_temp_files
 #     systems::sanitize_filename "filename"
 #     systems::reattempt_command 3 2 some_command arg1 arg2
+#     systems::check_dependencies
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -108,12 +110,27 @@ systems::_clean_cache_files() {
 
 # Perform all cleanup actions (temp files, background pids, cache).
 # Usage: systems::perform_housekeeping
+# In systems.sh
 systems::perform_housekeeping() {
-    local LAST_COMMAND_EXIT_CODE=$?
-    [[ ${VERBOSE:-0} -eq 1 ]] && loggers::log_message "DEBUG" "Cleanup triggered. Last command's exit code: $LAST_COMMAND_EXIT_CODE"
-    systems::_clean_background_processes
-    systems::delete_temp_files
-    systems::_clean_cache_files
+  loggers::log_message "DEBUG" "Performing application housekeeping..."
+  local cache_dir="${CACHE_DIR:-}" # Ensure CACHE_DIR is set or default safely
+  local lock_file="${LOCK_FILE:-}"
+
+  # Clean up temporary files
+  systems::delete_temp_files
+
+  # Clean up background processes
+  systems::_clean_background_processes
+
+  # Clean up old cache files (if desired on exit, though often a scheduled task)
+  # systems::_clean_cache_files # Decide if this should run on every exit
+
+  # Clean up lock file
+  if [[ -n "$lock_file" && -e "$lock_file" ]]; then
+    loggers::log_message "DEBUG" "Removing lock file: $lock_file"
+    rm -f -- "$lock_file" || true
+  fi
+  return 0
 }
 
 # ------------------------------------------------------------------------------
@@ -190,6 +207,37 @@ systems::require_json_value() {
     echo "$value"
     return 0
 }
+
+# ------------------------------------------------------------------------------
+# SECTION: System Dependency Check
+# ------------------------------------------------------------------------------
+
+# Check that all required system dependencies are available.
+# Calls errors::handle_error_and_exit if dependencies are missing.
+# Usage: systems::check_dependencies
+systems::check_dependencies() {
+  loggers::log_message "INFO" "Performing system dependency check..."
+  local -a missing_cmds=()
+  
+  # REQUIRED_COMMANDS and INSTALL_CMD are constants from main.sh, assumed available
+  # because main.sh sources globals.sh and then lib modules.
+
+  for cmd in "${REQUIRED_COMMANDS[@]}"; do
+    if ! command -v "$cmd" &>/dev/null; then
+      missing_cmds+=("$cmd")
+    fi
+  done
+
+  if [[ ${#missing_cmds[@]} -gt 0 ]]; then
+    # Print installation help message BEFORE exiting
+    interfaces::print_installation_help # Ensure this function is called
+    errors::handle_error_and_exit "DEPENDENCY_ERROR" \
+      "Missing required core commands: ${missing_cmds[*]}. Please install them." "core"
+  fi
+  
+  loggers::log_message "INFO" "All core system dependencies found."
+}
+
 
 # ==============================================================================
 # END OF MODULE

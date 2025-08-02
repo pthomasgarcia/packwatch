@@ -8,7 +8,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/errors.sh"
+#     source "$CORE_DIR/errors.sh"
 #
 #   Then use:
 #     errors::handle_error "NETWORK_ERROR" "Failed to fetch data" "AppName"

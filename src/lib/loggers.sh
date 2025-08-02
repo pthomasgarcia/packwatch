@@ -9,7 +9,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/loggers.sh"
+#     source "$CORE_DIR/loggers.sh"
 #
 #   Then use:
 #     loggers::log_message "INFO" "This is an info message"

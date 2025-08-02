@@ -7,7 +7,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/notifiers.sh"
+#     source "$CORE_DIR/notifiers.sh"
 #
 #   Then use:
 #     notifiers::send_notification "Title" "Message" "urgency"

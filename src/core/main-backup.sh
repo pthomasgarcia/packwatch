@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # Source external modules
-# SCRIPT_DIR is /home/p/Documents/write/code/bash/packwatch/src/core
+# CORE_DIR is /home/p/Documents/write/code/bash/packwatch/src/core
 # Custom checkers are in /home/p/Documents/write/code/bash/packwatch/src/custom_checkers
 # Lib scripts are in /home/p/Documents/write/code/bash/packwatch/src/lib
 # shellcheck source=/dev/null
@@ -124,12 +124,12 @@ fi
 # Script configuration
 SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_NAME
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_DIR
+CORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly CORE_DIR
 # Updated CONFIG_DIR based on new path structure
-# SCRIPT_DIR is /home/p/Documents/write/code/bash/packwatch/src/core
+# CORE_DIR is /home/p/Documents/write/code/bash/packwatch/src/core
 # CONFIG_DIR should be /home/p/Documents/write/code/bash/packwatch/config
-readonly CONFIG_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")/config"
+readonly CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
 readonly CONFIG_DIR="$CONFIG_ROOT/conf.d"
 readonly CACHE_DIR="/tmp/app-updater-cache"
 # DEFAULT_CONFIG_FILE is removed as monolithic config is deprecated.
@@ -2008,7 +2008,7 @@ updates::handle_custom_check() {
         return 1
     fi
 
-    local script_base_dir="$(dirname "$SCRIPT_DIR")"
+    local script_base_dir="$(dirname "$CORE_DIR")"
     local custom_checkers_dir="${script_base_dir}/custom_checkers"
     local script_path="${custom_checkers_dir}/${custom_checker_script}"
 

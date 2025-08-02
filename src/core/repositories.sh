@@ -7,7 +7,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/repositories.sh"
+#     source "$CORE_DIR/repositories.sh"
 #
 #   Then use:
 #     repositories::get_latest_release_info "owner" "repo"

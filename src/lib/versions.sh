@@ -7,7 +7,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/versions.sh"
+#     source "$CORE_DIR/versions.sh"
 #
 #   Then use:
 #     versions::compare_strings "1.2.3" "1.2.0"

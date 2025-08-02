@@ -8,7 +8,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/validators.sh"
+#     source "$CORE_DIR/validators.sh"
 #
 #   Then use:
 #     validators::check_url_format "https://example.com"

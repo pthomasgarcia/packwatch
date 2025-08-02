@@ -4,14 +4,16 @@
 # ==============================================================================
 # Responsibilities:
 #   - Config schema loading, validation, and merging
+#   - Validation of loaded application count
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/configs.sh"
+#     source "$CORE_DIR/configs.sh"
 #
 #   Then use:
 #     configs::load_modular_directory
 #     configs::create_default_files
+#     configs::validate_loaded_app_count
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -238,6 +240,24 @@ configs::populate_globals_from_json() {
             fi
         done < <(echo "$applications_json" | jq -r --arg app_key "$app_key" '.[$app_key] | keys[]')
     done < <(echo "$applications_json" | jq -r 'keys[]')
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: Config State Validation
+# ------------------------------------------------------------------------------
+
+# Validate that a sufficient number of applications were found in configurations.
+# Exits with EXIT_SUCCESS if no applications are found, as this is a valid
+# operational state (nothing to check).
+# Usage: configs::validate_loaded_app_count "$total_apps"
+configs::validate_loaded_app_count() {
+  local total_apps=$1
+  
+  if [[ $total_apps -eq 0 ]]; then
+    loggers::print_message \
+      "No applications configured to check in '$CONFIG_DIR' directory with '\"enabled\": true'. Exiting."
+    exit "${EXIT_SUCCESS}"
+  fi
 }
 
 # ------------------------------------------------------------------------------

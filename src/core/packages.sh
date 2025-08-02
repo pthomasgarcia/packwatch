@@ -7,7 +7,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/packages.sh"
+#     source "$CORE_DIR/packages.sh"
 #
 #   Then use:
 #     packages::get_installed_version "AppKey"

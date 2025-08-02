@@ -1,0 +1,19 @@
+feat: Refactor core logic for modularity and robustness
+
+This commit introduces a major refactoring of the application's core logic to improve modularity, robustness, and maintainability.
+
+Key changes include:
+
+- **Modularization:** The main script has been broken down into smaller, more focused modules with clear responsibilities (e.g., `cli.sh`, `configs.sh`, `updates.sh`). This improves code organization and makes it easier to understand and maintain.
+
+- **Improved Error Handling:** The error handling has been centralized and made more consistent across the application.
+
+- **CLI Enhancements:** The command-line interface has been improved to allow specifying which applications to check.
+
+- **New `script` Installation Type:** A new `script` installation type has been added to support applications that are installed via a shell script (e.g., Ollama).
+
+- **Bug Fixes:**
+  - Fixed a bug where UI messages were being captured into variables during the download process, causing installation failures.
+  - Corrected the `jq` expression for finding assets in GitHub releases.
+
+- **Code Cleanup:** The codebase has been cleaned up to improve readability and consistency.

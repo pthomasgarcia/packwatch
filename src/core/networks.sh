@@ -7,7 +7,7 @@
 #
 # Usage:
 #   Source this file in your main script:
-#     source "$SCRIPT_DIR/networks.sh"
+#     source "$CORE_DIR/networks.sh"
 #
 #   Then use:
 #     networks::download_file "url" "/tmp/file" "checksum" "sha256"
