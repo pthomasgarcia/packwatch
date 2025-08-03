@@ -14,10 +14,10 @@
 
 # Custom checker for Zed
 check_zed() {
-	local -n app_config_ref=$1
-	local name="${app_config_ref[name]}"
-	local app_key="${app_config_ref[app_key]}"
-	local flatpak_app_id="${app_config_ref[flatpak_app_id]}"
+	local app_config_json="$1" # Now receives JSON string
+	local name=$(echo "$app_config_json" | jq -r '.name')
+	local app_key=$(echo "$app_config_json" | jq -r '.app_key')
+	local flatpak_app_id=$(echo "$app_config_json" | jq -r '.flatpak_app_id')
 
 	local installed_version
 	installed_version=$(packages::get_installed_version "$app_key")

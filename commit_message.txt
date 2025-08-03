@@ -1,15 +1,20 @@
-refactor(shell): Improve script style and correctness
+refactor(shell): Improve modularity and script structure
 
-This commit addresses several style and correctness issues identified by `shellcheck`, and improves the overall quality of the codebase.
+This commit introduces a significant refactoring to improve the modularity and overall structure of the application.
 
-- **Fix `shellcheck` warnings:**
-  - **SC2181:** Replaced indirect exit code checks (`if [[ $? -ne 0 ]]`) with direct checks (`if ! command`) across multiple files for improved readability and robustness.
-  - **SC2207:** Replaced unsafe array creation from command output with the more reliable `mapfile` command in `src/core/networks.sh`.
-  - **SC2059:** Corrected the unsafe use of a variable as the `printf` format string in `src/core/custom_checkers/veracrypt.sh`.
-  - **SC2001:** Replaced a `sed` command with a more efficient shell parameter expansion in `src/lib/systems.sh`.
-  - **SC2153 & SC2034:** Added `shellcheck` directives to `src/core/globals.sh` and `src/core/interfaces.sh` to suppress false positive warnings about unused variables that are intentionally global.
+- **Dependency Documentation:**
+  - Added `Dependencies` sections to the headers of all script files to clearly document the relationships between modules.
+
+- **Refactored CLI Logic:**
+  - The `cli::validate_and_filter_apps` function has been refactored to return a list of valid applications instead of modifying an array by reference. This improves the clarity and predictability of the function.
+
+- **Lazy Loading of Modules:**
+  - The main script (`src/core/main.sh`) has been updated to lazy-load non-essential modules. Core modules required for basic operations like `--help` are loaded first, and the rest are loaded only when the main application workflow is executed.
+
+- **New `util` Directory:**
+  - A new `src/util` directory has been created to house utility scripts that are shared across different parts of the application.
+  - The `checker_utils.sh` script has been moved from `src/lib` to `src/util`.
 
 - **Code Cleanup:**
-  - Removed the unused `main-backup.sh` file.
-  - Removed unused variables in `src/core/cli.sh` and `src/core/configs.sh`.
-  - Improved code formatting and consistency in several files.
+  - The unused `main-backup.sh` file has been deleted.
+  - Code formatting has been made more consistent across all files.

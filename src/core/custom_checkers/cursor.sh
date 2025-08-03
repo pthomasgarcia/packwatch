@@ -14,10 +14,10 @@
 
 # Custom checker for Cursor with direct curl calls
 check_cursor() {
-	local -n app_config_ref=$1
-	local name="${app_config_ref[name]}"
-	local install_path_config="${app_config_ref[install_path]}"
-	local app_key="${app_config_ref[app_key]}"
+	local app_config_json="$1" # Now receives JSON string
+	local name=$(echo "$app_config_json" | jq -r '.name')
+	local install_path_config=$(echo "$app_config_json" | jq -r '.install_path')
+	local app_key=$(echo "$app_config_json" | jq -r '.app_key')
 	local appimage_filename_final="cursor.AppImage"
 	local install_base_dir="${install_path_config//\$HOME/$ORIGINAL_HOME}"
 	install_base_dir="${install_base_dir/#\~/$ORIGINAL_HOME}"

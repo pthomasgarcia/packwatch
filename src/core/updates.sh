@@ -1158,6 +1158,7 @@ updates::check_flatpak() {
 # ------------------------------------------------------------------------------
 
 # Updates helper; handles the logic for a 'custom' application type.
+# This function now passes a JSON string of the app configuration to the custom checker.
 updates::handle_custom_check() {
 	local config_array_name="$1"
 	local -n app_config_ref=$config_array_name
@@ -1220,15 +1221,23 @@ updates::handle_custom_check() {
 		return 1
 	fi
 
-	custom_checker_output=$("$custom_checker_func" "$config_array_name")
+	# Convert the app_config_ref associative array to a JSON string
+	local app_config_json="{}"
+	local key
+	for key in "${!app_config_ref[@]}"; do
+		app_config_json=$(echo "$app_config_json" | jq --arg k "$key" --arg v "${app_config_ref[$key]}" '.[$k] = $v')
+	done
+
+	# Pass the JSON string as the first argument to the custom checker function
+	custom_checker_output=$("$custom_checker_func" "$app_config_json")
 	local status
-	status=$(echo "$custom_checker_output" | jq -r '.status') # Using original `jq` calls
+	status=$(echo "$custom_checker_output" | jq -r '.status // "error"') # Default to error if status is missing
 	local latest_version
-	latest_version=$(versions::normalize "$(echo "$custom_checker_output" | jq -r '.latest_version')") # Using original `jq` calls
+	latest_version=$(versions::normalize "$(echo "$custom_checker_output" | jq -r '.latest_version // "0.0.0"')") # Default to 0.0.0
 	local source
-	source=$(echo "$custom_checker_output" | jq -r '.source') # Using original `jq` calls
+	source=$(echo "$custom_checker_output" | jq -r '.source // "Unknown"') # Default to Unknown
 	local error_message
-	error_message=$(echo "$custom_checker_output" | jq -r '.error_message // empty') # Using original `jq` calls
+	error_message=$(echo "$custom_checker_output" | jq -r '.error_message // empty')
 
 	loggers::print_ui_line "  " "Installed: " "$installed_version"
 	loggers::print_ui_line "  " "Source:    " "$source"

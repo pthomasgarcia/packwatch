@@ -48,6 +48,7 @@ source "$CORE_DIR/globals.sh"
 source "$CORE_DIR/../lib/loggers.sh"
 source "$CORE_DIR/../lib/errors.sh"
 source "$CORE_DIR/../lib/systems.sh"
+source "$CORE_DIR/interfaces.sh" # Moved here as it's needed early for headers/prompts
 source "$CORE_DIR/cli.sh"
 
 # ==============================================================================
@@ -172,7 +173,7 @@ DOC
 	source "$CORE_DIR/repositories.sh"
 	source "$CORE_DIR/packages.sh"
 	source "$CORE_DIR/configs.sh"
-	source "$CORE_DIR/interfaces.sh"
+	# interfaces.sh is now sourced earlier
 	source "$CORE_DIR/updates.sh"
 
 	# External libraries
