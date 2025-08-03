@@ -16,6 +16,12 @@
 #     systems::sanitize_filename "filename"
 #     systems::reattempt_command 3 2 some_command arg1 arg2
 #     systems::check_dependencies
+#
+# Dependencies:
+#   - errors.sh
+#   - globals.sh
+#   - interfaces.sh
+#   - loggers.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

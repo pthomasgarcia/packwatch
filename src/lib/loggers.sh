@@ -15,6 +15,9 @@
 #     loggers::log_message "INFO" "This is an info message"
 #     loggers::print_ui_line "  " "✓ " "Success!" _color_green
 #     loggers::print_message "Simple message"
+#
+# Dependencies:
+#   - None
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

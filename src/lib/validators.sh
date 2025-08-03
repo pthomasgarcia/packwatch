@@ -16,6 +16,11 @@
 #     validators::check_executable_file "/usr/bin/foo"
 #     validators::verify_checksum "/tmp/file" "abc123" "sha256"
 #     validators::verify_gpg_key "KEYID" "FINGERPRINT" "AppName"
+#
+# Dependencies:
+#   - errors.sh
+#   - globals.sh
+#   - loggers.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

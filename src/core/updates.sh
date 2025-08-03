@@ -13,6 +13,23 @@
 #   Then use:
 #     updates::check_application "AppKey" 1 5
 #     updates::perform_all_checks "${apps_to_check[@]}"
+#
+# Dependencies:
+#   - util/checker_utils.sh
+#   - configs.sh
+#   - counters.sh
+#   - errors.sh
+#   - globals.sh
+#   - gpg.sh
+#   - interfaces.sh
+#   - loggers.sh
+#   - networks.sh
+#   - notifiers.sh
+#   - packages.sh
+#   - repositories.sh
+#   - systems.sh
+#   - validators.sh
+#   - versions.sh
 # ==============================================================================
 
 # --- GLOBAL DECLARATIONS FOR EXTENSIBILITY ---

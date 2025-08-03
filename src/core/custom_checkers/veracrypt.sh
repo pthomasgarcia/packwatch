@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# MODULE: custom_checkers/veracrypt.sh
+# ==============================================================================
+# Responsibilities:
+#   - Custom logic to check for updates for VeraCrypt.
+#
+# Dependencies:
+#   - util/checker_utils.sh
+#   - errors.sh
+#   - networks.sh
+#   - packages.sh
+#   - systems.sh
+#   - validators.sh
+# ==============================================================================
 
 # Custom checker for VeraCrypt
 check_veracrypt() {

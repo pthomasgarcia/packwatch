@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# MODULE: custom_checkers/zed.sh
+# ==============================================================================
+# Responsibilities:
+#   - Custom logic to check for updates for Zed.
+#
+# Dependencies:
+#   - util/checker_utils.sh
+#   - errors.sh
+#   - packages.sh
+#   - systems.sh
+# ==============================================================================
 
 # Custom checker for Zed
 check_zed() {

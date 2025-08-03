@@ -14,6 +14,13 @@
 #     repositories::parse_version_from_release "$release_json" "AppName"
 #     repositories::find_asset_url "$release_json" "pattern" "AppName"
 #     repositories::find_asset_checksum "$release_json" "filename"
+#
+# Dependencies:
+#   - errors.sh
+#   - loggers.sh
+#   - networks.sh
+#   - systems.sh
+#   - versions.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

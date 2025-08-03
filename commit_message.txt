@@ -1,15 +1,15 @@
-refactor(checkers): Extract common logic into checker_utils
+refactor(shell): Improve script style and correctness
 
-This commit introduces a new `checker_utils.sh` library to reduce code duplication and improve consistency across the custom checker scripts.
+This commit addresses several style and correctness issues identified by `shellcheck`, and improves the overall quality of the codebase.
 
-- **New `checker_utils.sh` library:**
-  - Created a new file `src/lib/checker_utils.sh` to house common functions used by custom checkers.
-  - Added `checker_utils::determine_status` to standardize the logic for checking if an update is needed.
-  - Added `checker_utils::strip_version_prefix` to provide a consistent way to remove "v" prefixes from version strings.
+- **Fix `shellcheck` warnings:**
+  - **SC2181:** Replaced indirect exit code checks (`if [[ $? -ne 0 ]]`) with direct checks (`if ! command`) across multiple files for improved readability and robustness.
+  - **SC2207:** Replaced unsafe array creation from command output with the more reliable `mapfile` command in `src/core/networks.sh`.
+  - **SC2059:** Corrected the unsafe use of a variable as the `printf` format string in `src/core/custom_checkers/veracrypt.sh`.
+  - **SC2001:** Replaced a `sed` command with a more efficient shell parameter expansion in `src/lib/systems.sh`.
+  - **SC2153 & SC2034:** Added `shellcheck` directives to `src/core/globals.sh` and `src/core/interfaces.sh` to suppress false positive warnings about unused variables that are intentionally global.
 
-- **Updated Custom Checkers:**
-  - Refactored the custom checkers for Cursor, VeraCrypt, Warp, and Zed to use the new utility functions from `checker_utils.sh`.
-  - This simplifies the code in each checker and ensures that the logic for determining update status and normalizing version strings is consistent.
-
-- **Updated Main Script:**
-  - The main script (`src/core/main.sh`) has been updated to source the new `checker_utils.sh` library.
+- **Code Cleanup:**
+  - Removed the unused `main-backup.sh` file.
+  - Removed unused variables in `src/core/cli.sh` and `src/core/configs.sh`.
+  - Improved code formatting and consistency in several files.

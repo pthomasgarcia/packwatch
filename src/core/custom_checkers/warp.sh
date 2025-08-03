@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# MODULE: custom_checkers/warp.sh
+# ==============================================================================
+# Responsibilities:
+#   - Custom logic to check for updates for Warp.
+#
+# Dependencies:
+#   - util/checker_utils.sh
+#   - errors.sh
+#   - packages.sh
+#   - systems.sh
+#   - validators.sh
+# ==============================================================================
 
 # Custom checker for Warp with direct curl calls
 check_warp() {

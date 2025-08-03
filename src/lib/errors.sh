@@ -13,6 +13,12 @@
 #   Then use:
 #     errors::handle_error "NETWORK_ERROR" "Failed to fetch data" "AppName"
 # ==============================================================================
+# Dependencies:
+#   - globals.sh
+#   - interfaces.sh
+#   - loggers.sh
+#   - notifiers.sh
+# ==============================================================================
 
 # ------------------------------------------------------------------------------
 # SECTION: Error Code Definitions

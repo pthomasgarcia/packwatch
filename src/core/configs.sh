@@ -14,6 +14,12 @@
 #     configs::load_modular_directory
 #     configs::create_default_files
 #     configs::validate_loaded_app_count
+#
+# Dependencies:
+#   - errors.sh
+#   - loggers.sh
+#   - systems.sh
+#   - validators.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

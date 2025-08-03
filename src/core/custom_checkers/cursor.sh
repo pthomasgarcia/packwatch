@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# MODULE: custom_checkers/cursor.sh
+# ==============================================================================
+# Responsibilities:
+#   - Custom logic to check for updates for Cursor.
+#
+# Dependencies:
+#   - util/checker_utils.sh
+#   - errors.sh
+#   - packages.sh
+#   - systems.sh
+# ==============================================================================
 
 # Custom checker for Cursor with direct curl calls
 check_cursor() {

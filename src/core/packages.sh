@@ -13,6 +13,12 @@
 #     packages::get_installed_version "AppKey"
 #     packages::update_installed_version_json "AppKey" "1.2.3"
 #     packages::install_deb_package "/tmp/file.deb" "AppName" "1.2.3" "AppKey"
+#
+# Dependencies:
+#   - errors.sh
+#   - loggers.sh
+#   - notifiers.sh
+#   - systems.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

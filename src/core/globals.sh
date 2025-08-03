@@ -5,6 +5,11 @@
 # ==============================================================================
 # This file contains global variables and simple state helpers.
 # Assumes CORE_DIR is defined by the caller before sourcing.
+#
+# Dependencies:
+#   - errors.sh
+#   - interfaces.sh
+#   - loggers.sh
 # ==============================================================================
 
 # --- Application Metadata ---

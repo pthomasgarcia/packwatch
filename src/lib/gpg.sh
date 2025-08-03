@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 
 # GPG module; provides functions for GPG key management and verification.
+#
+# Dependencies:
+#   - errors.sh
+#   - globals.sh
+#   - interfaces.sh
+#   - loggers.sh
+# ==============================================================================
 
 # GPG module; prompts the user to import and verify a GPG key if not already present.
 # Args:

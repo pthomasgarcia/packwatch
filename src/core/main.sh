@@ -6,6 +6,24 @@
 # ==============================================================================
 # This script is the main entry point for the application. It sets up the
 # environment, sources all necessary modules, and orchestrates the update check.
+#
+# Dependencies:
+#   - cli.sh
+#   - configs.sh
+#   - counters.sh
+#   - errors.sh
+#   - globals.sh
+#   - gpg.sh
+#   - interfaces.sh
+#   - loggers.sh
+#   - networks.sh
+#   - notifiers.sh
+#   - packages.sh
+#   - repositories.sh
+#   - systems.sh
+#   - updates.sh
+#   - validators.sh
+#   - versions.sh
 # ==============================================================================
 set -euo pipefail
 
@@ -22,41 +40,20 @@ readonly CORE_DIR
 source "$CORE_DIR/globals.sh"
 
 # ==============================================================================
-# SECTION: Source All Modules
+# SECTION: Source Essential Modules (required before CLI argument parsing)
 # ==============================================================================
-# The order is important due to dependencies between modules.
-
-# Foundational modules
+# These modules provide core functionalities like logging, error handling,
+# system checks, and CLI parsing itself, which are needed early in the script's
+# execution flow.
 source "$CORE_DIR/../lib/loggers.sh"
-source "$CORE_DIR/../lib/counters.sh"
-source "$CORE_DIR/../lib/notifiers.sh"
 source "$CORE_DIR/../lib/errors.sh"
 source "$CORE_DIR/../lib/systems.sh"
-source "$CORE_DIR/../lib/validators.sh"
-source "$CORE_DIR/../lib/versions.sh"
-
-source "$CORE_DIR/../lib/checker_utils.sh"
-
-# Core logic modules
-source "$CORE_DIR/networks.sh"
-source "$CORE_DIR/repositories.sh"
-source "$CORE_DIR/packages.sh"
-source "$CORE_DIR/configs.sh"
-source "$CORE_DIR/interfaces.sh"
-source "$CORE_DIR/updates.sh"
 source "$CORE_DIR/cli.sh"
-
-# External libraries
-# shellcheck source=/dev/null
-source "$CORE_DIR/../lib/gpg.sh"
 
 # ==============================================================================
 # SECTION: Application Initialization and Orchestration
 # ==============================================================================
 
-# Initialize the complete application environment and components.
-# This includes setting up signal handlers, validating global state,
-# resetting counters, and loading configurations.
 # Initialize the complete application environment and components.
 # This includes setting up signal handlers, validating global state,
 # resetting counters, and loading configurations.
@@ -151,6 +148,36 @@ main() {
 DOC
 	# Parse CLI arguments (now self-contained in cli module)
 	cli::parse_arguments "$@"
+
+	# Handle dry run mode early
+	if [[ ${DRY_RUN:-0} -eq 1 ]]; then
+		interfaces::print_application_header
+		interfaces::notify_execution_mode
+		echo "[DRY RUN] Exiting without checking apps."
+		return 0
+	fi
+
+	# Source non-essential modules now that CLI arguments are parsed.
+	# These modules are required for the main application workflow but are
+	# deferred to avoid unnecessary loading for operations like --help or --version.
+	# Foundational modules
+	source "$CORE_DIR/../lib/counters.sh"
+	source "$CORE_DIR/../lib/notifiers.sh"
+	source "$CORE_DIR/../lib/validators.sh"
+	source "$CORE_DIR/../lib/versions.sh"
+	source "$CORE_DIR/../util/checker_utils.sh"
+
+	# Core logic modules
+	source "$CORE_DIR/networks.sh"
+	source "$CORE_DIR/repositories.sh"
+	source "$CORE_DIR/packages.sh"
+	source "$CORE_DIR/configs.sh"
+	source "$CORE_DIR/interfaces.sh"
+	source "$CORE_DIR/updates.sh"
+
+	# External libraries
+	# shellcheck source=/dev/null
+	source "$CORE_DIR/../lib/gpg.sh"
 
 	# Initialize all core application components and environment
 	main::initialize_application

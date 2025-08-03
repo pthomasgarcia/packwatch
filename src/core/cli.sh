@@ -15,6 +15,11 @@
 #     cli::parse_arguments "$@"
 #     cli::show_usage
 #     cli::determine_apps_to_check apps_array_ref "${input_app_keys[@]}"
+#
+# Dependencies:
+#   - configs.sh
+#   - errors.sh
+#   - loggers.sh
 # ==============================================================================
 
 # Private module state - CLI arguments
@@ -164,12 +169,12 @@ cli::parse_arguments() {
 # ------------------------------------------------------------------------------
 
 # Validate and filter CLI apps against enabled configurations.
-# Usage: cli::validate_and_filter_apps apps_ref "${cli_apps[@]}"
-#   apps_ref  - Nameref to the array that will store the valid filtered apps
+# This function prints the valid filtered app keys to standard output,
+# one key per line.
+# Usage: cli::validate_and_filter_apps "${cli_apps[@]}"
 #   cli_apps  - Array of app keys specified on the command line
 cli::validate_and_filter_apps() {
-	local -n apps_ref=$1
-	local -a cli_apps=("${@:2}")
+	local -a cli_apps=("${@}")
 
 	# Create associative array of enabled apps for fast lookup
 	declare -A enabled_apps_assoc
@@ -177,7 +182,7 @@ cli::validate_and_filter_apps() {
 		enabled_apps_assoc["$key"]=1
 	done
 
-	# Filter CLI apps to only include enabled ones
+	# Filter CLI apps and print valid ones
 	local -a valid_cli_apps=()
 	for cli_app in "${cli_apps[@]}"; do
 		if [[ -n "${enabled_apps_assoc[$cli_app]:-}" ]]; then
@@ -187,32 +192,32 @@ cli::validate_and_filter_apps() {
 				"Application '$cli_app' specified on command line not found or not enabled in configurations. Skipping."
 		fi
 	done
-
-	# Update apps array or exit if no valid apps
-	if [[ ${#valid_cli_apps[@]} -gt 0 ]]; then
-		apps_ref=("${valid_cli_apps[@]}")
-	else
-		errors::handle_error_and_exit "CLI_ERROR" \
-			"No valid application keys specified on command line found in enabled configurations. Exiting." "cli"
-	fi
+	printf '%s\n' "${valid_cli_apps[@]}" # Print valid apps, one per line
 }
 
 # Determine the final list of applications to check.
 # This defaults to all enabled apps unless specific keys are provided via CLI.
-# Usage: cli::determine_apps_to_check apps_ref "${input_app_keys_from_cli[@]}"
-#   apps_ref                 - Nameref to the array that will store the final list of apps
-#   input_app_keys_from_cli  - Array of app keys parsed from the command line
+# Usage: cli::determine_apps_to_check apps_array_name
+#   apps_array_name          - Name of the array in the caller's scope that will store the final list of apps
 cli::determine_apps_to_check() {
-	local -n apps_ref=$1
+	local -n apps_ref=$1 # Nameref to the array in the caller's scope
 
 	# Default to all enabled apps
 	apps_ref=("${CUSTOM_APP_KEYS[@]}")
 
 	# Override with CLI apps if provided
 	if cli::has_app_keys; then
-		local -a cli_apps
-		readarray -t cli_apps < <(cli::get_app_keys)
-		cli::validate_and_filter_apps apps_ref "${cli_apps[@]}"
+		local -a cli_input_apps
+		readarray -t cli_input_apps < <(cli::get_app_keys)
+
+		# Filter CLI apps and capture the output into apps_ref
+		readarray -t apps_ref < <(cli::validate_and_filter_apps "${cli_input_apps[@]}")
+
+		# If no valid apps after filtering, handle error
+		if [[ ${#apps_ref[@]} -eq 0 ]]; then
+			errors::handle_error_and_exit "CLI_ERROR" \
+				"No valid application keys specified on command line found in enabled configurations. Exiting." "cli"
+		fi
 	fi
 }
 

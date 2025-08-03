@@ -12,6 +12,12 @@
 #   Then use:
 #     networks::download_file "url" "/tmp/file" "checksum" "sha256"
 #     networks::fetch_cached_data "url" "json"
+#
+# Dependencies:
+#   - errors.sh
+#   - loggers.sh
+#   - systems.sh
+#   - validators.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

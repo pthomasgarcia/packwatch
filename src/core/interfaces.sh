@@ -9,9 +9,9 @@
 #   - User-facing error and debug messages
 #
 # Dependencies:
-#   - loggers.sh (for internal logging)
-#   - counters.sh (for summary statistics)
-#   - globals.sh (for APP_NAME, APP_DESCRIPTION, DRY_RUN)
+#   - counters.sh
+#   - globals.sh
+#   - loggers.sh
 #
 # Usage:
 #   Source this file in your main script:
