@@ -220,14 +220,14 @@ configs::populate_globals_from_json() {
 
 	local extracted_data
 	extracted_data=$(echo "$merged_json_array" | jq -c '
-        reduce .[] as $item ({
-            apps_to_check: [],
-            applications: {}
-        };
-        .apps_to_check += [$item.app_key] |
-        .applications += {($item.app_key): $item.application}
-        )
-    ')
+		reduce .[] as $item ({
+			apps_to_check: [],
+			applications: {}
+		};
+		.apps_to_check += [$item.app_key] |
+		.applications += {($item.app_key): $item.application}
+		)
+	')
 
 	mapfile -t CUSTOM_APP_KEYS < <(echo "$extracted_data" | jq -r '.apps_to_check[]')
 	applications_json=$(echo "$extracted_data" | jq -c '.applications')
@@ -237,13 +237,13 @@ configs::populate_globals_from_json() {
 		[[ -z "$app_key" || -z "$prop_key" || "$prop_key" == "_comment"* ]] && continue
 		ALL_APP_CONFIGS["${app_key}_${prop_key}"]="$prop_value"
 	done < <(echo "$applications_json" | jq -r '
-        to_entries[] |
-        .key as $app_key |
-        .value |
-        to_entries[] |
-        select(.key | startswith("_comment") | not) |
-        [$app_key, .key, .value] | @tsv
-    ')
+		to_entries[] |
+		.key as $app_key |
+		.value |
+		to_entries[] |
+		select(.key | startswith("_comment") | not) |
+		[$app_key, .key, .value] | @tsv
+	')
 }
 
 # ------------------------------------------------------------------------------
@@ -307,87 +307,87 @@ configs::create_default_files() {
 		cat <<'EOF'
 {
 	   "VeraCrypt": {
-	       "app_key": "VeraCrypt",
-        "enabled": true,
-        "application": {
-            "name": "VeraCrypt",
-            "type": "custom",
-            "package_name": "veracrypt",
-            "gpg_key_id": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
-            "gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
-            "custom_checker_script": "veracrypt.sh",
-            "custom_checker_func": "check_veracrypt"
-        }
-    },
-    "Ghostty": {
-        "app_key": "Ghostty",
-        "enabled": true,
-        "application": {
-            "name": "Ghostty",
-            "type": "github_deb",
-            "package_name": "ghostty",
-            "repo_owner": "mkasberg",
-            "repo_name": "ghostty-ubuntu",
-            "filename_pattern_template": "ghostty_%s.ppa2_amd64_25.04.deb"
-        }
-    },
-    "Tabby": {
-        "app_key": "Tabby",
-        "enabled": true,
-        "application": {
-            "name": "Tabby",
-            "type": "github_deb",
-            "package_name": "tabby-terminal",
-            "repo_owner": "Eugeny",
-            "repo_name": "tabby",
-            "filename_pattern_template": "tabby-%s-linux-x64.deb"
-        }
-    },
-    "Warp": {
-        "app_key": "Warp",
-        "enabled": true,
-        "application": {
-            "name": "Warp",
-            "type": "custom",
-            "package_name": "warp-terminal",
-            "custom_checker_script": "warp.sh",
-            "custom_checker_func": "check_warp"
-        }
-    },
-    "WaveTerm": {
-        "app_key": "WaveTerm",
-        "enabled": true,
-        "application": {
-            "name": "WaveTerm",
-            "type": "github_deb",
-            "package_name": "waveterm",
-            "repo_owner": "wavetermdev",
-            "repo_name": "waveterm",
-            "filename_pattern_template": "waveterm-linux-amd64-%s.deb"
-        }
-    },
-    "Cursor": {
-        "app_key": "Cursor",
-        "enabled": true,
-        "application": {
-            "name": "Cursor",
-            "type": "custom",
-            "install_path": "$HOME/Applications/cursor",
-            "custom_checker_script": "cursor.sh",
-            "custom_checker_func": "check_cursor"
-        }
-    },
-    "Zed": {
-        "app_key": "Zed",
-        "enabled": true,
-        "application": {
-            "name": "Zed",
-            "type": "custom",
-            "flatpak_app_id": "dev.zed.Zed",
-            "custom_checker_script": "zed.sh",
-            "custom_checker_func": "check_zed"
-        }
-    }
+		   "app_key": "VeraCrypt",
+		"enabled": true,
+		"application": {
+			"name": "VeraCrypt",
+			"type": "custom",
+			"package_name": "veracrypt",
+			"gpg_key_id": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
+			"gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
+			"custom_checker_script": "veracrypt.sh",
+			"custom_checker_func": "check_veracrypt"
+		}
+	},
+	"Ghostty": {
+		"app_key": "Ghostty",
+		"enabled": true,
+		"application": {
+			"name": "Ghostty",
+			"type": "github_deb",
+			"package_name": "ghostty",
+			"repo_owner": "mkasberg",
+			"repo_name": "ghostty-ubuntu",
+			"filename_pattern_template": "ghostty_%s.ppa2_amd64_25.04.deb"
+		}
+	},
+	"Tabby": {
+		"app_key": "Tabby",
+		"enabled": true,
+		"application": {
+			"name": "Tabby",
+			"type": "github_deb",
+			"package_name": "tabby-terminal",
+			"repo_owner": "Eugeny",
+			"repo_name": "tabby",
+			"filename_pattern_template": "tabby-%s-linux-x64.deb"
+		}
+	},
+	"Warp": {
+		"app_key": "Warp",
+		"enabled": true,
+		"application": {
+			"name": "Warp",
+			"type": "custom",
+			"package_name": "warp-terminal",
+			"custom_checker_script": "warp.sh",
+			"custom_checker_func": "check_warp"
+		}
+	},
+	"WaveTerm": {
+		"app_key": "WaveTerm",
+		"enabled": true,
+		"application": {
+			"name": "WaveTerm",
+			"type": "github_deb",
+			"package_name": "waveterm",
+			"repo_owner": "wavetermdev",
+			"repo_name": "waveterm",
+			"filename_pattern_template": "waveterm-linux-amd64-%s.deb"
+		}
+	},
+	"Cursor": {
+		"app_key": "Cursor",
+		"enabled": true,
+		"application": {
+			"name": "Cursor",
+			"type": "custom",
+			"install_path": "$HOME/Applications/cursor",
+			"custom_checker_script": "cursor.sh",
+			"custom_checker_func": "check_cursor"
+		}
+	},
+	"Zed": {
+		"app_key": "Zed",
+		"enabled": true,
+		"application": {
+			"name": "Zed",
+			"type": "custom",
+			"flatpak_app_id": "dev.zed.Zed",
+			"custom_checker_script": "zed.sh",
+			"custom_checker_func": "check_zed"
+		}
+	}
 }
 EOF
 	)
@@ -411,6 +411,49 @@ EOF
 	done < <(echo "$default_app_configs" | jq -r 'keys[]')
 
 	loggers::print_message "Default modular configuration setup complete."
+	return 0
+}
+
+# Get the full configuration for a specific application key.
+# Usage: configs::get_app_config "AppKey" app_config_nameref
+#   app_key           - The application key to retrieve.
+#   app_config_nameref - The name of the associative array in the caller's scope
+#                        to populate with the application's configuration.
+# Returns 0 on success, 1 if app_key not found.
+configs::get_app_config() {
+local app_key="$1"
+local app_config_nameref="$2"
+if [[ -z "$app_config_nameref" ]]; then
+	loggers::log_message "ERROR" "configs::get_app_config: Second argument (nameref) is missing for app_key '$app_key'"
+	return 1
+fi
+if ! declare -p "$app_config_nameref" 2>/dev/null | grep -q 'declare -A'; then
+	loggers::log_message "ERROR" "configs::get_app_config: Second argument '$app_config_nameref' is not an associative array for app_key '$app_key'"
+	return 1
+fi
+local -n app_config_ref=$app_config_nameref # Nameref to the array in the caller's scope
+
+	# Clear the array to ensure a clean state
+	for key in "${!app_config_ref[@]}"; do
+		unset "app_config_ref[$key]"
+	done
+
+	local found=0
+	local field_name
+	for field_name in "${!ALL_APP_CONFIGS[@]}"; do
+		if [[ "$field_name" == "${app_key}_"* ]]; then
+			app_config_ref["${field_name#"${app_key}_"}"]="${ALL_APP_CONFIGS[$field_name]}"
+			found=1
+		fi
+	done
+
+	if [[ "$found" -eq 0 ]]; then
+		loggers::log_message "ERROR" "Application configuration not found for key: '$app_key'"
+		return 1
+	fi
+
+	# Add the app_key itself to the config for convenience
+	app_config_ref["app_key"]="$app_key"
 	return 0
 }
 

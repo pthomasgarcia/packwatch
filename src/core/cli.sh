@@ -157,7 +157,6 @@ cli::parse_arguments() {
 			;;
 		*)
 			_CLI_APP_KEYS+=("$1") # Direct assignment to module state
-			apps_specified_on_cmdline=1
 			shift
 			;;
 		esac

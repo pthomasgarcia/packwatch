@@ -1158,7 +1158,6 @@ updates::check_flatpak() {
 # ------------------------------------------------------------------------------
 
 # Updates helper; handles the logic for a 'custom' application type.
-# This function now passes a JSON string of the app configuration to the custom checker.
 updates::handle_custom_check() {
 	local config_array_name="$1"
 	local -n app_config_ref=$config_array_name
@@ -1231,11 +1230,11 @@ updates::handle_custom_check() {
 	# Pass the JSON string as the first argument to the custom checker function
 	custom_checker_output=$("$custom_checker_func" "$app_config_json")
 	local status
-	status=$(echo "$custom_checker_output" | jq -r '.status // "error"') # Default to error if status is missing
+	status=$(echo "$custom_checker_output" | jq -r '.status // empty')
 	local latest_version
-	latest_version=$(versions::normalize "$(echo "$custom_checker_output" | jq -r '.latest_version // "0.0.0"')") # Default to 0.0.0
+	latest_version=$(versions::normalize "$(echo "$custom_checker_output" | jq -r '.latest_version // empty')")
 	local source
-	source=$(echo "$custom_checker_output" | jq -r '.source // "Unknown"') # Default to Unknown
+	source=$(echo "$custom_checker_output" | jq -r '.source // empty')
 	local error_message
 	error_message=$(echo "$custom_checker_output" | jq -r '.error_message // empty')
 
@@ -1359,14 +1358,10 @@ updates::check_application() {
 	fi
 
 	declare -A _current_app_config
-	local field_name
-	for field_name in "${!ALL_APP_CONFIGS[@]}"; do
-		if [[ "$field_name" =~ ^"${app_key}_" ]]; then
-			_current_app_config["${field_name#"${app_key}"_}"]="${ALL_APP_CONFIGS[$field_name]}"
-		fi
-	done
-
-	_current_app_config["app_key"]="$app_key"
+	if ! configs::get_app_config "$app_key" "_current_app_config"; then
+		errors::handle_error "CONFIG_ERROR" "Failed to retrieve configuration for app: '$app_key'" "$app_key"
+		return 1
+	fi
 
 	local app_display_name="${_current_app_config[name]:-$app_key}"
 	interfaces::display_header "$app_display_name" "$current_index" "$total_apps"

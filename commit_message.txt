@@ -1,20 +1,13 @@
-refactor(shell): Improve modularity and script structure
+refactor(configs): Centralize config retrieval and remove unused variables
 
-This commit introduces a significant refactoring to improve the modularity and overall structure of the application.
+This commit introduces several improvements to the configuration handling logic, making it more robust and efficient.
 
-- **Dependency Documentation:**
-  - Added `Dependencies` sections to the headers of all script files to clearly document the relationships between modules.
+- **Centralized Application Config Retrieval:**
+  - A new function, `configs::get_app_config`, has been created in `src/core/configs.sh` to act as the single source of truth for fetching an application's configuration.
+  - The `updates::check_application` function has been refactored to use this new centralized function, removing duplicated logic.
 
-- **Refactored CLI Logic:**
-  - The `cli::validate_and_filter_apps` function has been refactored to return a list of valid applications instead of modifying an array by reference. This improves the clarity and predictability of the function.
+- **Removed Unused Variables:**
+  - The unused variable `apps_specified_on_cmdline` has been removed from `src/core/cli.sh`.
+  - The unused variable `apps_to_check_json` has been removed from `src/core/configs.sh`.
 
-- **Lazy Loading of Modules:**
-  - The main script (`src/core/main.sh`) has been updated to lazy-load non-essential modules. Core modules required for basic operations like `--help` are loaded first, and the rest are loaded only when the main application workflow is executed.
-
-- **New `util` Directory:**
-  - A new `src/util` directory has been created to house utility scripts that are shared across different parts of the application.
-  - The `checker_utils.sh` script has been moved from `src/lib` to `src/util`.
-
-- **Code Cleanup:**
-  - The unused `main-backup.sh` file has been deleted.
-  - Code formatting has been made more consistent across all files.
+These changes improve the modularity, maintainability, and efficiency of the codebase.
