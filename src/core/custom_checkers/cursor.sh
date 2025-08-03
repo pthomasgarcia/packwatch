@@ -2,44 +2,44 @@
 
 # Custom checker for Cursor with direct curl calls
 check_cursor() {
-    local -n app_config_ref=$1
-    local name="${app_config_ref[name]}"
-    local install_path_config="${app_config_ref[install_path]}"
-    local app_key="${app_config_ref[app_key]}"
-    local appimage_filename_final="cursor.AppImage"
-    local install_base_dir="${install_path_config//\$HOME/$ORIGINAL_HOME}"
-    install_base_dir="${install_base_dir/#\~/$ORIGINAL_HOME}"
-    local appimage_file_path="${install_base_dir}/${appimage_filename_final}"
+	local -n app_config_ref=$1
+	local name="${app_config_ref[name]}"
+	local install_path_config="${app_config_ref[install_path]}"
+	local app_key="${app_config_ref[app_key]}"
+	local appimage_filename_final="cursor.AppImage"
+	local install_base_dir="${install_path_config//\$HOME/$ORIGINAL_HOME}"
+	install_base_dir="${install_base_dir/#\~/$ORIGINAL_HOME}"
+	local appimage_file_path="${install_base_dir}/${appimage_filename_final}"
 
-    local installed_version
-    installed_version=$(packages::get_installed_version "$app_key")
+	local installed_version
+	installed_version=$(packages::get_installed_version "$app_key")
 
-    local api_endpoint="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
-    local api_json
-    api_json=$(systems::reattempt_command 3 5 curl -s -L "$api_endpoint")
+	local api_endpoint="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
+	local api_json
+	api_json=$(systems::reattempt_command 3 5 curl -s -L "$api_endpoint")
 
-    # Extract downloadUrl and version from JSON
-    local actual_download_url
-    actual_download_url=$(echo "$api_json" | jq -r '.downloadUrl // empty')
-    local latest_version
-    latest_version=$(echo "$api_json" | jq -r '.version // empty')
+	# Extract downloadUrl and version from JSON
+	local actual_download_url
+	actual_download_url=$(echo "$api_json" | jq -r '.downloadUrl // empty')
+	local latest_version
+	latest_version=$(echo "$api_json" | jq -r '.version // empty')
 
-    if [[ -z "$actual_download_url" ]] || [[ -z "$latest_version" ]]; then
-        errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to extract version or download URL for $name." "cursor"
-        return 1
-    fi
+	if [[ -z "$actual_download_url" ]] || [[ -z "$latest_version" ]]; then
+		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to extract version or download URL for $name." "cursor"
+		return 1
+	fi
 
-    local output_status
-    output_status=$(checker_utils::determine_status "$installed_version" "$latest_version")
+	local output_status
+	output_status=$(checker_utils::determine_status "$installed_version" "$latest_version")
 
-    jq -n \
-        --arg status "$output_status" \
-        --arg latest_version "$latest_version" \
-        --arg download_url "$actual_download_url" \
-        --arg install_type "appimage" \
-        --arg install_target_path "$appimage_file_path" \
-        --arg source "Official API (JSON)" \
-        '{
+	jq -n \
+		--arg status "$output_status" \
+		--arg latest_version "$latest_version" \
+		--arg download_url "$actual_download_url" \
+		--arg install_type "appimage" \
+		--arg install_target_path "$appimage_file_path" \
+		--arg source "Official API (JSON)" \
+		'{
           "status": $status,
           "latest_version": $latest_version,
           "download_url": $download_url,
@@ -48,5 +48,5 @@ check_cursor() {
           "source": $source
         }'
 
-    return 0
+	return 0
 }

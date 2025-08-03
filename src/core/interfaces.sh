@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source=src/core/globals.sh
 # ==============================================================================
 # MODULE: interfaces.sh
 # ==============================================================================
@@ -39,14 +40,14 @@ _bold() { echo -e "\033[1m$1\033[0m"; }
 # Display a standardized application header.
 # Usage: interfaces::display_header "AppName" 1 5
 interfaces::display_header() {
-    local app_name="$1"
-    local current="$2"
-    local total="$3"
+	local app_name="$1"
+	local current="$2"
+	local total="$3"
 
-    loggers::print_message ""
-    loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    loggers::print_message "$(_bold "$(_color_cyan "[$current/$total] $app_name")")"
-    loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	loggers::print_message ""
+	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	loggers::print_message "$(_bold "$(_color_cyan "[$current/$total] $app_name")")"
+	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
 # ------------------------------------------------------------------------------
@@ -59,29 +60,29 @@ interfaces::display_header() {
 #   default_resp_char - 'Y' or 'N' (default: 'N')
 # Returns 0 for yes, 1 for no.
 interfaces::confirm_prompt() {
-    local message="$1"
-    local default_resp_char="${2:-N}" # 'Y' or 'N'
-    local prompt_suffix=""
-    local response
+	local message="$1"
+	local default_resp_char="${2:-N}" # 'Y' or 'N'
+	local prompt_suffix=""
+	local response
 
-    if [[ "$default_resp_char" == "Y" ]]; then
-        prompt_suffix=" (Y/n): "
-    else
-        prompt_suffix=" (y/N): "
-    fi
+	if [[ "$default_resp_char" == "Y" ]]; then
+		prompt_suffix=" (Y/n): "
+	else
+		prompt_suffix=" (y/N): "
+	fi
 
-    # Use /dev/tty to ensure prompt works under sudo or piped input
-    read -rp "$(_bold "$message")$prompt_suffix" response < /dev/tty || true
+	# Use /dev/tty to ensure prompt works under sudo or piped input
+	read -rp "$(_bold "$message")$prompt_suffix" response </dev/tty || true
 
-    local lower_response
-    lower_response="${response,,}"
+	local lower_response
+	lower_response="${response,,}"
 
-    case "$lower_response" in
-        "y" | "yes") return 0 ;;
-        "n" | "no") return 1 ;;
-        "") [[ "$default_resp_char" == "Y" ]] && return 0 || return 1 ;;
-        *) return 1 ;;
-    esac
+	case "$lower_response" in
+	"y" | "yes") return 0 ;;
+	"n" | "no") return 1 ;;
+	"") [[ "$default_resp_char" == "Y" ]] && return 0 || return 1 ;;
+	*) return 1 ;;
+	esac
 }
 
 # ------------------------------------------------------------------------------
@@ -90,9 +91,9 @@ interfaces::confirm_prompt() {
 
 # Display the main application header
 interfaces::print_application_header() {
-    loggers::print_message ""
-    loggers::print_message "$(_bold "🔄 $APP_NAME: $APP_DESCRIPTION")"
-    loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	loggers::print_message ""
+	loggers::print_message "$(_bold "🔄 $APP_NAME: $APP_DESCRIPTION")"
+	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
 # ------------------------------------------------------------------------------
@@ -101,16 +102,16 @@ interfaces::print_application_header() {
 
 # Display the update summary
 interfaces::print_summary() {
-    loggers::print_message ""
-    loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
-    loggers::print_message "$(_bold "Update Summary:")"
-    loggers::print_message "  $(_color_green "✓ Up to date:")    $(counters::get_up_to_date)"
-    loggers::print_message "  $(_color_yellow "⬆ Updated:")       $(counters::get_updated)"
-    loggers::print_message "  $(_color_red "✗ Failed:")        $(counters::get_failed)"
-    if [[ $(counters::get_skipped) -gt 0 ]]; then
-        loggers::print_message "  $(_color_cyan "🞨 Skipped/Disabled:") $(counters::get_skipped)"
-    fi
-    loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
+	loggers::print_message ""
+	loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
+	loggers::print_message "$(_bold "Update Summary:")"
+	loggers::print_message "  $(_color_green "✓ Up to date:")    $(counters::get_up_to_date)"
+	loggers::print_message "  $(_color_yellow "⬆ Updated:")       $(counters::get_updated)"
+	loggers::print_message "  $(_color_red "✗ Failed:")        $(counters::get_failed)"
+	if [[ $(counters::get_skipped) -gt 0 ]]; then
+		loggers::print_message "  $(_color_cyan "🞨 Skipped/Disabled:") $(counters::get_skipped)"
+	fi
+	loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
 }
 
 # ------------------------------------------------------------------------------
@@ -119,13 +120,13 @@ interfaces::print_summary() {
 
 # Display installation help information
 interfaces::print_installation_help() {
-    loggers::print_message ""
-    loggers::print_message "$(_bold "To install core dependencies:")"
-    loggers::print_message "  $(_color_cyan "$INSTALL_CMD")"
-    loggers::print_message ""
-    loggers::print_message "Additional notes:"
-    loggers::print_message "  • For 'notify-send': install 'libnotify-bin'"
-    loggers::print_message "  • For 'flatpak': see https://flatpak.org/setup/"
+	loggers::print_message ""
+	loggers::print_message "$(_bold "To install core dependencies:")"
+	loggers::print_message "  $(_color_cyan "$INSTALL_CMD")"
+	loggers::print_message ""
+	loggers::print_message "Additional notes:"
+	loggers::print_message "  • For 'notify-send': install 'libnotify-bin'"
+	loggers::print_message "  • For 'flatpak': see https://flatpak.org/setup/"
 }
 
 # ------------------------------------------------------------------------------
@@ -135,10 +136,10 @@ interfaces::print_installation_help() {
 # Notify the user if the script is running in dry-run mode.
 # Usage: interfaces::notify_execution_mode
 interfaces::notify_execution_mode() {
-  if [[ "${DRY_RUN:-0}" -eq 1 ]]; then # Use default value for DRY_RUN for robustness
-    loggers::print_message ""
-    loggers::print_message "$(_color_yellow "🚀 Running in DRY RUN mode - no installations or file modifications will be performed.")"
-  fi
+	if [[ "${DRY_RUN:-0}" -eq 1 ]]; then # Use default value for DRY_RUN for robustness
+		loggers::print_message ""
+		loggers::print_message "$(_color_yellow "🚀 Running in DRY RUN mode - no installations or file modifications will be performed.")"
+	fi
 }
 
 # ------------------------------------------------------------------------------
@@ -147,14 +148,14 @@ interfaces::notify_execution_mode() {
 
 # Display home determination error to user
 interfaces::print_home_determination_error() {
-  local error_msg="$1"
-  loggers::print_message "$(_color_red "⚠️  $error_msg")" >&2
+	local error_msg="$1"
+	loggers::print_message "$(_color_red "⚠️  $error_msg")" >&2
 }
 
 # Display general error to user
 interfaces::print_error_to_user() {
-  local error_msg="$1"
-  loggers::print_message "$(_color_red "❌ Error: $error_msg")" >&2
+	local error_msg="$1"
+	loggers::print_message "$(_color_red "❌ Error: $error_msg")" >&2
 }
 
 # ------------------------------------------------------------------------------
@@ -163,15 +164,15 @@ interfaces::print_error_to_user() {
 
 # Display debug state snapshot to user
 interfaces::print_debug_state_snapshot() {
-  loggers::print_message "$(_color_cyan "🔍 Debug Information:")" >&2
-  loggers::print_message "   CORE_DIR: $CORE_DIR" >&2
-  loggers::print_message "   CONFIG_ROOT: $CONFIG_ROOT" >&2
-  loggers::print_message "   CONFIG_DIR: $CONFIG_DIR" >&2
-  loggers::print_message "   CACHE_DIR: $CACHE_DIR" >&2
-  loggers::print_message "   ORIGINAL_USER: $ORIGINAL_USER" >&2
-  loggers::print_message "   ORIGINAL_HOME: $ORIGINAL_HOME" >&2
-  loggers::print_message "   DRY_RUN: $DRY_RUN" >&2
-  loggers::print_message "   VERBOSE: $VERBOSE" >&2
+	loggers::print_message "$(_color_cyan "🔍 Debug Information:")" >&2
+	loggers::print_message "   CORE_DIR: $CORE_DIR" >&2
+	loggers::print_message "   CONFIG_ROOT: $CONFIG_ROOT" >&2
+	loggers::print_message "   CONFIG_DIR: $CONFIG_DIR" >&2
+	loggers::print_message "   CACHE_DIR: $CACHE_DIR" >&2
+	loggers::print_message "   ORIGINAL_USER: $ORIGINAL_USER" >&2
+	loggers::print_message "   ORIGINAL_HOME: $ORIGINAL_HOME" >&2
+	loggers::print_message "   DRY_RUN: $DRY_RUN" >&2
+	loggers::print_message "   VERBOSE: $VERBOSE" >&2
 }
 
 # ==============================================================================

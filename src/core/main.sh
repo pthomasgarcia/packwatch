@@ -61,61 +61,61 @@ source "$CORE_DIR/../lib/gpg.sh"
 # This includes setting up signal handlers, validating global state,
 # resetting counters, and loading configurations.
 main::initialize_application() {
-  # Setup signal handlers
-  trap 'systems::perform_housekeeping; exit $?' EXIT
-  
-  # Perform post-sourcing validation (e.g., initial HOME/USER determination errors)
-  if [[ -n "${_home_determination_error:-}" ]]; then
-    loggers::log_message "ERROR" "$_home_determination_error"
-    interfaces::print_home_determination_error "$_home_determination_error"
-  fi
+	# Setup signal handlers
+	trap 'systems::perform_housekeeping; exit $?' EXIT
 
-  # Validate base state (directories, user context, etc.)
-  if ! globals::validate_state; then
-    errors::handle_error "VALIDATION_ERROR" "Failed to validate global state" "core"
-    local exit_code=$?
-    exit "$exit_code"
-  fi
+	# Perform post-sourcing validation (e.g., initial HOME/USER determination errors)
+	if [[ -n "${_home_determination_error:-}" ]]; then
+		loggers::log_message "ERROR" "$_home_determination_error"
+		interfaces::print_home_determination_error "$_home_determination_error"
+	fi
 
-  # Optional: snapshot key state when verbose debug mode is enabled
-  if [[ ${VERBOSE:-0} -ge 2 ]]; then
-    loggers::log_message "DEBUG" "State snapshot requested"
-    interfaces::print_debug_state_snapshot
-  fi
+	# Validate base state (directories, user context, etc.)
+	if ! globals::validate_state; then
+		errors::handle_error "VALIDATION_ERROR" "Failed to validate global state" "core"
+		local exit_code=$?
+		exit "$exit_code"
+	fi
 
-  # Initialize application components
-  counters::reset # Ensure a clean state for each run
-  
-  if ! packages::initialize_installed_versions_file; then
-    errors::handle_error "INITIALIZATION_ERROR" "Failed to initialize installed versions file" "packages"
-    local exit_code=$?
-    exit "$exit_code"
-  fi
-  
-  if ! configs::load_modular_directory; then
-    errors::handle_error "INITIALIZATION_ERROR" "Failed to load modular directory" "configs"
-    local exit_code=$?
-    exit "$exit_code"
-  fi
+	# Optional: snapshot key state when verbose debug mode is enabled
+	if [[ ${VERBOSE:-0} -ge 2 ]]; then
+		loggers::log_message "DEBUG" "State snapshot requested"
+		interfaces::print_debug_state_snapshot
+	fi
 
-  # Optionally freeze semantically-immutable values after config load
-  if ! globals::freeze; then
-    errors::handle_error "CONFIG_ERROR" "Failed to freeze global configuration" "core"
-    local exit_code=$?
-    exit "$exit_code"
-  fi
+	# Initialize application components
+	counters::reset # Ensure a clean state for each run
+
+	if ! packages::initialize_installed_versions_file; then
+		errors::handle_error "INITIALIZATION_ERROR" "Failed to initialize installed versions file" "packages"
+		local exit_code=$?
+		exit "$exit_code"
+	fi
+
+	if ! configs::load_modular_directory; then
+		errors::handle_error "INITIALIZATION_ERROR" "Failed to load modular directory" "configs"
+		local exit_code=$?
+		exit "$exit_code"
+	fi
+
+	# Optionally freeze semantically-immutable values after config load
+	if ! globals::freeze; then
+		errors::handle_error "CONFIG_ERROR" "Failed to freeze global configuration" "core"
+		local exit_code=$?
+		exit "$exit_code"
+	fi
 }
 
 # Perform the main application workflow for checking and processing updates.
 # This function orchestrates the steps after initialization is complete.
 main::perform_application_workflow() {
-  local -a apps_to_check=("$@")
-  
-  local total_apps=${#apps_to_check[@]}
-  configs::validate_loaded_app_count "$total_apps" # Delegates to configs module
-  interfaces::notify_execution_mode                # Delegates to interfaces module
-  updates::perform_all_checks "${apps_to_check[@]}" # Delegates to updates module
-  interfaces::print_summary
+	local -a apps_to_check=("$@")
+
+	local total_apps=${#apps_to_check[@]}
+	configs::validate_loaded_app_count "$total_apps"  # Delegates to configs module
+	interfaces::notify_execution_mode                 # Delegates to interfaces module
+	updates::perform_all_checks "${apps_to_check[@]}" # Delegates to updates module
+	interfaces::print_summary
 }
 
 # ==============================================================================
@@ -123,7 +123,7 @@ main::perform_application_workflow() {
 # ==============================================================================
 
 main() {
-  : <<'DOC'
+	: <<'DOC'
   Orchestrates the entire application update check process.
 
   This function serves as the primary controller. It parses command-line
@@ -149,24 +149,24 @@ main() {
     - 0 if all checks were successful or skipped.
     - 1 if any application check failed.
 DOC
-  # Parse CLI arguments (now self-contained in cli module)
-  cli::parse_arguments "$@"
-  
-  # Initialize all core application components and environment
-  main::initialize_application
-  
-  # Display the main application header
-  interfaces::print_application_header
+	# Parse CLI arguments (now self-contained in cli module)
+	cli::parse_arguments "$@"
 
-  # Determine the final list of applications to check
-  local -a apps_to_check
-  cli::determine_apps_to_check apps_to_check  # No parameters needed!
+	# Initialize all core application components and environment
+	main::initialize_application
 
-  # Execute the main update workflow
-  main::perform_application_workflow "${apps_to_check[@]}"
+	# Display the main application header
+	interfaces::print_application_header
 
-  # Return an exit code indicating overall success or failure
-  return $(( $(counters::get_failed) > 0 ? 1 : 0 ))
+	# Determine the final list of applications to check
+	local -a apps_to_check
+	cli::determine_apps_to_check apps_to_check # No parameters needed!
+
+	# Execute the main update workflow
+	main::perform_application_workflow "${apps_to_check[@]}"
+
+	# Return an exit code indicating overall success or failure
+	return $(($(counters::get_failed) > 0 ? 1 : 0))
 }
 
 # ==============================================================================
@@ -175,7 +175,7 @@ DOC
 
 # Perform system dependency check early. This is a crucial pre-initialization step.
 if ! systems::check_dependencies; then
-  exit 1
+	exit 1
 fi
 
 # Run the main application logic.
