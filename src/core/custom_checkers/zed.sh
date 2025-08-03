@@ -28,7 +28,11 @@ check_zed() {
 	)
 
 	if [[ -z "$latest_version" ]]; then
-		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to retrieve latest version for $name." "zed"
+		jq -n \
+			--arg status "error" \
+			--arg error_message "Failed to retrieve latest version for $name." \
+			--arg error_type "NETWORK_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 		return 1
 	fi
 
@@ -47,13 +51,15 @@ check_zed() {
 		--arg flatpak_app_id "$flatpak_app_id" \
 		--arg install_type "flatpak" \
 		--arg source "Flathub" \
+		--arg error_type "NONE" \
 		'{
-          "status": $status,
-          "latest_version": $latest_version,
-          "flatpak_app_id": $flatpak_app_id,
-          "install_type": $install_type,
-          "source": $source
-        }'
+	         "status": $status,
+	         "latest_version": $latest_version,
+	         "flatpak_app_id": $flatpak_app_id,
+	         "install_type": $install_type,
+	         "source": $source,
+	         "error_type": $error_type
+	       }'
 
 	return 0
 }

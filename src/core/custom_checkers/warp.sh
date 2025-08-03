@@ -24,7 +24,11 @@ check_warp() {
 	local url="https://app.warp.dev/get_warp?package=deb"
 	local html_content
 	if ! html_content=$(systems::reattempt_command 3 5 curl -s -L -A "${NETWORK_CONFIG[USER_AGENT]}" "$url") || [[ -z "$html_content" ]]; then
-		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to fetch download page for $name." "warp"
+		jq -n \
+			--arg status "error" \
+			--arg error_message "Failed to fetch download page for $name." \
+			--arg error_type "NETWORK_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 		return 1
 	fi
 
@@ -36,7 +40,11 @@ check_warp() {
 	latest_version=$(checker_utils::strip_version_prefix "$latest_version_raw")
 
 	if [[ -z "$latest_version" ]]; then
-		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to extract version for $name." "warp"
+		jq -n \
+			--arg status "error" \
+			--arg error_message "Failed to extract version for $name." \
+			--arg error_type "PARSING_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 		return 1
 	fi
 
@@ -49,7 +57,11 @@ check_warp() {
 		"https://app.warp.dev/download?package=deb" | tr -d '\r')
 
 	if [[ -z "$actual_deb_url" ]] || ! validators::check_url_format "$actual_deb_url"; then
-		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to resolve download URL for $name." "warp"
+		jq -n \
+			--arg status "error" \
+			--arg error_message "Failed to resolve download URL for $name." \
+			--arg error_type "NETWORK_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 		return 1
 	fi
 
@@ -62,13 +74,15 @@ check_warp() {
 		--arg download_url "$actual_deb_url" \
 		--arg install_type "deb" \
 		--arg source "Official API" \
+		--arg error_type "NONE" \
 		'{
-          "status": $status,
-          "latest_version": $latest_version,
-          "download_url": $download_url,
-          "install_type": $install_type,
-          "source": $source
-        }'
+	         "status": $status,
+	         "latest_version": $latest_version,
+	         "download_url": $download_url,
+	         "install_type": $install_type,
+	         "source": $source,
+	         "error_type": $error_type
+	       }'
 
 	return 0
 }

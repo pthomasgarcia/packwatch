@@ -1230,13 +1230,15 @@ updates::handle_custom_check() {
 	# Pass the JSON string as the first argument to the custom checker function
 	custom_checker_output=$("$custom_checker_func" "$app_config_json")
 	local status
-	status=$(echo "$custom_checker_output" | jq -r '.status // empty')
+	status=$(echo "$custom_checker_output" | jq -r '.status // "error"')
 	local latest_version
-	latest_version=$(versions::normalize "$(echo "$custom_checker_output" | jq -r '.latest_version // empty')")
+	latest_version=$(versions::normalize "$(echo "$custom_checker_output" | jq -r '.latest_version // "0.0.0"')")
 	local source
-	source=$(echo "$custom_checker_output" | jq -r '.source // empty')
+	source=$(echo "$custom_checker_output" | jq -r '.source // "Unknown"')
 	local error_message
 	error_message=$(echo "$custom_checker_output" | jq -r '.error_message // empty')
+	local error_type_from_checker
+	error_type_from_checker=$(echo "$custom_checker_output" | jq -r '.error_type // "CUSTOM_CHECKER_ERROR"')
 
 	loggers::print_ui_line "  " "Installed: " "$installed_version"
 	loggers::print_ui_line "  " "Source:    " "$source"
@@ -1300,6 +1302,7 @@ updates::handle_custom_check() {
 		loggers::print_ui_line "  " "✓ " "Up to date." _color_green
 		counters::inc_up_to_date
 	elif [[ "$status" == "error" ]]; then
+		errors::handle_error "$error_type_from_checker" "$error_message" "$app_display_name"
 		loggers::print_ui_line "  " "✗ " "Error: $error_message" _color_red
 		return 1
 	else

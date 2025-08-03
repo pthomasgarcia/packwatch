@@ -47,14 +47,16 @@ declare -A ERROR_CODES=(
 #   MESSAGE   - Error message to log
 #   APP_NAME  - (Optional) Application name for context
 errors::handle_error() {
-	local error_type="$1"
+	local error_type_code="$1" # Renamed to avoid conflict with new optional param
 	local error_message="$2"
 	local app_name="${3:-unknown}"
+	local custom_error_type="${4:-}" # New optional parameter for custom error type
 
-	local exit_code="${ERROR_CODES[$error_type]:-1}"
+	local final_error_type="${custom_error_type:-$error_type_code}" # Use custom if provided, else default
+	local exit_code="${ERROR_CODES[$final_error_type]:-1}"
 
 	# Log the error (requires loggers.sh to be sourced)
-	loggers::log_message "ERROR" "[$error_type] $error_message (app: $app_name)"
+	loggers::log_message "ERROR" "[$final_error_type] $error_message (app: $app_name)"
 
 	# Optionally, send notifications for certain error types (requires notifiers.sh)
 	case "$error_type" in
@@ -81,12 +83,13 @@ errors::handle_error() {
 #   MESSAGE   - Error message to log
 #   APP_NAME  - (Optional) Application name for context
 errors::handle_error_and_exit() {
-	local error_type="$1"
+	local error_type_code="$1"
 	local error_message="$2"
 	local app_name="${3:-unknown}"
+	local custom_error_type="${4:-}"
 
-	errors::handle_error "$error_type" "$error_message" "$app_name"
-	exit "${ERROR_CODES[$error_type]:-1}"
+	errors::handle_error "$error_type_code" "$error_message" "$app_name" "$custom_error_type"
+	exit "${ERROR_CODES[${custom_error_type:-$error_type_code}]:-1}"
 }
 
 # Helper for module-specific initialization errors.
@@ -97,8 +100,8 @@ errors::handle_error_and_exit() {
 errors::handle_module_error() {
 	local module="$1"
 	local function="$2"
-	local error_type="${3:-VALIDATION_ERROR}"
-	errors::handle_error_and_exit "$error_type" "Failed to initialize $module::$function" "core"
+	local error_type_code="${3:-VALIDATION_ERROR}"
+	errors::handle_error_and_exit "$error_type_code" "Failed to initialize $module::$function" "core"
 }
 
 # ==============================================================================

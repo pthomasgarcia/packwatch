@@ -37,7 +37,11 @@ check_cursor() {
 	latest_version=$(echo "$api_json" | jq -r '.version // empty')
 
 	if [[ -z "$actual_download_url" ]] || [[ -z "$latest_version" ]]; then
-		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to extract version or download URL for $name." "cursor"
+		jq -n \
+			--arg status "error" \
+			--arg error_message "Failed to extract version or download URL for $name." \
+			--arg error_type "PARSING_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 		return 1
 	fi
 
@@ -51,14 +55,16 @@ check_cursor() {
 		--arg install_type "appimage" \
 		--arg install_target_path "$appimage_file_path" \
 		--arg source "Official API (JSON)" \
+		--arg error_type "NONE" \
 		'{
-          "status": $status,
-          "latest_version": $latest_version,
-          "download_url": $download_url,
-          "install_type": $install_type,
-          "install_target_path": $install_target_path,
-          "source": $source
-        }'
+	         "status": $status,
+	         "latest_version": $latest_version,
+	         "download_url": $download_url,
+	         "install_type": $install_type,
+	         "install_target_path": $install_target_path,
+	         "source": $source,
+	         "error_type": $error_type
+	       }'
 
 	return 0
 }

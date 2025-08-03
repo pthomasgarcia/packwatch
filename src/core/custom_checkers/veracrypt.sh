@@ -32,7 +32,11 @@ check_veracrypt() {
 	local latest_version
 	latest_version=$(echo "$page_content" | grep -oP 'VeraCrypt \K\d+\.\d+\.\d+' | head -n1)
 	if [[ -z "$latest_version" ]]; then
-		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to detect latest version for $name." "veracrypt"
+		jq -n \
+			--arg status "error" \
+			--arg error_message "Failed to detect latest version for $name." \
+			--arg error_type "PARSING_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 		return 1
 	fi
 
@@ -63,7 +67,11 @@ check_veracrypt() {
 	fi
 
 	if [[ -z "$download_url_final" ]] || ! validators::check_url_format "$download_url_final"; then
-		errors::handle_error "CUSTOM_CHECKER_ERROR" "No compatible DEB package found for $name." "veracrypt"
+		jq -n \
+			--arg status "error" \
+			--arg error_message "No compatible DEB package found for $name." \
+			--arg error_type "NETWORK_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 		return 1
 	fi
 
@@ -81,15 +89,17 @@ check_veracrypt() {
 		--arg gpg_key_id "$gpg_key_id" \
 		--arg gpg_fingerprint "$gpg_fingerprint" \
 		--arg source "Official Download Page" \
+		--arg error_type "NONE" \
 		'{
-          "status": $status,
-          "latest_version": $latest_version,
-          "download_url": $download_url,
-          "install_type": $install_type,
-          "gpg_key_id": $gpg_key_id,
-          "gpg_fingerprint": $gpg_fingerprint,
-          "source": $source
-        }'
+	         "status": $status,
+	         "latest_version": $latest_version,
+	         "download_url": $download_url,
+	         "install_type": $install_type,
+	         "gpg_key_id": $gpg_key_id,
+	         "gpg_fingerprint": $gpg_fingerprint,
+	         "source": $source,
+	         "error_type": $error_type
+	       }'
 
 	return 0
 }
