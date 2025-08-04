@@ -20,7 +20,7 @@
 #   - counters.sh
 #   - errors.sh
 #   - globals.sh
-#   - gpg.sh
+#   - gpg.sh # Ensure gpg.sh is sourced for _get_gpg_fingerprint_as_user
 #   - interfaces.sh
 #   - loggers.sh
 #   - networks.sh
@@ -477,32 +477,45 @@ updates::_verify_gpg_signature() {
 	fi
 
 	loggers::print_ui_line "  " "→ " "Verifying signature..."
-	local original_user_id_for_sudo=""
-	if [[ -n "$ORIGINAL_USER" ]]; then
-		original_user_id_for_sudo=$(getent passwd "$ORIGINAL_USER" | cut -d: -f3 2>/dev/null)
+	# Ensure gpg.sh is sourced to use _get_gpg_fingerprint_as_user
+	# shellcheck source=/dev/null
+	source "$LIB_DIR/gpg.sh"
+
+	local gpg_verify_output=""
+	local gpg_verify_status=1 # Assume failure
+
+	if [[ -z "$ORIGINAL_USER" ]]; then
+		loggers::log_message "ERROR" "ORIGINAL_USER is not set. Cannot perform GPG signature verification as original user. Falling back to root."
+		gpg_verify_output=$(gpg --verify "$temp_sig_path" "$deb_path" 2>&1)
+	elif ! getent passwd "$ORIGINAL_USER" &>/dev/null; then
+		loggers::log_message "ERROR" "ORIGINAL_USER '$ORIGINAL_USER' does not exist. Cannot perform GPG signature verification as original user. Falling back to root."
+		gpg_verify_output=$(gpg --verify "$temp_sig_path" "$deb_path" 2>&1)
+	elif [[ ! -d "$ORIGINAL_HOME" ]]; then
+		loggers::log_message "ERROR" "ORIGINAL_HOME '$ORIGINAL_HOME' is not a valid directory. Cannot perform GPG signature verification as original user. Falling back to root."
+		gpg_verify_output=$(gpg --verify "$temp_sig_path" "$deb_path" 2>&1)
+	elif [[ ! -d "$ORIGINAL_HOME/.gnupg" ]]; then
+		loggers::log_message "ERROR" "GPG home directory '$ORIGINAL_HOME/.gnupg' does not exist. Cannot perform GPG signature verification as original user. Falling back to root."
+		gpg_verify_output=$(gpg --verify "$temp_sig_path" "$deb_path" 2>&1)
+	else
+		# Attempt as original user, capturing stderr
+		gpg_verify_output=$(sudo -u "$ORIGINAL_USER" GNUPGHOME="$ORIGINAL_HOME/.gnupg" \
+			gpg --verify "$temp_sig_path" "$deb_path" 2>&1)
 	fi
 
-	if [[ -z "$original_user_id_for_sudo" ]]; then
-		loggers::log_message "ERROR" "ORIGINAL_USER is invalid or empty ('$ORIGINAL_USER'). Cannot perform GPG signature verification. Running as current user (root)."
-		if gpg --verify "$temp_sig_path" "$deb_path" &>/dev/null; then
-			loggers::log_message "INFO" "✓ Signature verification passed."
-			loggers::print_ui_line "  " "✓ " "Signature verification passed." _color_green
-			return 0
-		else
-			errors::handle_error "GPG_ERROR" "Signature verification FAILED for '$app_name' DEB. Aborting installation due to potential tampering." "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"GPG_ERROR\", \"message\": \"Signature verification FAILED.\"}"
-			return 1
-		fi
+	if echo "$gpg_verify_output" | grep -q "Good signature"; then
+		gpg_verify_status=0 # Success
 	else
-		if sudo -u "$ORIGINAL_USER" GNUPGHOME="$ORIGINAL_HOME/.gnupg" gpg --verify "$temp_sig_path" "$deb_path" &>/dev/null; then
-			loggers::log_message "INFO" "✓ Signature verification passed."
-			loggers::print_ui_line "  " "✓ " "Signature verification passed." _color_green
-			return 0
-		else
-			errors::handle_error "GPG_ERROR" "Signature verification FAILED for '$app_name' DEB. Aborting installation due to potential tampering." "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"GPG_ERROR\", \"message\": \"Signature verification FAILED.\"}"
-			return 1
-		fi
+		loggers::log_message "ERROR" "GPG signature verification failed for '$app_name' DEB. Output: $gpg_verify_output"
+	fi
+
+	if [[ "$gpg_verify_status" -eq 0 ]]; then
+		loggers::log_message "INFO" "✓ Signature verification passed."
+		loggers::print_ui_line "  " "✓ " "Signature verification passed." _color_green
+		return 0
+	else
+		errors::handle_error "GPG_ERROR" "Signature verification FAILED for '$app_name' DEB. Aborting installation due to potential tampering." "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"GPG_ERROR\", \"message\": \"Signature verification FAILED.\"}"
+		return 1
 	fi
 }
 
@@ -1000,7 +1013,7 @@ updates::check_appimage() {
 		loggers::log_message "DEBUG" "Attempting to extract version from download URL filename: '$download_url'"
 		local filename_from_url
 		filename_from_url=$(basename "$download_url" | cut -d'?' -f1)
-		if ! latest_version=$(versions::extract_from_regex "$filename_from_url" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-zA-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$name"); then
+		if ! latest_version=$(versions::extract_from_regex "$filename_from_url" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$name"); then
 			loggers::log_message "WARN" "Could not extract version from AppImage download URL filename for '$name'. Will default to 0.0.0 for comparison."
 			latest_version="0.0.0"
 		fi

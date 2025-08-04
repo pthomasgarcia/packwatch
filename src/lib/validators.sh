@@ -21,6 +21,7 @@
 #   - errors.sh
 #   - globals.sh
 #   - loggers.sh
+#   - gpg.sh # Added for _get_gpg_fingerprint_as_user
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -99,19 +100,20 @@ validators::verify_gpg_key() {
 		return 1
 	fi
 
+-------
 	local actual_fingerprint
-	local original_user_id_for_sudo=""
-	if [[ -n "$ORIGINAL_USER" ]]; then
-		original_user_id_for_sudo=$(getent passwd "$ORIGINAL_USER" | cut -d: -f3 2>/dev/null)
-	fi
 
-	if [[ -z "$original_user_id_for_sudo" ]]; then
-		loggers::log_message "WARN" "ORIGINAL_USER is invalid or empty ('$ORIGINAL_USER'). Cannot perform GPG verification as original user. Attempting as current user (root)."
-		actual_fingerprint=$(gpg --fingerprint --with-colons "$key_id" 2>/dev/null | awk -F: '/^fpr:/ {print $10}' | head -n1)
-	else
-		actual_fingerprint=$(sudo -u "$ORIGINAL_USER" GNUPGHOME="$ORIGINAL_HOME/.gnupg" \
-			gpg --fingerprint --with-colons "$key_id" 2>/dev/null |
-			awk -F: '/^fpr:/ {print $10}' | head -n1)
+	# Ensure gpg.sh is sourced to use _get_gpg_fingerprint_as_user
+	# shellcheck source=/dev/null
+	source "$LIB_DIR/gpg.sh"
+
+	actual_fingerprint=$(_get_gpg_fingerprint_as_user "$key_id")
+
+	if [[ -z "$actual_fingerprint" ]]; then
+		loggers::log_message "ERROR" "GPG fingerprint retrieval failed for key ID '$key_id'. This may indicate a security downgrade if falling back to root."
+		# The _get_gpg_fingerprint_as_user function already logs specific errors.
+		# We return 1 here if the fingerprint is empty, indicating a failure to retrieve.
+		return 1
 	fi
 
 	if [[ -z "$actual_fingerprint" ]]; then
