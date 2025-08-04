@@ -1,14 +1,14 @@
-refactor(checkers): Standardize error handling for custom checkers
+refactor(versions): Centralize version extraction logic
 
-This commit refactors the error handling mechanism for custom checkers to make it more robust and consistent with the rest of the application.
+This commit introduces a major refactoring of how version strings are extracted and validated, centralizing the logic into the `versions.sh` module to improve robustness and reduce code duplication.
 
-- **Standardized JSON Error Reporting:**
-  - Custom checkers now return a JSON object with a standardized error format, including `status`, `error_message`, and `error_type`.
-  - This allows the main script to parse and handle errors from custom checkers in a more structured way.
+- **New Version Extraction Functions:**
+  - Created `versions::extract_from_json` to provide a standardized way to extract and normalize version strings from JSON data.
+  - Created `versions::extract_from_regex` to provide a standardized way to extract and normalize version strings from plain text using regular expressions.
 
-- **Centralized Error Handling:**
-  - The `updates::handle_custom_check` function has been updated to parse the JSON error object from custom checkers and pass the details to the centralized `errors::handle_error` function.
-  - This ensures that all errors, whether from the core script or custom checkers, are logged and reported consistently.
+- **Improved Validation:**
+  - Added a new `validators::check_semver_format` function to provide a basic check for semantic versioning.
+  - The configuration validation in `src/core/configs.sh` has been enhanced to validate the format of version-related fields for all application types.
 
-- **Updated Custom Checkers:**
-  - The custom checkers for Cursor, VeraCrypt, Warp, and Zed have been updated to return the new standardized JSON error object on failure.
+- **Refactored Core Logic:**
+  - The `updates.sh`, `repositories.sh`, and `packages.sh` modules have been refactored to use the new centralized version extraction functions. This removes duplicated `grep` and `sed` commands and ensures that version parsing is handled consistently across the application.

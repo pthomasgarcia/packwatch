@@ -12,8 +12,8 @@
 #   Then use:
 #     repositories::get_latest_release_info "owner" "repo"
 #     repositories::parse_version_from_release "$release_json" "AppName"
-#     repositories::find_asset_url "$release_json" "pattern" "AppName"
-#     repositories::find_asset_checksum "$release_json" "filename"
+#     repositories::find_asset_url "release_json" "pattern" "AppName"
+#     repositories::find_asset_checksum "release_json" "filename"
 #
 # Dependencies:
 #   - errors.sh
@@ -44,16 +44,21 @@ repositories::parse_version_from_release() {
 
 	local raw_tag_name
 	raw_tag_name=$(systems::get_json_value "$release_json" '.tag_name' "$app_name")
-	if [[ $? -ne 0 ]]; then return 1; fi
+	if [[ $? -ne 0 ]]; then
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get raw tag name.\"}"
+		return 1
+	fi
 
 	local latest_version
 	if ! latest_version=$(versions::extract_from_json "$release_json" ".tag_name" "$app_name"); then
 		errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get version from latest release.\"}"
 		return 1
 	fi
 
 	if [[ -z "$latest_version" ]]; then
 		errors::handle_error "VALIDATION_ERROR" "Failed to detect latest version for '$app_name' from tag '$raw_tag_name'." "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to detect latest version from tag.\"}"
 		return 1
 	fi
 
@@ -90,6 +95,7 @@ repositories::find_asset_url() {
 
 	# If both methods fail, return error
 	errors::handle_error "NETWORK_ERROR" "Download URL not found or invalid for '${filename_pattern}'." "$app_name"
+	updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Download URL not found or invalid.\"}"
 	return 1
 }
 
@@ -107,7 +113,10 @@ repositories::find_asset_checksum() {
 
 	local temp_checksum_file
 	temp_checksum_file=$(systems::create_temp_file "checksum_file")
-	if [[ $? -ne 0 ]]; then return 1; fi
+	if [[ $? -ne 0 ]]; then
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"checksum_download\", \"error_type\": \"SYSTEM_ERROR\", \"message\": \"Failed to create temporary file for checksum.\"}"
+		return 1
+	fi
 
 	local extracted_checksum=""
 	if networks::download_file "$checksum_file_url" "$temp_checksum_file" ""; then

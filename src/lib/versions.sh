@@ -73,7 +73,18 @@ versions::is_newer() {
 # Usage: versions::normalize "v1.2.3"
 versions::normalize() {
 	local version="$1"
-	echo "$version" | sed -E 's/^[vV]//' | xargs
+	# Strip leading 'v' or 'V'
+	version=$(echo "$version" | sed -E 's/^[vV]//')
+
+	# Convert common pre-release indicators to dpkg-compatible format
+	# e.g., -beta.1 -> ~beta1, -rc1 -> ~rc1
+	version=$(echo "$version" | sed -E 's/-alpha([0-9]*)/~alpha\1/' | sed -E 's/-beta([0-9]*)/~beta\1/' | sed -E 's/-rc([0-9]*)/~rc\1/')
+
+	# Remove build metadata (after '+') as it's not typically used for comparison
+	version=$(echo "$version" | sed -E 's/\+.*$//')
+
+	# Trim whitespace
+	echo "$version" | xargs
 }
 
 # Extract a version string from a JSON response using a jq expression.
@@ -91,7 +102,16 @@ versions::extract_from_json() {
 		echo "0.0.0"
 		return 1
 	fi
-	versions::normalize "$raw_version"
+	local normalized
+	normalized=$(versions::normalize "$raw_version")
+
+	if ! validators::check_semver_format "$normalized"; then
+		loggers::log_message "WARN" "Invalid semver '$normalized' for '$app_name' extracted from JSON. Defaulting to 0.0.0."
+		echo "0.0.0"
+		return 1
+	fi
+
+	echo "$normalized"
 	return 0
 }
 
@@ -110,7 +130,16 @@ versions::extract_from_regex() {
 		echo "0.0.0"
 		return 1
 	fi
-	versions::normalize "$raw_version"
+	local normalized
+	normalized=$(versions::normalize "$raw_version")
+
+	if ! validators::check_semver_format "$normalized"; then
+		loggers::log_message "WARN" "Invalid semver '$normalized' for '$app_name' extracted by regex. Defaulting to 0.0.0."
+		echo "0.0.0"
+		return 1
+	fi
+
+	echo "$normalized"
 	return 0
 }
 

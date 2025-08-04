@@ -68,6 +68,7 @@ updates::process_script_installation() {
 
 	if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$app_key" ]]; then
 		errors::handle_error "VALIDATION_ERROR" "Invalid parameters for script update flow (version, URL, or app_key missing)" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"script_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Invalid parameters for script update flow.\"}"
 		return 1
 	fi
 
@@ -77,6 +78,7 @@ updates::process_script_installation() {
 	base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
 	if ! temp_script_path=$(mktemp "/tmp/${base_filename_for_tmp}.XXXXXX.sh"); then
 		errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file for script: '${base_filename_for_tmp}.XXXXXX.sh'" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"script_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to create temporary file.\"}"
 		return 1
 	fi
 	TEMP_FILES+=("$temp_script_path")
@@ -84,12 +86,14 @@ updates::process_script_installation() {
 	updates::on_download_start "$app_name" "unknown"                                # Hook
 	if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_script_path" ""; then # DI applied
 		errors::handle_error "NETWORK_ERROR" "Failed to download script" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download script.\"}"
 		return 1
 	fi
 	updates::on_download_complete "$app_name" "$temp_script_path" # Hook
 
 	if ! chmod +x "$temp_script_path"; then
 		errors::handle_error "PERMISSION_ERROR" "Failed to make script executable: '$temp_script_path'" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to make script executable.\"}"
 		return 1
 	fi
 
@@ -149,16 +153,19 @@ updates::check_script() {
 
 	if ! validators::check_url_format "$download_url"; then
 		errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
 		loggers::print_ui_line "  " "✗ " "Invalid download URL configured." _color_red
 		return 1
 	fi
 	if ! validators::check_url_format "$version_url"; then
 		errors::handle_error "CONFIG_ERROR" "Invalid version URL in configuration" "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid version URL configured.\"}"
 		loggers::print_ui_line "  " "✗ " "Invalid version URL configured." _color_red
 		return 1
 	fi
 	if [[ -z "$version_regex" ]]; then
 		errors::handle_error "CONFIG_ERROR" "Missing version regex in configuration" "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Missing version regex configured.\"}"
 		loggers::print_ui_line "  " "✗ " "Missing version regex configured." _color_red
 		return 1
 	fi
@@ -191,6 +198,7 @@ updates::check_script() {
 		fi
 	else
 		errors::handle_error "NETWORK_ERROR" "Failed to fetch version from '$version_url' for '$name'." "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to fetch version from '$version_url'.\"}"
 		loggers::print_ui_line "  " "✗ " "Failed to fetch version from '$version_url' for '$name'." _color_red
 		return 1
 	fi
@@ -436,6 +444,7 @@ updates::_verify_gpg_signature() {
 	# Use dependency injection for download_file
 	if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$sig_url" "$temp_sig_path" ""; then
 		errors::handle_error "NETWORK_ERROR" "Failed to download signature for '$app_name'. Aborting." "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download signature.\"}"
 		return 1
 	fi
 
@@ -453,6 +462,7 @@ updates::_verify_gpg_signature() {
 			return 0
 		else
 			errors::handle_error "GPG_ERROR" "Signature verification FAILED for '$app_name' DEB. Aborting installation due to potential tampering." "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"GPG_ERROR\", \"message\": \"Signature verification FAILED.\"}"
 			return 1
 		fi
 	else
@@ -462,6 +472,7 @@ updates::_verify_gpg_signature() {
 			return 0
 		else
 			errors::handle_error "GPG_ERROR" "Signature verification FAILED for '$app_name' DEB. Aborting installation due to potential tampering." "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"GPG_ERROR\", \"message\": \"Signature verification FAILED.\"}"
 			return 1
 		fi
 	fi
@@ -537,6 +548,7 @@ updates::_prepare_deb_file() {
 		# Use dependency injection for download_file
 		if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_deb_file" "$expected_checksum" "$checksum_algorithm"; then
 			errors::handle_error "NETWORK_ERROR" "Failed to download DEB package" "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download DEB package.\"}"
 			return 1
 		fi
 		updates::on_download_complete "$app_name" "$temp_deb_file" # Download complete hook
@@ -565,6 +577,7 @@ updates::process_deb_package() {
 
 	if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url"; then
 		errors::handle_error "VALIDATION_ERROR" "Invalid parameters for DEB update flow" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"deb_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Invalid parameters for DEB update flow.\"}"
 		return 1
 	fi
 
@@ -583,6 +596,7 @@ updates::process_deb_package() {
 	# Handle GPG verification
 	if ! updates::_handle_gpg_verification local_app_config "$final_deb_path" "$download_url"; then
 		loggers::log_message "ERROR" "GPG verification failed for $app_name. Aborting installation."
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"GPG_ERROR\", \"message\": \"GPG verification failed.\"}"
 		return 1
 	fi
 
@@ -610,7 +624,7 @@ updates::process_deb_package() {
 	if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
 		updates::on_install_start "$app_name"                    # Hook
 		if ! packages::install_deb_package "$final_deb_path" "$app_name" "$latest_version" "$app_key"; then
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}" # Recommendation 10: Error hook
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Package installation failed.\"}" # Recommendation 10: Error hook
 			return 1
 		fi
 		updates::on_install_complete "$app_name" # Hook
@@ -644,6 +658,7 @@ updates::check_github_deb() {
 	local api_response
 	if ! api_response=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$repo_owner" "$repo_name"); then # DI applied
 		errors::handle_error "NETWORK_ERROR" "Failed to fetch GitHub releases for '$name'." "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to fetch GitHub releases.\"}"
 		loggers::print_ui_line "  " "✗ " "Failed to fetch GitHub releases for '$name'." _color_red
 		return 1
 	fi
@@ -651,6 +666,7 @@ updates::check_github_deb() {
 	local latest_release_json
 	if ! latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response" '.[0]' "$name"); then # DI applied
 		errors::handle_error "PARSING_ERROR" "Failed to parse latest release information." "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to parse latest release information.\"}"
 		loggers::print_ui_line "  " "✗ " "Failed to parse latest release information." _color_red
 		return 1
 	fi
@@ -658,6 +674,7 @@ updates::check_github_deb() {
 	local latest_version
 	if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json" "$name"); then
 		errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get version from latest release.\"}"
 		loggers::print_ui_line "  " "✗ " "Failed to get version from latest release." _color_red
 		return 1
 	fi
@@ -675,6 +692,7 @@ updates::check_github_deb() {
 		download_url=$(repositories::find_asset_url "$latest_release_json" "$download_filename" "$name")
 		if [[ $? -ne 0 || -z "$download_url" ]] || ! validators::check_url_format "$download_url"; then
 			errors::handle_error "NETWORK_ERROR" "Download URL not found or invalid for '$download_filename'." "$name"
+			updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Download URL not found or invalid.\"}"
 			loggers::print_ui_line "  " "✗ " "Download URL not found or invalid for '$download_filename'." _color_red
 			return 1
 		fi
@@ -720,6 +738,7 @@ updates::check_direct_deb() {
 
 	if ! validators::check_url_format "$download_url"; then
 		errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
 		loggers::print_ui_line "  " "✗ " "Invalid download URL configured." _color_red
 		return 1
 	fi
@@ -745,6 +764,7 @@ updates::check_direct_deb() {
 	updates::on_download_start "$name" "unknown"                                      # Hook
 	if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_download_file" ""; then # DI applied
 		errors::handle_error "NETWORK_ERROR" "Failed to download package for '$name'." "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download package.\"}"
 		return 1
 	fi
 	updates::on_download_complete "$name" "$temp_download_file" # Hook
@@ -822,6 +842,7 @@ updates::process_appimage_file() {
 
 	if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$install_target_full_path" ]] || [[ -z "$app_key" ]]; then
 		errors::handle_error "VALIDATION_ERROR" "Invalid parameters for AppImage update flow (version, URL, install path, or app_key missing)" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"appimage_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Invalid parameters for AppImage update flow.\"}"
 		return 1
 	fi
 
@@ -831,6 +852,7 @@ updates::process_appimage_file() {
 	base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
 	if ! temp_appimage_path=$(mktemp "/tmp/${base_filename_for_tmp}.XXXXXX.AppImage"); then
 		errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: '${base_filename_for_tmp}.XXXXXX.AppImage'" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"appimage_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to create temporary file.\"}"
 		return 1
 	fi
 	TEMP_FILES+=("$temp_appimage_path")
@@ -838,12 +860,14 @@ updates::process_appimage_file() {
 	updates::on_download_start "$app_name" "unknown"                                                                          # Hook
 	if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "$expected_checksum" "$checksum_algorithm"; then # DI applied
 		errors::handle_error "NETWORK_ERROR" "Failed to download AppImage" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download AppImage.\"}"
 		return 1
 	fi
 	updates::on_download_complete "$app_name" "$temp_appimage_path" # Hook
 
 	if ! chmod +x "$temp_appimage_path"; then
 		errors::handle_error "PERMISSION_ERROR" "Failed to make AppImage executable: '$temp_appimage_path'" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to make AppImage executable.\"}"
 		return 1
 	fi
 
@@ -872,6 +896,7 @@ updates::process_appimage_file() {
 		target_dir="$(dirname "$install_target_full_path")"
 		if ! mkdir -p "$target_dir"; then
 			errors::handle_error "PERMISSION_ERROR" "Failed to create installation directory: '$target_dir'" "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to create installation directory.\"}"
 			return 1
 		fi
 
@@ -879,6 +904,7 @@ updates::process_appimage_file() {
 		if [[ -f "$install_target_full_path" ]]; then
 			if ! rm -f "$install_target_full_path"; then
 				errors::handle_error "PERMISSION_ERROR" "Failed to remove existing AppImage: '$install_target_full_path'" "$app_name"
+				updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to remove existing AppImage.\"}"
 				return 1
 			fi
 		fi
@@ -899,7 +925,7 @@ updates::process_appimage_file() {
 			return 0
 		else
 			errors::handle_error "INSTALLATION_ERROR" "Failed to move new AppImage from '$temp_appimage_path' to '$install_target_full_path'" "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}" # Recommendation 10: Error hook
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to move new AppImage.\"}" # Recommendation 10: Error hook
 			return 1
 		fi
 	else
@@ -921,11 +947,13 @@ updates::check_appimage() {
 
 	if ! validators::check_url_format "$download_url"; then
 		errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
 		loggers::print_ui_line "  " "✗ " "Invalid download URL configured." _color_red
 		return 1
 	fi
 	if ! validators::check_file_path "$install_path"; then
 		errors::handle_error "CONFIG_ERROR" "Invalid install path in configuration" "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid install path configured.\"}"
 		loggers::print_ui_line "  " "✗ " "Invalid install path configured." _color_red
 		return 1
 	fi
@@ -955,7 +983,7 @@ updates::check_appimage() {
 		local api_response
 		if api_response=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$github_repo_owner" "$github_repo_name"); then # DI applied
 			local latest_release_json
-			if latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response" '.[0]' "$name") && [[ -n "$latest_release_json" ]]; then # DI applied
+			if latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response" '.[0]' "$name"); then # DI applied
 				if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json" "$name"); then
 					loggers::log_message "WARN" "Failed to parse version from GitHub release for '$name'. Will try direct download URL."
 				fi
@@ -1032,11 +1060,13 @@ updates::process_flatpak_app() {
 
 	if [[ -z "$app_name" ]] || [[ -z "$app_key" ]] || [[ -z "$latest_version" ]] || [[ -z "$flatpak_app_id" ]]; then
 		errors::handle_error "VALIDATION_ERROR" "Missing required parameters for Flatpak installation" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"flatpak_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Missing required parameters for Flatpak installation.\"}"
 		return 1
 	fi
 
 	if ! command -v flatpak &>/dev/null; then
 		errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot update $app_name." "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
 		loggers::print_ui_line "  " "✗ " "Flatpak not installed. Cannot update $(_bold "$app_name")." _color_red
 		return 1
 	fi
@@ -1044,6 +1074,7 @@ updates::process_flatpak_app() {
 		loggers::print_ui_line "  " "→ " "Adding Flathub remote..."
 		flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || {
 			errors::handle_error "INSTALLATION_ERROR" "Failed to add Flathub remote. Cannot update $app_name." "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to add Flathub remote.\"}"
 			loggers::print_ui_line "  " "✗ " "Failed to add Flathub remote." _color_red
 			return 1
 		}
@@ -1087,7 +1118,7 @@ updates::process_flatpak_app() {
 			return 0
 		else
 			errors::handle_error "INSTALLATION_ERROR" "Failed to install/update $app_name via Flatpak" "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}" # Recommendation 10: Error hook
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to install/update Flatpak.\"}" # Recommendation 10: Error hook
 			return 1
 		fi
 	else
@@ -1111,6 +1142,7 @@ updates::check_flatpak() {
 
 	if ! command -v flatpak &>/dev/null; then
 		errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot check $name." "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
 		loggers::print_ui_line "  " "✗ " "Flatpak not installed. Cannot check $(_bold "$name")." _color_red
 		return 1
 	fi
@@ -1127,6 +1159,7 @@ updates::check_flatpak() {
 		fi
 	else
 		errors::handle_error "NETWORK_ERROR" "Failed to search Flatpak remote for '$name'." "$name"
+		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to search Flatpak remote.\"}"
 		loggers::print_ui_line "  " "✗ " "Failed to search Flatpak remote for '$name'. Cannot determine latest version." _color_red
 		return 1
 	fi
@@ -1169,6 +1202,7 @@ updates::handle_custom_check() {
 	local custom_checker_script="${app_config_ref[custom_checker_script]}"
 	if [[ -z "$custom_checker_script" ]]; then
 		errors::handle_error "CONFIG_ERROR" "Missing 'custom_checker_script' for custom app type" "$app_display_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Missing custom_checker_script.\"}"
 		loggers::print_ui_line "  " "✗ " "Configuration error: Missing custom checker script." _color_red
 		return 1
 	fi
@@ -1211,12 +1245,14 @@ updates::handle_custom_check() {
 	# Source the custom checker script
 	source "$script_path" || {
 		errors::handle_error "CONFIG_ERROR" "Failed to source custom checker script: '$script_path'" "$app_display_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Failed to source custom checker script.\"}"
 		return 1
 	}
 
 	# Verify the custom checker function exists
 	if [[ -z "$custom_checker_func" ]] || ! type -t "$custom_checker_func" | grep -q 'function'; then
 		errors::handle_error "CONFIG_ERROR" "Custom checker function '$custom_checker_func' not found in script '$custom_checker_script'" "$app_display_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Custom checker function not found.\"}"
 		return 1
 	fi
 
@@ -1328,6 +1364,7 @@ updates::_validate_app_config() {
 	local required_fields_str="${APP_TYPE_VALIDATIONS[$app_type]}"
 	if [[ -z "$required_fields_str" ]]; then
 		errors::handle_error "CONFIG_ERROR" "No validation schema found for app type '$app_type'." "$app_name" "Please define it in APP_TYPE_VALIDATIONS."
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"config_validation\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"No validation schema found for app type.\"}"
 		return 1
 	fi
 
@@ -1337,6 +1374,7 @@ updates::_validate_app_config() {
 		# Check if the field is empty in the config
 		if [[ -z "${config_ref[$field]:-}" ]]; then
 			errors::handle_error "VALIDATION_ERROR" "Missing required field '$field' for app type '$app_type'." "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"config_validation\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Missing required field '$field'.\"}"
 			return 1
 		fi
 	done
@@ -1356,6 +1394,7 @@ updates::check_application() {
 
 	if [[ -z "$app_key" ]]; then
 		errors::handle_error "VALIDATION_ERROR" "Empty app key provided"
+		updates::trigger_hooks ERROR_HOOKS "unknown" "{\"phase\": \"cli_parsing\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Empty app key provided.\"}"
 		counters::inc_failed
 		return 1
 	fi
@@ -1363,6 +1402,7 @@ updates::check_application() {
 	declare -A _current_app_config
 	if ! configs::get_app_config "$app_key" "_current_app_config"; then
 		errors::handle_error "CONFIG_ERROR" "Failed to retrieve configuration for app: '$app_key'" "$app_key"
+		updates::trigger_hooks ERROR_HOOKS "$app_key" "{\"phase\": \"config_retrieval\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Failed to retrieve configuration.\"}"
 		return 1
 	fi
 
@@ -1380,6 +1420,7 @@ updates::check_application() {
 
 	if [[ -z "${_current_app_config[type]:-}" ]]; then
 		errors::handle_error "CONFIG_ERROR" "Application '$app_key' missing 'type' field." "$app_display_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"config_validation\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Application missing 'type' field.\"}"
 		loggers::print_ui_line "  " "✗ " "Configuration error: Missing app type." _color_red
 		counters::inc_failed
 		loggers::print_message ""
