@@ -120,6 +120,114 @@ updates::process_installation() {
 }
 
 # ------------------------------------------------------------------------------
+# SECTION: Version Fetching Helpers
+# ------------------------------------------------------------------------------
+
+# Fetch version from GitHub release
+updates::_fetch_github_version() {
+    local repo_owner="$1"
+    local repo_name="$2"
+    local app_name="$3"
+
+    local api_response
+    if ! api_response=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$repo_owner" "$repo_name"); then
+        errors::handle_error "NETWORK_ERROR" "Failed to fetch GitHub releases for '$app_name'." "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to fetch GitHub releases.\"}"
+        return 1
+    fi
+
+    local latest_release_json
+    if ! latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response" '.[0]' "$app_name"); then
+        errors::handle_error "PARSING_ERROR" "Failed to parse latest release information." "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to parse latest release information.\"}"
+        return 1
+    fi
+
+    local latest_version
+    if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json" "$app_name"); then
+        errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get version from latest release.\"}"
+        return 1
+    fi
+
+    echo "$latest_version"
+    echo "$latest_release_json"
+    return 0
+}
+
+# Fetch version from direct URL with regex
+updates::_fetch_version_from_url() {
+    local version_url="$1"
+    local version_regex="$2"
+    local app_name="$3"
+
+    local latest_version="0.0.0"
+    local api_response
+    if api_response=$(networks::fetch_cached_data "$version_url" "json") && [[ -n "$api_response" ]]; then
+        local parsed_version
+        if parsed_version=$(versions::extract_from_json "$api_response" ".tag_name" "$app_name"); then
+            latest_version="$parsed_version"
+        else
+            if parsed_version=$(versions::extract_from_regex "$api_response" "$version_regex" "$app_name"); then
+                latest_version="$parsed_version"
+            else
+                loggers::log_message "WARN" "Could not extract version from '$version_url' for '$app_name' using JSON or regex. Defaulting to 0.0.0."
+            fi
+        fi
+    fi
+
+    echo "$latest_version"
+    return 0
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: URL Construction Helpers
+# ------------------------------------------------------------------------------
+
+# Build download URL from release JSON
+updates::_build_download_url() {
+    local release_json="$1"
+    local filename_template="$2"
+    local version="$3"
+    local app_name="$4"
+
+    local download_filename
+    download_filename=$(printf "%s" "$filename_template" "$version")
+
+    local download_url
+    download_url=$(repositories::find_asset_url "$release_json" "$download_filename" "$app_name")
+    if [[ $? -ne 0 || -z "$download_url" ]] || ! validators::check_url_format "$download_url"; then
+        errors::handle_error "NETWORK_ERROR" "Download URL not found or invalid for '$download_filename'." "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Download URL not found or invalid.\"}"
+        return 1
+    fi
+
+    echo "$download_url"
+    return 0
+}
+
+# Extract checksum from release JSON
+updates::_extract_release_checksum() {
+    local release_json="$1"
+    local filename_template="$2"
+    local version="$3"
+    local app_name="$4"
+
+    local download_filename
+    download_filename=$(printf "%s" "$filename_template" "$version")
+
+    local expected_checksum
+    if ! expected_checksum=$(repositories::find_asset_checksum "$release_json" "$download_filename" "$app_name"); then
+        loggers::print_ui_line "  " "✗ " "Failed to get GitHub checksum." _color_red
+        echo ""
+        return 0
+    fi
+
+    echo "$expected_checksum"
+    return 0
+}
+
+# ------------------------------------------------------------------------------
 # SECTION: Script-based Update Flow
 # ------------------------------------------------------------------------------
 
@@ -171,83 +279,60 @@ updates::process_script_installation() {
 
 # Updates module; checks for updates for a script-based application.
 updates::check_script() {
-	local -n app_config_ref=$1
-	local name="${app_config_ref[name]}"
-	local app_key="${app_config_ref[app_key]}"
-	local download_url="${app_config_ref[download_url]}"
-	local version_url="${app_config_ref[version_url]}"
-	local version_regex="${app_config_ref[version_regex]}"
-	local source="Script Download"
+    local -n app_config_ref=$1
+    local name="${app_config_ref[name]}"
+    local app_key="${app_config_ref[app_key]}"
+    local download_url="${app_config_ref[download_url]}"
+    local version_url="${app_config_ref[version_url]}"
+    local version_regex="${app_config_ref[version_regex]}"
+    local source="Script Download"
 
-	if ! validators::check_url_format "$download_url"; then
-		errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
-		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
-		loggers::print_ui_line "  " "✗ " "Invalid download URL configured." _color_red
-		return 1
-	fi
-	if ! validators::check_url_format "$version_url"; then
-		errors::handle_error "CONFIG_ERROR" "Invalid version URL in configuration" "$name"
-		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid version URL configured.\"}"
-		loggers::print_ui_line "  " "✗ " "Invalid version URL configured." _color_red
-		return 1
-	fi
-	if [[ -z "$version_regex" ]]; then
-		errors::handle_error "CONFIG_ERROR" "Missing version regex in configuration" "$name"
-		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Missing version regex configured.\"}"
-		loggers::print_ui_line "  " "✗ " "Missing version regex configured." _color_red
-		return 1
-	fi
+    # Configuration validation (same as before)
+    if ! validators::check_url_format "$download_url"; then
+        errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
+        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
+        loggers::print_ui_line "  " "✗ " "Invalid download URL configured." _color_red
+        return 1
+    fi
+    if ! validators::check_url_format "$version_url"; then
+        errors::handle_error "CONFIG_ERROR" "Invalid version URL in configuration" "$name"
+        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid version URL configured.\"}"
+        loggers::print_ui_line "  " "✗ " "Invalid version URL configured." _color_red
+        return 1
+    fi
+    if [[ -z "$version_regex" ]]; then
+        errors::handle_error "CONFIG_ERROR" "Missing version regex in configuration" "$name"
+        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Missing version regex configured.\"}"
+        loggers::print_ui_line "  " "✗ " "Missing version regex configured." _color_red
+        return 1
+    fi
 
-	local installed_version
-	installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
+    local installed_version
+    installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
-	loggers::print_ui_line "  " "→ " "Checking $(_bold "$name") for latest version..."
+    loggers::print_ui_line "  " "→ " "Checking $(_bold "$name") for latest version..."
 
-	local latest_version="0.0.0"
-	local api_response
-	if api_response=$(networks::fetch_cached_data "$version_url" "json") && [[ -n "$api_response" ]]; then
-		# Attempt to parse as JSON first, then fall back to regex
-		local parsed_version
-		if parsed_version=$(versions::extract_from_json "$api_response" ".tag_name" "$name"); then
-			latest_version="$parsed_version"
-			source="GitHub Releases (via script type)"
-		else
-			# Fallback to regex if JSON parsing fails or is not applicable
-			if parsed_version=$(versions::extract_from_regex "$api_response" "$version_regex" "$name"); then
-				latest_version="$parsed_version"
-				source="URL Regex (via script type)"
-			else
-				loggers::log_message "WARN" "Could not extract version from '$version_url' for '$name' using JSON or regex. Defaulting to 0.0.0."
-			fi
-		fi
+    # Use the new helper function
+    local latest_version
+    latest_version=$(updates::_fetch_version_from_url "$version_url" "$version_regex" "$name")
 
-		if [[ -z "$latest_version" || "$latest_version" == "0.0.0" ]]; then
-			loggers::log_message "WARN" "Could not extract version from '$version_url' using regex '$version_regex' for '$name'. Defaulting to 0.0.0."
-		fi
-	else
-		errors::handle_error "NETWORK_ERROR" "Failed to fetch version from '$version_url' for '$name'." "$name"
-		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to fetch version from '$version_url'.\"}"
-		loggers::print_ui_line "  " "✗ " "Failed to fetch version from '$version_url' for '$name'." _color_red
-		return 1
-	fi
+    loggers::print_ui_line "  " "Installed: " "$installed_version"
+    loggers::print_ui_line "  " "Source:    " "$source"
+    loggers::print_ui_line "  " "Latest:    " "$latest_version"
 
-	loggers::print_ui_line "  " "Installed: " "$installed_version"
-	loggers::print_ui_line "  " "Source:    " "$source"
-	loggers::print_ui_line "  " "Latest:    " "$latest_version"
+    if updates::is_needed "$installed_version" "$latest_version"; then
+        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" _color_yellow
+        updates::process_script_installation \
+            "${name}" \
+            "${latest_version}" \
+            "${download_url}" \
+            "${app_key}"
+    else
+        loggers::print_ui_line "  " "✓ " "Up to date." _color_green
+        counters::inc_up_to_date
+    fi
 
-	if updates::is_needed "$installed_version" "$latest_version"; then
-		loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" _color_yellow
-		updates::process_script_installation \
-			"${name}" \
-			"${latest_version}" \
-			"${download_url}" \
-			"${app_key}"
-	else
-		loggers::print_ui_line "  " "✓ " "Up to date." _color_green
-		counters::inc_up_to_date
-	fi
-
-	return 0
+    return 0
 }
 
 # 7. Progress Tracking Callbacks
@@ -668,84 +753,60 @@ updates::process_deb_package() {
 
 # Updates module; checks for updates for a GitHub DEB application.
 updates::check_github_deb() {
-	local -n app_config_ref=$1
-	local name="${app_config_ref[name]}"
-	local app_key="${app_config_ref[app_key]}"
-	local repo_owner="${app_config_ref[repo_owner]}"
-	local repo_name="${app_config_ref[repo_name]}"
-	local filename_pattern_template="${app_config_ref[filename_pattern_template]}"
-	local source="GitHub Releases"
+    local -n app_config_ref=$1
+    local name="${app_config_ref[name]}"
+    local app_key="${app_config_ref[app_key]}"
+    local repo_owner="${app_config_ref[repo_owner]}"
+    local repo_name="${app_config_ref[repo_name]}"
+    local filename_pattern_template="${app_config_ref[filename_pattern_template]}"
+    local source="GitHub Releases"
 
-	loggers::print_ui_line "  " "→ " "Checking GitHub releases for $(_bold "$name")..."
+    loggers::print_ui_line "  " "→ " "Checking GitHub releases for $(_bold "$name")..."
 
-	local installed_version
-	installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
+    local installed_version
+    installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
-	local api_response
-	if ! api_response=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$repo_owner" "$repo_name"); then # DI applied
-		errors::handle_error "NETWORK_ERROR" "Failed to fetch GitHub releases for '$name'." "$name"
-		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to fetch GitHub releases.\"}"
-		loggers::print_ui_line "  " "✗ " "Failed to fetch GitHub releases for '$name'." _color_red
-		return 1
-	fi
+    # Use the new helper function
+    local fetch_result
+    fetch_result=$(updates::_fetch_github_version "$repo_owner" "$repo_name" "$name") || return 1
+    local latest_version
+    latest_version=$(echo "$fetch_result" | head -n1)
+    local latest_release_json
+    latest_release_json=$(echo "$fetch_result" | tail -n +2)
 
-	local latest_release_json
-	if ! latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response" '.[0]' "$name"); then # DI applied
-		errors::handle_error "PARSING_ERROR" "Failed to parse latest release information." "$name"
-		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to parse latest release information.\"}"
-		loggers::print_ui_line "  " "✗ " "Failed to parse latest release information." _color_red
-		return 1
-	fi
+    loggers::print_ui_line "  " "Installed: " "$installed_version"
+    loggers::print_ui_line "  " "Source:    " "$source"
+    loggers::print_ui_line "  " "Latest:    " "$latest_version"
 
-	local latest_version
-	if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json" "$name"); then
-		errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$name"
-		updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get version from latest release.\"}"
-		loggers::print_ui_line "  " "✗ " "Failed to get version from latest release." _color_red
-		return 1
-	fi
+    if updates::is_needed "$installed_version" "$latest_version"; then
+        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" _color_yellow
+        
+        # Use the new helper functions
+        local download_url
+        if ! download_url=$(updates::_build_download_url "$latest_release_json" "$filename_pattern_template" "$latest_version" "$name"); then
+            return 1
+        fi
 
-	loggers::print_ui_line "  " "Installed: " "$installed_version"
-	loggers::print_ui_line "  " "Source:    " "$source"
-	loggers::print_ui_line "  " "Latest:    " "$latest_version"
+        local expected_checksum
+        expected_checksum=$(updates::_extract_release_checksum "$latest_release_json" "$filename_pattern_template" "$latest_version" "$name")
 
-	if updates::is_needed "$installed_version" "$latest_version"; then
-		loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" _color_yellow
-		local download_filename
-		download_filename=$(printf "%s" "$filename_pattern_template" "$latest_version")
+        updates::process_deb_package \
+            "$name" \
+            "$app_key" \
+            "${app_config_ref[gpg_key_id]:-}" \
+            "${app_config_ref[gpg_fingerprint]:-}" \
+            "$filename_pattern_template" \
+            "$latest_version" \
+            "$download_url" \
+            "" \
+            "$expected_checksum" \
+            "sha256"
+    else
+        loggers::print_ui_line "  " "✓ " "Up to date." _color_green
+        counters::inc_up_to_date
+    fi
 
-		local download_url
-		download_url=$(repositories::find_asset_url "$latest_release_json" "$download_filename" "$name")
-		if [[ $? -ne 0 || -z "$download_url" ]] || ! validators::check_url_format "$download_url"; then
-			errors::handle_error "NETWORK_ERROR" "Download URL not found or invalid for '$download_filename'." "$name"
-			updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Download URL not found or invalid.\"}"
-			loggers::print_ui_line "  " "✗ " "Download URL not found or invalid for '$download_filename'." _color_red
-			return 1
-		fi
-
-		local expected_checksum
-		if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json" "$download_filename" "$name"); then
-			loggers::print_ui_line "  " "✗ " "Failed to get GitHub checksum." _color_red
-			expected_checksum="" # Clear checksum if not found, to proceed without it.
-		fi
-
-		updates::process_deb_package \
-			"$name" \
-			"$app_key" \
-			"${app_config_ref[gpg_key_id]:-}" \
-			"${app_config_ref[gpg_fingerprint]:-}" \
-			"$filename_pattern_template" \
-			"$latest_version" \
-			"$download_url" \
-			"" \
-			"$expected_checksum" \
-			"sha256"
-	else
-		loggers::print_ui_line "  " "✓ " "Up to date." _color_green
-		counters::inc_up_to_date
-	fi
-
-	return 0
+    return 0
 }
 
 # ------------------------------------------------------------------------------
