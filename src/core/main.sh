@@ -48,6 +48,7 @@ source "$CORE_DIR/globals.sh"
 source "$CORE_DIR/../lib/loggers.sh"
 source "$CORE_DIR/../lib/errors.sh"
 source "$CORE_DIR/../lib/systems.sh"
+source "$CORE_DIR/../lib/validators.sh"
 source "$CORE_DIR/interfaces.sh" # Moved here as it's needed early for headers/prompts
 source "$CORE_DIR/cli.sh"
 source "$CORE_DIR/configs.sh" # Moved here to ensure configs::create_default_files is available
@@ -165,7 +166,6 @@ DOC
 	# Foundational modules
 	source "$CORE_DIR/../lib/counters.sh"
 	source "$CORE_DIR/../lib/notifiers.sh"
-	source "$CORE_DIR/../lib/validators.sh"
 	source "$CORE_DIR/../lib/versions.sh"
 	source "$CORE_DIR/../util/checker_utils.sh"
 
@@ -173,8 +173,6 @@ DOC
 	source "$CORE_DIR/networks.sh"
 	source "$CORE_DIR/repositories.sh"
 	source "$CORE_DIR/packages.sh"
-	source "$CORE_DIR/configs.sh" # Moved here to ensure configs::create_default_files is available
-	# interfaces.sh is now sourced earlier
 	source "$CORE_DIR/updates.sh"
 
 	# External libraries

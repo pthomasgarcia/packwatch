@@ -22,6 +22,8 @@
 
 # ------------------------------------------------------------------------------
 # SECTION: Globals for Networking
+# Ensure LAST_API_CALL is initialized to avoid arithmetic errors
+LAST_API_CALL=0
 # ------------------------------------------------------------------------------
 
 # These variables are now loaded from configs.sh
@@ -67,6 +69,11 @@ networks::apply_rate_limit() {
 # SECTION: Curl Argument Builder
 # ------------------------------------------------------------------------------
 
+# Helper to get the User-Agent string from NETWORK_CONFIG or fallback
+networks::_user_agent() {
+	printf '%s' "${NETWORK_CONFIG[USER_AGENT]:-Packwatch/1.0}"
+}
+
 # Build standard curl arguments.
 # Usage: networks::build_curl_args "/tmp/file" 4
 networks::build_curl_args() {
@@ -78,7 +85,7 @@ networks::build_curl_args() {
 		"-L" "--fail" "--output" "$output_file"
 		"--connect-timeout" "$timeout_val"
 		"--max-time" "$((timeout_val * timeout_multiplier))"
-		"-A" "${NETWORK_CONFIG[USER_AGENT]:-Packwatch/1.0}"
+		"-A" "$(networks::_user_agent)"
 		"-s"
 	)
 
@@ -152,17 +159,22 @@ networks::fetch_cached_data() {
 # Usage: networks::get_effective_url "url"
 networks::get_effective_url() {
 	local url="$1"
-	local effective_url
+	local curl_output
 
 	networks::apply_rate_limit
 
 	# Use curl to get the effective URL after redirects, discarding content
-	effective_url=$(systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl -s -L \
-		-H "User-Agent: ${NETWORK_CONFIG[USER_AGENT]:-Packwatch/1.0}" \
+	if ! curl_output=$(systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl -s -L \
+		-H "User-Agent: $(networks::_user_agent)" \
 		-o /dev/null \
 		-w "%{url_effective}\n" \
-		"$url" | tr -d '\r')
+		"$url"); then
+		errors::handle_error "NETWORK_ERROR" "Failed to get effective URL for '$url'."
+		return 1
+	fi
 
+	local effective_url
+	effective_url=$(echo "$curl_output" | tr -d '\r')
 	if [[ -z "$effective_url" ]]; then
 		errors::handle_error "NETWORK_ERROR" "Failed to get effective URL for '$url'."
 		return 1
@@ -174,6 +186,17 @@ networks::get_effective_url() {
 
 # ------------------------------------------------------------------------------
 # SECTION: File Downloading
+# Efficiently check if a URL exists using a HEAD request.
+# Usage: networks::url_exists "url"
+networks::url_exists() {
+	local url="$1"
+	networks::apply_rate_limit
+	if curl -s --head --fail -A "$(networks::_user_agent)" "$url" >/dev/null; then
+		return 0
+	else
+		return 1
+	fi
+}
 # ------------------------------------------------------------------------------
 
 # Download a file from a given URL.

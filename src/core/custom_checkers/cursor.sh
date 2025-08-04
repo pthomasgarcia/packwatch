@@ -28,7 +28,14 @@ check_cursor() {
 
 	local api_endpoint="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
 	local api_json
-	api_json=$(networks::fetch_cached_data "$api_endpoint" "json")
+	if ! api_json=$(networks::fetch_cached_data "$api_endpoint" "json"); then
+		jq -n \
+			--arg status "error" \
+			--arg error_message "Failed to fetch Cursor API JSON for $name." \
+			--arg error_type "NETWORK_ERROR" \
+			'{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
+		return 1
+	fi
 
 	# Extract downloadUrl and version from JSON
 	local actual_download_url
@@ -57,14 +64,14 @@ check_cursor() {
 		--arg source "Official API (JSON)" \
 		--arg error_type "NONE" \
 		'{
-	         "status": $status,
-	         "latest_version": $latest_version,
-	         "download_url": $download_url,
-	         "install_type": $install_type,
-	         "install_target_path": $install_target_path,
-	         "source": $source,
-	         "error_type": $error_type
-	       }'
+			 "status": $status,
+			 "latest_version": $latest_version,
+			 "download_url": $download_url,
+			 "install_type": $install_type,
+			 "install_target_path": $install_target_path,
+			 "source": $source,
+			 "error_type": $error_type
+		   }'
 
 	return 0
 }

@@ -59,7 +59,7 @@ check_veracrypt() {
 			local test_url="${current_base_url}${deb_file}"
 			test_url=$(networks::decode_url "$test_url")
 			if validators::check_url_format "$test_url" &&
-				networks::fetch_cached_data "$test_url" "raw" >/dev/null 2>&1; then
+				networks::url_exists "$test_url"; then
 				download_url_final="$test_url"
 				break
 			fi
@@ -91,15 +91,15 @@ check_veracrypt() {
 		--arg source "Official Download Page" \
 		--arg error_type "NONE" \
 		'{
-	         "status": $status,
-	         "latest_version": $latest_version,
-	         "download_url": $download_url,
-	         "install_type": $install_type,
-	         "gpg_key_id": $gpg_key_id,
-	         "gpg_fingerprint": $gpg_fingerprint,
-	         "source": $source,
-	         "error_type": $error_type
-	       }'
+			 "status": $status,
+			 "latest_version": $latest_version,
+			 "download_url": $download_url,
+			 "install_type": $install_type,
+			 "gpg_key_id": $gpg_key_id,
+			 "gpg_fingerprint": $gpg_fingerprint,
+			 "source": $source,
+			 "error_type": $error_type
+		   }'
 
 	return 0
 }

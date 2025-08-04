@@ -42,10 +42,11 @@ declare -A ERROR_CODES=(
 # ------------------------------------------------------------------------------
 
 # Centralized error handler.
-# Usage: errors::handle_error TYPE MESSAGE [APP_NAME]
-#   TYPE      - One of the keys in ERROR_CODES
-#   MESSAGE   - Error message to log
-#   APP_NAME  - (Optional) Application name for context
+# Usage: errors::handle_error TYPE MESSAGE [APP_NAME] [CUSTOM_ERROR_TYPE]
+#   TYPE               - One of the keys in ERROR_CODES (default error type)
+#   MESSAGE            - Error message to log
+#   APP_NAME           - (Optional) Application name for context
+#   CUSTOM_ERROR_TYPE  - (Optional) Override error type (must be key in ERROR_CODES)
 errors::handle_error() {
 	local error_type_code="$1" # Renamed to avoid conflict with new optional param
 	local error_message="$2"
@@ -78,10 +79,11 @@ errors::handle_error() {
 }
 
 # Centralized error handler that exits immediately.
-# Usage: errors::handle_error_and_exit TYPE MESSAGE [APP_NAME]
-#   TYPE      - One of the keys in ERROR_CODES
-#   MESSAGE   - Error message to log
-#   APP_NAME  - (Optional) Application name for context
+# Usage: errors::handle_error_and_exit TYPE MESSAGE [APP_NAME] [CUSTOM_ERROR_TYPE]
+#   TYPE               - One of the keys in ERROR_CODES (default error type)
+#   MESSAGE            - Error message to log
+#   APP_NAME           - (Optional) Application name for context
+#   CUSTOM_ERROR_TYPE  - (Optional) Override error type (must be key in ERROR_CODES)
 errors::handle_error_and_exit() {
 	local error_type_code="$1"
 	local error_message="$2"

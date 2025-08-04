@@ -40,6 +40,16 @@ declare -a CUSTOM_APP_KEYS
 declare -g CACHE_DIR
 declare -g CACHE_DURATION
 declare -A -g NETWORK_CONFIG # -g makes it global, -A makes it associative
+# Helper to set default network settings
+configs::_set_default_network_settings() {
+	CACHE_DIR="/tmp/packwatch_cache"
+	CACHE_DURATION=300
+	NETWORK_CONFIG["MAX_RETRIES"]=3
+	NETWORK_CONFIG["TIMEOUT"]=30
+	NETWORK_CONFIG["USER_AGENT"]="Packwatch/1.0"
+	NETWORK_CONFIG["RATE_LIMIT"]=1
+	NETWORK_CONFIG["RETRY_DELAY"]=2
+}
 # Load global network settings from a dedicated JSON file.
 # Usage: configs::load_network_settings "$CONFIG_ROOT/network_settings.json"
 configs::load_network_settings() {
@@ -47,14 +57,7 @@ configs::load_network_settings() {
 
 	if [[ ! -f "$network_settings_file" ]]; then
 		loggers::log_message "WARN" "Network settings file not found: '$network_settings_file'. Using defaults."
-		# Set default values if file not found
-		CACHE_DIR="/tmp/packwatch_cache"
-		CACHE_DURATION=300
-		NETWORK_CONFIG["MAX_RETRIES"]=3
-		NETWORK_CONFIG["TIMEOUT"]=30
-		NETWORK_CONFIG["USER_AGENT"]="Packwatch/1.0"
-		NETWORK_CONFIG["RATE_LIMIT"]=1
-		NETWORK_CONFIG["RETRY_DELAY"]=2
+		configs::_set_default_network_settings
 		return 0
 	fi
 
@@ -78,11 +81,7 @@ configs::load_network_settings() {
 	local network_config_json
 	network_config_json=$(systems::get_json_value "$settings_content" '.network_config' "Network Configuration Block") || {
 		loggers::log_message "WARN" "Missing 'network_config' block in network settings. Using defaults."
-		NETWORK_CONFIG["MAX_RETRIES"]=3
-		NETWORK_CONFIG["TIMEOUT"]=30
-		NETWORK_CONFIG["USER_AGENT"]="Packwatch/1.0"
-		NETWORK_CONFIG["RATE_LIMIT"]=1
-		NETWORK_CONFIG["RETRY_DELAY"]=2
+		configs::_set_default_network_settings
 		return 0
 	}
 
@@ -342,7 +341,6 @@ configs::populate_globals_from_json() {
 		.key as $app_key |
 		.value |
 		to_entries[] |
-# Load global network settings from a dedicated JSON file.
 		select(.key | startswith("_comment") | not) |
 		[$app_key, .key, .value] | @tsv
 	')
