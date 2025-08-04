@@ -1,13 +1,14 @@
-refactor(configs): Centralize config retrieval and remove unused variables
+refactor(checkers): Standardize error handling for custom checkers
 
-This commit introduces several improvements to the configuration handling logic, making it more robust and efficient.
+This commit refactors the error handling mechanism for custom checkers to make it more robust and consistent with the rest of the application.
 
-- **Centralized Application Config Retrieval:**
-  - A new function, `configs::get_app_config`, has been created in `src/core/configs.sh` to act as the single source of truth for fetching an application's configuration.
-  - The `updates::check_application` function has been refactored to use this new centralized function, removing duplicated logic.
+- **Standardized JSON Error Reporting:**
+  - Custom checkers now return a JSON object with a standardized error format, including `status`, `error_message`, and `error_type`.
+  - This allows the main script to parse and handle errors from custom checkers in a more structured way.
 
-- **Removed Unused Variables:**
-  - The unused variable `apps_specified_on_cmdline` has been removed from `src/core/cli.sh`.
-  - The unused variable `apps_to_check_json` has been removed from `src/core/configs.sh`.
+- **Centralized Error Handling:**
+  - The `updates::handle_custom_check` function has been updated to parse the JSON error object from custom checkers and pass the details to the centralized `errors::handle_error` function.
+  - This ensures that all errors, whether from the core script or custom checkers, are logged and reported consistently.
 
-These changes improve the modularity, maintainability, and efficiency of the codebase.
+- **Updated Custom Checkers:**
+  - The custom checkers for Cursor, VeraCrypt, Warp, and Zed have been updated to return the new standardized JSON error object on failure.

@@ -76,6 +76,44 @@ versions::normalize() {
 	echo "$version" | sed -E 's/^[vV]//' | xargs
 }
 
+# Extract a version string from a JSON response using a jq expression.
+# Usage: versions::extract_from_json "$json_data" ".tag_name" "AppName"
+# Returns the normalized version string or "0.0.0" on failure.
+versions::extract_from_json() {
+	local json_data="$1"
+	local jq_expression="$2"
+	local app_name="$3"
+	local raw_version
+
+	raw_version=$(systems::get_json_value "$json_data" "$jq_expression" "$app_name")
+	if [[ $? -ne 0 || -z "$raw_version" || "$raw_version" == "null" ]]; then
+		loggers::log_message "WARN" "Failed to extract version for '$app_name' using JSON expression '$jq_expression'. Defaulting to 0.0.0."
+		echo "0.0.0"
+		return 1
+	fi
+	versions::normalize "$raw_version"
+	return 0
+}
+
+# Extract a version string from raw text using a regex pattern.
+# Usage: versions::extract_from_regex "$text_data" "v([0-9.]+)" "AppName"
+# Returns the normalized version string or "0.0.0" on failure.
+versions::extract_from_regex() {
+	local text_data="$1"
+	local regex_pattern="$2"
+	local app_name="$3"
+	local raw_version
+
+	raw_version=$(echo "$text_data" | grep -oE "$regex_pattern" | head -n1)
+	if [[ -z "$raw_version" ]]; then
+		loggers::log_message "WARN" "Failed to extract version for '$app_name' using regex '$regex_pattern'. Defaulting to 0.0.0."
+		echo "0.0.0"
+		return 1
+	fi
+	versions::normalize "$raw_version"
+	return 0
+}
+
 # ==============================================================================
 # END OF MODULE
 # ==============================================================================

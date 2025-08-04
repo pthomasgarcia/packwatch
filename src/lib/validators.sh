@@ -140,3 +140,15 @@ validators::verify_gpg_key() {
 # ==============================================================================
 # END OF MODULE
 # ==============================================================================
+
+# Check if a string is a valid semantic version (basic check).
+# Allows for X.Y.Z, X.Y, X, and optional pre-release/build metadata.
+# Usage: validators::check_semver_format "1.2.3"
+# Returns 0 for valid, 1 for invalid.
+validators::check_semver_format() {
+	local version="$1"
+	# Regex for semantic versioning: MAJOR.MINOR.PATCH-prerelease+build
+	# Allows for just major, major.minor, major.minor.patch
+	# Allows alphanumeric for pre-release and build metadata
+	[[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[0-9a-zA-Z.-]+)?(\+[0-9a-zA-Z.-]+)?$ ]]
+}

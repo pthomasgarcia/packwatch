@@ -162,7 +162,7 @@ packages::extract_deb_version() {
 	version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null)
 
 	if [[ -z "$version" ]]; then
-		version=$(basename "$deb_file" | grep -oE '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?' | head -n1)
+		version=$(versions::extract_from_regex "$(basename "$deb_file")" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-zA-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$(basename "$deb_file")")
 	fi
 
 	echo "${version:-0.0.0}"

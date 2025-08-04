@@ -173,15 +173,17 @@ updates::check_script() {
 	if api_response=$(curl -s -m 30 "$version_url") && [[ -n "$api_response" ]]; then
 		# Attempt to parse as JSON first, then fall back to regex
 		local parsed_version
-		parsed_version=$(echo "$api_response" | jq -r ".tag_name" 2>/dev/null | sed 's/^v//')
-		if [[ -n "$parsed_version" && "$parsed_version" != "null" ]]; then
-			latest_version=$(versions::normalize "$parsed_version")
+		if parsed_version=$(versions::extract_from_json "$api_response" ".tag_name" "$name"); then
+			latest_version="$parsed_version"
 			source="GitHub Releases (via script type)"
 		else
 			# Fallback to regex if JSON parsing fails or is not applicable
-			latest_version=$(echo "$api_response" | grep -oE "$version_regex" | head -n1)
-			latest_version=$(versions::normalize "$latest_version")
-			source="URL Regex (via script type)"
+			if parsed_version=$(versions::extract_from_regex "$api_response" "$version_regex" "$name"); then
+				latest_version="$parsed_version"
+				source="URL Regex (via script type)"
+			else
+				loggers::log_message "WARN" "Could not extract version from '$version_url' for '$name' using JSON or regex. Defaulting to 0.0.0."
+			fi
 		fi
 
 		if [[ -z "$latest_version" || "$latest_version" == "0.0.0" ]]; then
@@ -972,8 +974,7 @@ updates::check_appimage() {
 		loggers::log_message "DEBUG" "Attempting to extract version from download URL filename: '$download_url'"
 		local filename_from_url
 		filename_from_url=$(basename "$download_url" | cut -d'?' -f1)
-		latest_version=$(echo "$filename_from_url" | grep -oE '[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?' | head -n1)
-		if [[ -z "$latest_version" ]]; then
+		if ! latest_version=$(versions::extract_from_regex "$filename_from_url" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-zA-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$name"); then
 			loggers::log_message "WARN" "Could not extract version from AppImage download URL filename for '$name'. Will default to 0.0.0 for comparison."
 			latest_version="0.0.0"
 		fi
@@ -1120,8 +1121,7 @@ updates::check_flatpak() {
 	local flatpak_search_output
 	if flatpak_search_output=$("$UPDATES_FLATPAK_SEARCH_IMPL" --columns=application,version,summary "$flatpak_app_id" 2>/dev/null); then # DI applied
 		if [[ "$flatpak_search_output" =~ "$flatpak_app_id"[[:space:]]+([0-9.]+[^[:space:]]*)[[:space:]]+.* ]]; then
-			latest_version="${BASH_REMATCH[1]}"
-			latest_version=$(versions::normalize "$latest_version")
+			latest_version=$(versions::normalize "${BASH_REMATCH[1]}")
 		else
 			loggers::log_message "WARN" "Could not parse Flatpak version for '$name' from search output."
 		fi

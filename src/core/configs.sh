@@ -147,6 +147,47 @@ configs::validate_single_config_file() {
 			return 1
 		fi
 		;;
+	"script")
+		local download_url_val version_url_val version_regex_val
+		download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
+		version_url_val=$(systems::get_json_value "$app_data_str" '.version_url' "$app_name_in_config") || return 1
+		version_regex_val=$(systems::get_json_value "$app_data_str" '.version_regex' "$app_name_in_config") || return 1
+
+		if ! validators::check_url_format "$download_url_val"; then
+			errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
+			return 1
+		fi
+		if ! validators::check_url_format "$version_url_val"; then
+			errors::handle_error "CONFIG_ERROR" "Invalid version URL format in: '$filename'" "$app_name_in_config"
+			return 1
+		fi
+		if [[ -z "$version_regex_val" ]]; then
+			errors::handle_error "CONFIG_ERROR" "Empty version regex in: '$filename'" "$app_name_in_config"
+			return 1
+		fi
+		;;
+	"flatpak")
+		local flatpak_app_id_val
+		flatpak_app_id_val=$(systems::get_json_value "$app_data_str" '.flatpak_app_id' "$app_name_in_config") || return 1
+		if [[ -z "$flatpak_app_id_val" ]]; then
+			errors::handle_error "CONFIG_ERROR" "Empty flatpak_app_id in: '$filename'" "$app_name_in_config"
+			return 1
+		fi
+		;;
+	"custom")
+		local custom_checker_script_val custom_checker_func_val
+		custom_checker_script_val=$(systems::get_json_value "$app_data_str" '.custom_checker_script' "$app_name_in_config") || return 1
+		custom_checker_func_val=$(systems::get_json_value "$app_data_str" '.custom_checker_func' "$app_name_in_config") || return 1
+
+		if [[ -z "$custom_checker_script_val" ]]; then
+			errors::handle_error "CONFIG_ERROR" "Empty custom_checker_script in: '$filename'" "$app_name_in_config"
+			return 1
+		fi
+		if [[ -z "$custom_checker_func_val" ]]; then
+			errors::handle_error "CONFIG_ERROR" "Empty custom_checker_func in: '$filename'" "$app_name_in_config"
+			return 1
+		fi
+		;;
 	esac
 
 	return 0

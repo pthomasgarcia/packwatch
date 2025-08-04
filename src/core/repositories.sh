@@ -47,7 +47,10 @@ repositories::parse_version_from_release() {
 	if [[ $? -ne 0 ]]; then return 1; fi
 
 	local latest_version
-	latest_version=$(versions::normalize "$raw_tag_name" | grep -oE '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?' | head -n1)
+	if ! latest_version=$(versions::extract_from_json "$release_json" ".tag_name" "$app_name"); then
+		errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$app_name"
+		return 1
+	fi
 
 	if [[ -z "$latest_version" ]]; then
 		errors::handle_error "VALIDATION_ERROR" "Failed to detect latest version for '$app_name' from tag '$raw_tag_name'." "$app_name"
