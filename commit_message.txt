@@ -1,14 +1,17 @@
-refactor(versions): Centralize version extraction logic
+refactor(error-handling): Implement centralized error hooks
 
-This commit introduces a major refactoring of how version strings are extracted and validated, centralizing the logic into the `versions.sh` module to improve robustness and reduce code duplication.
+This commit introduces a more robust and centralized error handling mechanism by implementing a system of error hooks.
 
-- **New Version Extraction Functions:**
-  - Created `versions::extract_from_json` to provide a standardized way to extract and normalize version strings from JSON data.
-  - Created `versions::extract_from_regex` to provide a standardized way to extract and normalize version strings from plain text using regular expressions.
+- **New Error Hook System:**
+  - The `updates.sh` module now includes a system for triggering error hooks. This allows for centralized error reporting and handling from various parts of the application.
+  - The `errors::handle_error` and `errors::handle_error_and_exit` functions have been updated to accept an optional `custom_error_type` to provide more specific error information.
 
-- **Improved Validation:**
-  - Added a new `validators::check_semver_format` function to provide a basic check for semantic versioning.
-  - The configuration validation in `src/core/configs.sh` has been enhanced to validate the format of version-related fields for all application types.
+- **Improved Error Reporting in Modules:**
+  - The `repositories.sh` and `updates.sh` modules have been updated to trigger the new error hooks on failure. This provides more detailed context about where and why an error occurred.
 
-- **Refactored Core Logic:**
-  - The `updates.sh`, `repositories.sh`, and `packages.sh` modules have been refactored to use the new centralized version extraction functions. This removes duplicated `grep` and `sed` commands and ensures that version parsing is handled consistently across the application.
+- **Enhanced Configuration Validation:**
+  - The `configs::validate_single_config_file` function in `src/core/configs.sh` has been significantly improved to provide more specific validation for each application type.
+
+- **Improved Version Normalization:**
+  - The `versions::normalize` function has been enhanced to handle pre-release indicators (e.g., `-beta`, `-rc`) and to remove build metadata, making version comparisons more reliable.
+  - The `versions::extract_from_json` and `versions::extract_from_regex` functions now validate the extracted version string against a semantic versioning format.

@@ -698,7 +698,7 @@ updates::check_github_deb() {
 		fi
 
 		local expected_checksum
-		if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json" "$download_filename"); then
+		if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json" "$download_filename" "$name"); then
 			loggers::print_ui_line "  " "✗ " "Failed to get GitHub checksum." _color_red
 			expected_checksum="" # Clear checksum if not found, to proceed without it.
 		fi
@@ -990,7 +990,7 @@ updates::check_appimage() {
 
 				local download_filename_from_url
 				download_filename_from_url="$(basename "$download_url" | cut -d'?' -f1)"
-				if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json" "$download_filename_from_url"); then loggers::log_message "WARN" "Failed to get GitHub checksum for '$name'."; fi
+				if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json" "$download_filename_from_url" "$name"); then loggers::log_message "WARN" "Failed to get GitHub checksum for '$name'."; fi
 				source="GitHub Releases"
 			fi
 		else

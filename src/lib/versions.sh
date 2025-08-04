@@ -76,9 +76,11 @@ versions::normalize() {
 	# Strip leading 'v' or 'V'
 	version=$(echo "$version" | sed -E 's/^[vV]//')
 
-	# Convert common pre-release indicators to dpkg-compatible format
-	# e.g., -beta.1 -> ~beta1, -rc1 -> ~rc1
-	version=$(echo "$version" | sed -E 's/-alpha([0-9]*)/~alpha\1/' | sed -E 's/-beta([0-9]*)/~beta\1/' | sed -E 's/-rc([0-9]*)/~rc\1/')
+	# Convert common pre-release indicators to dpkg-compatible “~” notation.
+	# Handles dash or dot separators and is case-insensitive (alpha, beta, rc).
+	# Examples: -alpha.1 → ~alpha1, -Beta2 → ~beta2, -RC.0 → ~rc0
+	version=$(echo "$version" |
+	  sed -E 's/-([aA]lpha|[bB]eta|[rR][cC])[.-]?([0-9]*)/~\L\1\E\2/')
 
 	# Remove build metadata (after '+') as it's not typically used for comparison
 	version=$(echo "$version" | sed -E 's/\+.*$//')

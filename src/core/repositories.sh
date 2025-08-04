@@ -102,8 +102,9 @@ repositories::find_asset_url() {
 # Find and extract a checksum for a given asset from a release.
 # Usage: repositories::find_asset_checksum "$release_json" "filename"
 repositories::find_asset_checksum() {
-	local release_json="$1"
-	local target_filename="$2"
+local release_json="$1"
+local target_filename="$2"
+local app_name="$3"
 
 	local checksum_file_url
 	checksum_file_url=$(systems::get_json_value "$release_json" '.assets[] | select(.name | (endswith("sha256sum.txt") or endswith("checksums.txt"))) | .browser_download_url' "Repository Release Checksum URL")
@@ -114,7 +115,7 @@ repositories::find_asset_checksum() {
 	local temp_checksum_file
 	temp_checksum_file=$(systems::create_temp_file "checksum_file")
 	if [[ $? -ne 0 ]]; then
-		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"checksum_download\", \"error_type\": \"SYSTEM_ERROR\", \"message\": \"Failed to create temporary file for checksum.\"}"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" '{"phase": "checksum_download", "error_type": "SYSTEM_ERROR", "message": "Failed to create temporary file for checksum."}'
 		return 1
 	fi
 
