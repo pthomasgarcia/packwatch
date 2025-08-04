@@ -50,6 +50,7 @@ source "$CORE_DIR/../lib/errors.sh"
 source "$CORE_DIR/../lib/systems.sh"
 source "$CORE_DIR/interfaces.sh" # Moved here as it's needed early for headers/prompts
 source "$CORE_DIR/cli.sh"
+source "$CORE_DIR/configs.sh" # Moved here to ensure configs::create_default_files is available
 
 # ==============================================================================
 # SECTION: Application Initialization and Orchestration
@@ -172,7 +173,7 @@ DOC
 	source "$CORE_DIR/networks.sh"
 	source "$CORE_DIR/repositories.sh"
 	source "$CORE_DIR/packages.sh"
-	source "$CORE_DIR/configs.sh"
+	source "$CORE_DIR/configs.sh" # Moved here to ensure configs::create_default_files is available
 	# interfaces.sh is now sourced earlier
 	source "$CORE_DIR/updates.sh"
 

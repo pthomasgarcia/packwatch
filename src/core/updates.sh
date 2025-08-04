@@ -205,7 +205,7 @@ updates::check_script() {
 
 	local latest_version="0.0.0"
 	local api_response
-	if api_response=$(curl -s -m 30 "$version_url") && [[ -n "$api_response" ]]; then
+	if api_response=$(networks::fetch_cached_data "$version_url" "raw") && [[ -n "$api_response" ]]; then
 		# Attempt to parse as JSON first, then fall back to regex
 		local parsed_version
 		if parsed_version=$(versions::extract_from_json "$api_response" ".tag_name" "$name"); then

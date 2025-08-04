@@ -23,7 +23,7 @@ check_warp() {
 
 	local url="https://app.warp.dev/get_warp?package=deb"
 	local html_content
-	if ! html_content=$(systems::reattempt_command 3 5 curl -s -L -A "${NETWORK_CONFIG[USER_AGENT]}" "$url") || [[ -z "$html_content" ]]; then
+	if ! html_content=$(networks::fetch_cached_data "$url" "html") || [[ -z "$html_content" ]]; then
 		jq -n \
 			--arg status "error" \
 			--arg error_message "Failed to fetch download page for $name." \
@@ -49,12 +49,7 @@ check_warp() {
 	fi
 
 	local actual_deb_url=""
-	actual_deb_url=$(systems::reattempt_command 3 5 curl -s -L \
-		-H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
-		-H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
-		-o /dev/null \
-		-w "%{url_effective}\n" \
-		"https://app.warp.dev/download?package=deb" | tr -d '\r')
+	actual_deb_url=$(networks::get_effective_url "https://app.warp.dev/download?package=deb")
 
 	if [[ -z "$actual_deb_url" ]] || ! validators::check_url_format "$actual_deb_url"; then
 		jq -n \

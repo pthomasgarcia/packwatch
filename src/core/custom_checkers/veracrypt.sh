@@ -59,7 +59,7 @@ check_veracrypt() {
 			local test_url="${current_base_url}${deb_file}"
 			test_url=$(networks::decode_url "$test_url")
 			if validators::check_url_format "$test_url" &&
-				systems::reattempt_command 3 5 curl --head -s --fail "$test_url" | head -n 1 | grep -q "200 OK"; then
+				networks::fetch_cached_data "$test_url" "raw" >/dev/null 2>&1; then
 				download_url_final="$test_url"
 				break
 			fi

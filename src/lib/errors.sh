@@ -59,7 +59,7 @@ errors::handle_error() {
 	loggers::log_message "ERROR" "[$final_error_type] $error_message (app: $app_name)"
 
 	# Optionally, send notifications for certain error types (requires notifiers.sh)
-	case "$error_type" in
+	case "$final_error_type" in
 	"NETWORK_ERROR")
 		notifiers::send_notification "Network Error" "$error_message" "critical"
 		;;

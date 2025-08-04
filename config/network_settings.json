@@ -1,0 +1,11 @@
+{
+  "cache_dir": "/tmp/packwatch_cache",
+  "cache_duration": 300,
+  "network_config": {
+    "max_retries": 3,
+    "timeout": 30,
+    "user_agent": "Packwatch/1.0",
+    "rate_limit": 1,
+    "retry_delay": 2
+  }
+}

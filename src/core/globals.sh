@@ -32,7 +32,6 @@ readonly CONFIG_DIR
  
  # Cache directory - exported for subprocesses that may need it
  export CACHE_DIR="/tmp/app-updater-cache"
- readonly CACHE_DIR
 
 # --- Required System Dependencies ---
 readonly -a REQUIRED_COMMANDS=(

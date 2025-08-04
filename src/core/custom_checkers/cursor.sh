@@ -28,7 +28,7 @@ check_cursor() {
 
 	local api_endpoint="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
 	local api_json
-	api_json=$(systems::reattempt_command 3 5 curl -s -L "$api_endpoint")
+	api_json=$(networks::fetch_cached_data "$api_endpoint" "json")
 
 	# Extract downloadUrl and version from JSON
 	local actual_download_url

@@ -24,12 +24,12 @@
 # SECTION: Globals for Networking
 # ------------------------------------------------------------------------------
 
-# These should be set in your main script or config:
-#   CACHE_DIR="/tmp/app-updater-cache"
-#   CACHE_DURATION=300
-#   declare -A NETWORK_CONFIG=([MAX_RETRIES]=3 [TIMEOUT]=30 [USER_AGENT]="AppUpdater/1.0" [RATE_LIMIT]=1 [RETRY_DELAY]=2)
-#   LAST_API_CALL=0
-#   API_RATE_LIMIT=1
+# These variables are now loaded from configs.sh
+# CACHE_DIR
+# CACHE_DURATION
+# NETWORK_CONFIG (associative array)
+# LAST_API_CALL (managed internally by networks.sh)
+# API_RATE_LIMIT (managed internally by networks.sh)
 
 # ------------------------------------------------------------------------------
 # SECTION: URL Decoding
@@ -52,9 +52,10 @@ networks::apply_rate_limit() {
 	local current_time
 	current_time=$(date +%s)
 	local time_diff=$((current_time - LAST_API_CALL))
+	local rate_limit_val="${NETWORK_CONFIG[RATE_LIMIT]:-1}" # Default to 1 if not set
 
-	if ((time_diff < API_RATE_LIMIT)); then
-		local sleep_duration=$((API_RATE_LIMIT - time_diff))
+	if ((time_diff < rate_limit_val)); then
+		local sleep_duration=$((rate_limit_val - time_diff))
 		loggers::log_message "DEBUG" "Rate limiting: sleeping for ${sleep_duration}s"
 		sleep "$sleep_duration"
 	fi
@@ -77,7 +78,7 @@ networks::build_curl_args() {
 		"-L" "--fail" "--output" "$output_file"
 		"--connect-timeout" "$timeout_val"
 		"--max-time" "$((timeout_val * timeout_multiplier))"
-		"-A" "${NETWORK_CONFIG[USER_AGENT]:-AppUpdater/1.0}"
+		"-A" "${NETWORK_CONFIG[USER_AGENT]:-Packwatch/1.0}"
 		"-s"
 	)
 
@@ -95,16 +96,17 @@ networks::fetch_cached_data() {
 	local expected_type="$2" # "json", "html", "raw"
 	local cache_key
 	cache_key=$(echo -n "$url" | sha256sum | cut -d' ' -f1)
-	local cache_file="$CACHE_DIR/$cache_key"
+	local cache_file="${CACHE_DIR:-/tmp/packwatch_cache}/$cache_key" # Use global CACHE_DIR
 	local temp_download_file
 
-	mkdir -p "$CACHE_DIR" || {
-		errors::handle_error "PERMISSION_ERROR" "Failed to create cache directory: '$CACHE_DIR'"
+	mkdir -p "${CACHE_DIR:-/tmp/packwatch_cache}" || { # Use global CACHE_DIR
+		errors::handle_error "PERMISSION_ERROR" "Failed to create cache directory: '${CACHE_DIR:-/tmp/packwatch_cache}'"
 		return 1
 	}
 
 	# Check cache first
-	if [[ -f "$cache_file" ]] && [[ $(($(date +%s) - $(stat -c %Y "$cache_file"))) -lt $CACHE_DURATION ]]; then
+	local cache_duration_val="${CACHE_DURATION:-300}" # Use global CACHE_DURATION
+	if [[ -f "$cache_file" ]] && [[ $(($(date +%s) - $(stat -c %Y "$cache_file"))) -lt "$cache_duration_val" ]]; then
 		loggers::log_message "DEBUG" "Using cached response for: '$url' (file: '$cache_file')"
 		cat "$cache_file"
 		return 0
@@ -114,9 +116,11 @@ networks::fetch_cached_data() {
 		temp_download_file=$(systems::create_temp_file "fetch_response")
 		if [[ $? -ne 0 ]]; then return 1; fi
 
-		local -a curl_args; mapfile -t curl_args < <(networks::build_curl_args "$temp_download_file" 4)
+		local -a curl_args; mapfile -t curl_args < <(networks::build_curl_args "$temp_download_file" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-4}") # Use configurable timeout multiplier
 
-		if ! systems::reattempt_command 3 5 curl "${curl_args[@]}" "$url"; then
+		local max_retries_val="${NETWORK_CONFIG[MAX_RETRIES]:-3}"
+		local retry_delay_val="${NETWORK_CONFIG[RETRY_DELAY]:-5}"
+		if ! systems::reattempt_command "$max_retries_val" "$retry_delay_val" curl "${curl_args[@]}" "$url"; then
 			errors::handle_error "NETWORK_ERROR" "Failed to download '$url' after multiple attempts."
 			return 1
 		fi
@@ -144,6 +148,29 @@ networks::fetch_cached_data() {
 		return 0
 	fi
 }
+# Get the effective URL after redirects.
+# Usage: networks::get_effective_url "url"
+networks::get_effective_url() {
+	local url="$1"
+	local effective_url
+
+	networks::apply_rate_limit
+
+	# Use curl to get the effective URL after redirects, discarding content
+	effective_url=$(systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl -s -L \
+		-H "User-Agent: ${NETWORK_CONFIG[USER_AGENT]:-Packwatch/1.0}" \
+		-o /dev/null \
+		-w "%{url_effective}\n" \
+		"$url" | tr -d '\r')
+
+	if [[ -z "$effective_url" ]]; then
+		errors::handle_error "NETWORK_ERROR" "Failed to get effective URL for '$url'."
+		return 1
+	fi
+
+	echo "$effective_url"
+	return 0
+}
 
 # ------------------------------------------------------------------------------
 # SECTION: File Downloading
@@ -169,9 +196,9 @@ networks::download_file() {
 		return 1
 	fi
 
-	local -a curl_args; mapfile -t curl_args < <(networks::build_curl_args "$dest_path" 10)
+	local -a curl_args; mapfile -t curl_args < <(networks::build_curl_args "$dest_path" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-10}") # Use configurable timeout multiplier
 
-	if ! systems::reattempt_command 3 5 curl "${curl_args[@]}" "$url"; then
+	if ! systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl "${curl_args[@]}" "$url"; then
 		errors::handle_error "NETWORK_ERROR" "Failed to download '$url' after multiple attempts."
 		return 1
 	fi

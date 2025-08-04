@@ -1,16 +1,11 @@
-refactor(updates): Centralize installation flow and improve validation
+refactor(updates): Centralize installation flow and config retrieval
 
-This commit introduces a major refactoring of the update and installation logic to improve modularity, reduce code duplication, and enhance configuration validation.
+This commit introduces a significant refactoring to centralize common logic, reduce code duplication, and improve the overall structure of the application.
 
 - **Centralized Installation Flow:**
-  - A new generic function, `updates::process_installation`, has been created in `src/core/updates.sh` to handle the common elements of the installation process (e.g., user prompts, dry runs, version updates).
-  - The specific installation handlers for `deb`, `appimage`, `script`, and `flatpak` have been refactored to use this new centralized function, significantly reducing code duplication.
+  - A new generic function, `updates::process_installation`, has been created in `src/core/updates.sh`. This function encapsulates the common logic for handling user prompts, dry runs, and updating the installed version JSON file.
+  - The specific installation handlers for `deb`, `appimage`, `script`, and `flatpak` have been refactored to use this new centralized function, which dramatically reduces code duplication and makes the installation process more consistent.
 
-- **Enhanced Configuration Validation:**
-  - The `configs::validate_single_config_file` function in `src/core/configs.sh` has been improved with more specific and robust validation checks for each application type.
-
-- **Improved Error Handling:**
-  - Error hooks have been added to more places in the `updates.sh` and `repositories.sh` modules to provide more detailed and consistent error reporting.
-
-- **Refactored Custom Checkers:**
-  - The custom checkers have been updated to pass a JSON string as an argument instead of using namerefs, which improves the robustness of the interface.
+- **Centralized Config Retrieval:**
+  - A new function, `configs::get_app_config`, has been added to `src/core/configs.sh` to provide a single, consistent way to retrieve an application's configuration from the global state.
+  - The `updates::check_application` function has been updated to use this new helper, simplifying its logic.

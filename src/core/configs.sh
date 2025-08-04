@@ -36,6 +36,66 @@
 declare -A CONFIG_SCHEMA
 declare -A ALL_APP_CONFIGS
 declare -a CUSTOM_APP_KEYS
+# Global network configuration settings
+declare -g CACHE_DIR
+declare -g CACHE_DURATION
+declare -A -g NETWORK_CONFIG # -g makes it global, -A makes it associative
+# Load global network settings from a dedicated JSON file.
+# Usage: configs::load_network_settings "$CONFIG_ROOT/network_settings.json"
+configs::load_network_settings() {
+	local network_settings_file="$1"
+
+	if [[ ! -f "$network_settings_file" ]]; then
+		loggers::log_message "WARN" "Network settings file not found: '$network_settings_file'. Using defaults."
+		# Set default values if file not found
+		CACHE_DIR="/tmp/packwatch_cache"
+		CACHE_DURATION=300
+		NETWORK_CONFIG["MAX_RETRIES"]=3
+		NETWORK_CONFIG["TIMEOUT"]=30
+		NETWORK_CONFIG["USER_AGENT"]="Packwatch/1.0"
+		NETWORK_CONFIG["RATE_LIMIT"]=1
+		NETWORK_CONFIG["RETRY_DELAY"]=2
+		return 0
+	fi
+
+	local settings_content
+	settings_content=$(<"$network_settings_file")
+	if ! jq -e . "$network_settings_file" >/dev/null 2>&1; then
+		errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in network settings file: '$network_settings_file'"
+		return 1
+	fi
+
+	CACHE_DIR=$(systems::get_json_value "$settings_content" '.cache_dir' "Network Cache Directory") || {
+		loggers::log_message "WARN" "Missing 'cache_dir' in network settings. Using default: /tmp/packwatch_cache"
+		CACHE_DIR="/tmp/packwatch_cache"
+	}
+	CACHE_DURATION=$(systems::get_json_value "$settings_content" '.cache_duration' "Network Cache Duration") || {
+		loggers::log_message "WARN" "Missing 'cache_duration' in network settings. Using default: 300"
+		CACHE_DURATION=300
+	}
+
+	# Load NETWORK_CONFIG associative array
+	local network_config_json
+	network_config_json=$(systems::get_json_value "$settings_content" '.network_config' "Network Configuration Block") || {
+		loggers::log_message "WARN" "Missing 'network_config' block in network settings. Using defaults."
+		NETWORK_CONFIG["MAX_RETRIES"]=3
+		NETWORK_CONFIG["TIMEOUT"]=30
+		NETWORK_CONFIG["USER_AGENT"]="Packwatch/1.0"
+		NETWORK_CONFIG["RATE_LIMIT"]=1
+		NETWORK_CONFIG["RETRY_DELAY"]=2
+		return 0
+	}
+
+	local entry_json
+	while IFS= read -r entry_json; do
+		local key=$(echo "$entry_json" | jq -r '.key')
+		local value=$(echo "$entry_json" | jq -r '.value')
+		NETWORK_CONFIG["$key"]="$value"
+	done < <(echo "$network_config_json" | jq -c 'to_entries[]')
+
+	loggers::log_message "DEBUG" "Loaded network settings from '$network_settings_file'"
+	return 0
+}
 
 # ------------------------------------------------------------------------------
 # SECTION: Config Schema Loader
@@ -282,6 +342,7 @@ configs::populate_globals_from_json() {
 		.key as $app_key |
 		.value |
 		to_entries[] |
+# Load global network settings from a dedicated JSON file.
 		select(.key | startswith("_comment") | not) |
 		[$app_key, .key, .value] | @tsv
 	')
@@ -312,6 +373,10 @@ configs::validate_loaded_app_count() {
 # Orchestrate loading configuration from the modular directory.
 # Usage: configs::load_modular_directory
 configs::load_modular_directory() {
+	if ! configs::load_network_settings "$CONFIG_ROOT/network_settings.json"; then
+		return 1
+	fi
+
 	if ! configs::load_schema "$CONFIG_ROOT/schema.json"; then
 		return 1
 	fi
@@ -441,7 +506,7 @@ EOF
 
 		if [[ ! -f "$target_file" ]]; then
 			echo "$default_app_configs" | jq --arg key "$app_key" '.[$key]' >"$target_file"
-			if configs::validate_single_config_file "$file"; then
+			if configs::validate_single_config_file "$target_file"; then
 				loggers::log_message "INFO" "Created default config file: '$target_file'"
 			else
 				errors::handle_error "CONFIG_ERROR" "Failed to create default config file: '$target_file'"
