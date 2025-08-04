@@ -1,17 +1,16 @@
-refactor(error-handling): Implement centralized error hooks
+refactor(updates): Centralize installation flow and improve validation
 
-This commit introduces a more robust and centralized error handling mechanism by implementing a system of error hooks.
+This commit introduces a major refactoring of the update and installation logic to improve modularity, reduce code duplication, and enhance configuration validation.
 
-- **New Error Hook System:**
-  - The `updates.sh` module now includes a system for triggering error hooks. This allows for centralized error reporting and handling from various parts of the application.
-  - The `errors::handle_error` and `errors::handle_error_and_exit` functions have been updated to accept an optional `custom_error_type` to provide more specific error information.
-
-- **Improved Error Reporting in Modules:**
-  - The `repositories.sh` and `updates.sh` modules have been updated to trigger the new error hooks on failure. This provides more detailed context about where and why an error occurred.
+- **Centralized Installation Flow:**
+  - A new generic function, `updates::process_installation`, has been created in `src/core/updates.sh` to handle the common elements of the installation process (e.g., user prompts, dry runs, version updates).
+  - The specific installation handlers for `deb`, `appimage`, `script`, and `flatpak` have been refactored to use this new centralized function, significantly reducing code duplication.
 
 - **Enhanced Configuration Validation:**
-  - The `configs::validate_single_config_file` function in `src/core/configs.sh` has been significantly improved to provide more specific validation for each application type.
+  - The `configs::validate_single_config_file` function in `src/core/configs.sh` has been improved with more specific and robust validation checks for each application type.
 
-- **Improved Version Normalization:**
-  - The `versions::normalize` function has been enhanced to handle pre-release indicators (e.g., `-beta`, `-rc`) and to remove build metadata, making version comparisons more reliable.
-  - The `versions::extract_from_json` and `versions::extract_from_regex` functions now validate the extracted version string against a semantic versioning format.
+- **Improved Error Handling:**
+  - Error hooks have been added to more places in the `updates.sh` and `repositories.sh` modules to provide more detailed and consistent error reporting.
+
+- **Refactored Custom Checkers:**
+  - The custom checkers have been updated to pass a JSON string as an argument instead of using namerefs, which improves the robustness of the interface.

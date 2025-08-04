@@ -4,7 +4,7 @@
 # ==============================================================================
 # Responsibilities:
 #   - Update logic for each app type
-#   - Orchestration of individual and overall update flows
+#   - Orchestration of individual and overall update flow
 #
 # Usage:
 #   Source this file in your main script:
@@ -57,6 +57,69 @@ APP_TYPE_VALIDATIONS["flatpak"]="name,flatpak_app_id"
 APP_TYPE_VALIDATIONS["custom"]="name,custom_checker_script,custom_checker_func"
 
 # ------------------------------------------------------------------------------
+# SECTION: Generic Installation Flow
+# ------------------------------------------------------------------------------
+
+# Generic function to handle the common installation flow elements.
+# This includes prompting the user, handling dry runs, and updating the installed version.
+# Usage: updates::process_installation "app_name" "app_key" "latest_version" "install_command_func" "install_command_args..."
+#   app_name           - Display name of the application.
+#   app_key            - Unique key of the application.
+#   latest_version     - The version to be installed.
+#   install_command_func - Name of the function to call for the actual installation.
+#   install_command_args - Arguments to pass to the install_command_func.
+updates::process_installation() {
+	local app_name="$1"
+	local app_key="$2"
+	local latest_version="$3"
+	local install_command_func="$4"
+	shift 4
+	local -a install_command_args=("$@")
+
+	local current_installed_version
+	current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
+
+	local prompt_msg
+	prompt_msg="Do you want to install $(_bold "$app_name") v$latest_version?"
+	if [[ "$current_installed_version" != "0.0.0" ]]; then
+		prompt_msg="Do you want to update $(_bold "$app_name") to v$latest_version?"
+	fi
+
+	notifiers::send_notification "$app_name Update Available" "v$latest_version ready for install" "normal"
+
+	updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name" # Pre-install hook
+
+	if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
+		updates::on_install_start "$app_name"                    # Hook
+		if [[ $DRY_RUN -eq 1 ]]; then
+			loggers::log_message "DEBUG" "  [DRY RUN] Would execute installation command: '$install_command_func ${install_command_args[*]}'."
+			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
+				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name' in dry run."
+			fi
+			loggers::print_ui_line "  " "[DRY RUN] " "Installation simulated for $(_bold "$app_name")." _color_yellow
+			return 0
+		fi
+
+		if "$install_command_func" "${install_command_args[@]}"; then
+			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
+				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
+			fi
+			updates::on_install_complete "$app_name" # Hook
+			counters::inc_updated
+			return 0
+		else
+			errors::handle_error "INSTALLATION_ERROR" "Installation failed for '$app_name'." "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Installation failed.\"}"
+			return 1
+		fi
+	else
+		updates::on_install_skipped "$app_name" # Hook
+		counters::inc_skipped
+		return 0
+	fi
+}
+
+# ------------------------------------------------------------------------------
 # SECTION: Script-based Update Flow
 # ------------------------------------------------------------------------------
 
@@ -97,48 +160,13 @@ updates::process_script_installation() {
 		return 1
 	fi
 
-	local prompt_msg
-	prompt_msg="Do you want to install $(_bold "$app_name") (v$latest_version)?"
-	local current_installed_version
-	current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
-	if [[ "$current_installed_version" != "0.0.0" ]]; then
-		prompt_msg="Do you want to update $(_bold "$app_name") to (v$latest_version)?"
-	fi
-
-	notifiers::send_notification "${app_name} Update Available" "New script downloaded" "normal"
-
-	updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name" # Pre-install hook
-
-	if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
-		updates::on_install_start "$app_name"                    # Hook
-		if [[ $DRY_RUN -eq 1 ]]; then
-			loggers::log_message "DEBUG" "  [DRY RUN] Would execute script: 'sudo bash $temp_script_path'."
-			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name' in dry run."
-			fi
-			loggers::print_ui_line "  " "[DRY RUN] " "Script-based update simulated for $(_bold "$app_name")." _color_yellow
-			return 0
-		fi
-
-		loggers::print_ui_line "  " "→ " "Executing installation script for $(_bold "$app_name")..."
-		if sudo bash "$temp_script_path"; then
-			systems::unregister_temp_file "$temp_script_path"
-			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
-			fi
-			updates::on_install_complete "$app_name" # Hook
-			counters::inc_updated
-			return 0
-		else
-			errors::handle_error "INSTALLATION_ERROR" "Script execution failed for '$app_name'" "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\"}" # Error hook
-			return 1
-		fi
-	else
-		updates::on_install_skipped "$app_name" # Hook
-		counters::inc_skipped
-		return 0
-	fi
+	updates::process_installation \
+		"$app_name" \
+		"$app_key" \
+		"$latest_version" \
+		"sudo" \
+		"bash" \
+		"$temp_script_path"
 }
 
 # Updates module; checks for updates for a script-based application.
@@ -609,31 +637,16 @@ updates::process_deb_package() {
 		final_deb_path="$renamed_path"
 	fi
 
-	local current_installed_version
-	current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
-	local prompt_msg
-	prompt_msg="Do you want to install $(_bold "$app_name") v$latest_version?"
-	if [[ "$current_installed_version" != "0.0.0" ]]; then
-		prompt_msg="Do you want to update $(_bold "$app_name") to v$latest_version?"
-	fi
-
-	notifiers::send_notification "$app_name Update Available" "v$latest_version downloaded" "normal"
-
-	updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name" # Recommendation 10: Pre-install hook
-
-	if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
-		updates::on_install_start "$app_name"                    # Hook
-		if ! packages::install_deb_package "$final_deb_path" "$app_name" "$latest_version" "$app_key"; then
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Package installation failed.\"}" # Recommendation 10: Error hook
-			return 1
-		fi
-		updates::on_install_complete "$app_name" # Hook
-		counters::inc_updated
-	else
-		updates::on_install_skipped "$app_name" # Hook
-		counters::inc_skipped
-	fi
-	return 0
+	# Use the generic process_installation function
+	updates::process_installation \
+		"$app_name" \
+		"$app_key" \
+		"$latest_version" \
+		"packages::install_deb_package" \
+		"$final_deb_path" \
+		"$app_name" \
+		"$latest_version" \
+		"$app_key"
 }
 
 # ------------------------------------------------------------------------------
@@ -871,67 +884,52 @@ updates::process_appimage_file() {
 		return 1
 	fi
 
-	local prompt_msg
-	prompt_msg="Do you want to install $(_bold "$app_name") (v$latest_version)?"
-	if [[ -f "$install_target_full_path" ]]; then
-		prompt_msg="Do you want to update $(_bold "$app_name") to (v$latest_version)?"
+	# Use the generic process_installation function
+	updates::process_installation \
+		"$app_name" \
+		"$app_key" \
+		"$latest_version" \
+		"updates::_install_appimage_file_command" \
+		"$temp_appimage_path" \
+		"$install_target_full_path"
+}
+
+# Helper function to encapsulate the AppImage installation command
+updates::_install_appimage_file_command() {
+	local temp_appimage_path="$1"
+	local install_target_full_path="$2"
+	local app_name="$3" # Passed from process_installation, but not used here directly
+
+	local target_dir
+	target_dir="$(dirname "$install_target_full_path")"
+	if ! mkdir -p "$target_dir"; then
+		errors::handle_error "PERMISSION_ERROR" "Failed to create installation directory: '$target_dir'" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to create installation directory.\"}"
+		return 1
 	fi
 
-	notifiers::send_notification "${app_name} Update Available" "New AppImage downloaded" "normal"
-
-	updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name" # Recommendation 10: Pre-install hook
-
-	if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
-		updates::on_install_start "$app_name"                    # Hook
-		if [[ $DRY_RUN -eq 1 ]]; then
-			loggers::log_message "DEBUG" "  [DRY RUN] Would move '$temp_appimage_path' to '$install_target_full_path'."
-			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name' in dry run."
-			fi
-			loggers::print_ui_line "  " "[DRY RUN] " "AppImage update simulated for $(_bold "$app_name")." _color_yellow
-			return 0
-		fi
-
-		local target_dir
-		target_dir="$(dirname "$install_target_full_path")"
-		if ! mkdir -p "$target_dir"; then
-			errors::handle_error "PERMISSION_ERROR" "Failed to create installation directory: '$target_dir'" "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to create installation directory.\"}"
+	# Remove existing file if present
+	if [[ -f "$install_target_full_path" ]]; then
+		if ! rm -f "$install_target_full_path"; then
+			errors::handle_error "PERMISSION_ERROR" "Failed to remove existing AppImage: '$install_target_full_path'" "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to remove existing AppImage.\"}"
 			return 1
 		fi
+	fi
 
-		# Remove existing file if present
-		if [[ -f "$install_target_full_path" ]]; then
-			if ! rm -f "$install_target_full_path"; then
-				errors::handle_error "PERMISSION_ERROR" "Failed to remove existing AppImage: '$install_target_full_path'" "$app_name"
-				updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to remove existing AppImage.\"}"
-				return 1
-			fi
+	loggers::log_message "DEBUG" "Moving from '$temp_appimage_path' to '$install_target_full_path'"
+	if mv "$temp_appimage_path" "$install_target_full_path"; then
+		systems::unregister_temp_file "$temp_appimage_path"
+		chmod +x "$install_target_full_path" || loggers::log_message "WARN" "Failed to make final AppImage executable: '$install_target_full_path'."
+		if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
+			chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null ||
+				loggers::log_message "WARN" "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER'."
 		fi
-
-		loggers::log_message "DEBUG" "Moving from '$temp_appimage_path' to '$install_target_full_path'"
-		if mv "$temp_appimage_path" "$install_target_full_path"; then
-			systems::unregister_temp_file "$temp_appimage_path"
-			chmod +x "$install_target_full_path" || loggers::log_message "WARN" "Failed to make final AppImage executable: '$install_target_full_path'."
-			if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
-				chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null ||
-					loggers::log_message "WARN" "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER'."
-			fi
-			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
-			fi
-			updates::on_install_complete "$app_name" # Hook
-			counters::inc_updated
-			return 0
-		else
-			errors::handle_error "INSTALLATION_ERROR" "Failed to move new AppImage from '$temp_appimage_path' to '$install_target_full_path'" "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to move new AppImage.\"}" # Recommendation 10: Error hook
-			return 1
-		fi
-	else
-		updates::on_install_skipped "$app_name" # Hook
-		counters::inc_skipped
 		return 0
+	else
+		errors::handle_error "INSTALLATION_ERROR" "Failed to move new AppImage from '$temp_appimage_path' to '$install_target_full_path'" "$app_name"
+		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to move new AppImage.\"}"
+		return 1
 	fi
 }
 
@@ -1085,47 +1083,17 @@ updates::process_flatpak_app() {
 		loggers::print_ui_line "  " "! " "Failed to update Flatpak appstream data. Continuing anyway." _color_yellow
 	}
 
-	local current_installed_version
-	current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
-
-	local prompt_msg
-	prompt_msg="Do you want to install $(_bold "$app_name") v$latest_version via Flatpak?"
-	if [[ "$current_installed_version" != "0.0.0" ]]; then
-		prompt_msg="Do you want to update $(_bold "$app_name") to v$latest_version via Flatpak?"
-	fi
-
-	notifiers::send_notification "$app_name Update Available" "v$latest_version found on Flathub" "normal"
-
-	updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name" # Recommendation 10: Pre-install hook
-
-	if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
-		updates::on_install_start "$app_name"                    # Hook
-		if [[ $DRY_RUN -eq 1 ]]; then
-			loggers::print_ui_line "    " "[DRY RUN] " "Would run: flatpak install --or-update -y flathub '$flatpak_app_id'" _color_yellow
-			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name' in dry run."
-			fi
-			loggers::print_ui_line "  " "[DRY RUN] " "Flatpak update simulated for $(_bold "$app_name")." _color_yellow
-			return 0
-		fi
-
-		if flatpak install --or-update -y flathub "$flatpak_app_id"; then
-			if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-				loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but Flatpak installation was successful."
-			fi
-			updates::on_install_complete "$app_name" # Hook
-			counters::inc_updated
-			return 0
-		else
-			errors::handle_error "INSTALLATION_ERROR" "Failed to install/update $app_name via Flatpak" "$app_name"
-			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to install/update Flatpak.\"}" # Recommendation 10: Error hook
-			return 1
-		fi
-	else
-		updates::on_install_skipped "$app_name" # Hook
-		counters::inc_skipped
-		return 0
-	fi
+	# Use the generic process_installation function
+	updates::process_installation \
+		"$app_name" \
+		"$app_key" \
+		"$latest_version" \
+		"flatpak" \
+		"install" \
+		"--or-update" \
+		"-y" \
+		"flathub" \
+		"$flatpak_app_id"
 }
 
 # ------------------------------------------------------------------------------
@@ -1191,6 +1159,7 @@ updates::check_flatpak() {
 # ------------------------------------------------------------------------------
 
 # Updates helper; handles the logic for a 'custom' application type.
+# This function now passes a JSON string of the app configuration to the custom checker.
 updates::handle_custom_check() {
 	local config_array_name="$1"
 	local -n app_config_ref=$config_array_name
