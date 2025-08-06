@@ -35,6 +35,18 @@ validators::check_url_format() {
 	[[ -n "$url" ]] && [[ "$url" =~ ^https?://[a-zA-Z0-9.-]+(/.*)?$ ]]
 }
 
+# Check if a URL uses HTTPS.
+# Usage: validators::check_https_url "https://example.com"
+# Returns 0 if the URL starts with https://, 1 otherwise.
+validators::check_https_url() {
+    local url="$1"
+    if [[ "$url" =~ ^https:// ]]; then
+        return 0 # Valid HTTPS URL
+    else
+        return 1 # Invalid (not HTTPS)
+    fi
+}
+
 # Check if a file path is safe (prevents directory traversal).
 # Usage: validators::check_file_path "/usr/bin/foo"
 validators::check_file_path() {

@@ -90,15 +90,15 @@ versions::normalize() {
 }
 
 # Extract a version string from a JSON response using a jq expression.
-# Usage: versions::extract_from_json "$json_data" ".tag_name" "AppName"
+# Usage: versions::extract_from_json "$json_source" ".tag_name" "AppName"
 # Returns the normalized version string or "0.0.0" on failure.
 versions::extract_from_json() {
-	local json_data="$1"
+	local json_source="$1" # Can be a JSON string or a file path
 	local jq_expression="$2"
 	local app_name="$3"
 	local raw_version
 
-	raw_version=$(systems::get_json_value "$json_data" "$jq_expression" "$app_name")
+	raw_version=$(systems::get_json_value "$json_source" "$jq_expression" "$app_name")
 	if [[ $? -ne 0 || -z "$raw_version" || "$raw_version" == "null" ]]; then
 		loggers::log_message "WARN" "Failed to extract version for '$app_name' using JSON expression '$jq_expression'. Defaulting to 0.0.0."
 		echo "0.0.0"

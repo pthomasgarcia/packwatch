@@ -15,9 +15,9 @@
 # Custom checker for Cursor with direct curl calls
 check_cursor() {
 	local app_config_json="$1" # Now receives JSON string
-	local name=$(echo "$app_config_json" | jq -r '.name')
-	local install_path_config=$(echo "$app_config_json" | jq -r '.install_path')
-	local app_key=$(echo "$app_config_json" | jq -r '.app_key')
+	local name=$(systems::get_json_value "$app_config_json" '.name')
+	local install_path_config=$(systems::get_json_value "$app_config_json" '.install_path')
+	local app_key=$(systems::get_json_value "$app_config_json" '.app_key')
 	local appimage_filename_final="cursor.AppImage"
 	local install_base_dir="${install_path_config//\$HOME/$ORIGINAL_HOME}"
 	install_base_dir="${install_base_dir/#\~/$ORIGINAL_HOME}"
@@ -27,8 +27,8 @@ check_cursor() {
 	installed_version=$(packages::get_installed_version "$app_key")
 
 	local api_endpoint="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
-	local api_json
-	if ! api_json=$(networks::fetch_cached_data "$api_endpoint" "json"); then
+	local api_json_path # This will now be a file path
+	if ! api_json_path=$(networks::fetch_cached_data "$api_endpoint" "json"); then
 		jq -n \
 			--arg status "error" \
 			--arg error_message "Failed to fetch Cursor API JSON for $name." \
@@ -37,11 +37,11 @@ check_cursor() {
 		return 1
 	fi
 
-	# Extract downloadUrl and version from JSON
+	# Extract downloadUrl and version from JSON, passing the file path
 	local actual_download_url
-	actual_download_url=$(echo "$api_json" | jq -r '.downloadUrl // empty')
+	actual_download_url=$(systems::get_json_value "$api_json_path" '.downloadUrl // empty')
 	local latest_version
-	latest_version=$(echo "$api_json" | jq -r '.version // empty')
+	latest_version=$(systems::get_json_value "$api_json_path" '.version // empty')
 
 	if [[ -z "$actual_download_url" ]] || [[ -z "$latest_version" ]]; then
 		jq -n \

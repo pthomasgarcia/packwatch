@@ -21,6 +21,7 @@
 #   - networks.sh
 #   - systems.sh
 #   - versions.sh
+#   - validators.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -33,24 +34,28 @@ repositories::get_latest_release_info() {
 	local repo_owner="$1"
 	local repo_name="$2"
 	local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/releases"
-	networks::fetch_cached_data "$api_url" "json"
+	local response_file
+	response_file=$(networks::fetch_cached_data "$api_url" "json")
+	echo "$response_file" # Explicitly echo the file path
+	return $?
 }
 
 # Parse the version from a release JSON object.
 # Usage: repositories::parse_version_from_release "$release_json" "AppName"
 repositories::parse_version_from_release() {
-	local release_json="$1"
+	local release_json_path="$1" # Now expects a file path
 	local app_name="$2"
 
 	local raw_tag_name
-	raw_tag_name=$(systems::get_json_value "$release_json" '.tag_name' "$app_name")
+	local raw_tag_name
+	raw_tag_name=$(systems::get_json_value "$release_json_path" '.tag_name' "$app_name")
 	if [[ $? -ne 0 ]]; then
 		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get raw tag name.\"}"
 		return 1
 	fi
 
 	local latest_version
-	if ! latest_version=$(versions::extract_from_json "$release_json" ".tag_name" "$app_name"); then
+	if ! latest_version=$(versions::extract_from_json "$release_json_path" ".tag_name" "$app_name"); then
 		errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$app_name"
 		updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get version from latest release.\"}"
 		return 1
@@ -68,17 +73,23 @@ repositories::parse_version_from_release() {
 # Find a specific asset's download URL from a release JSON.
 # Usage: repositories::find_asset_url "$release_json" "pattern" "AppName"
 repositories::find_asset_url() {
-	local release_json="$1"
+	local release_json_path="$1" # Now expects a file path
 	local filename_pattern="$2"
 	local app_name="$3"
 
 	# First, try exact string matching (for patterns like "fastfetch-linux-amd64.deb")
 	local url
-	url=$(systems::get_json_value "$release_json" ".assets[] | select(.name == \"${filename_pattern}\") | .browser_download_url" "$app_name" 2>/dev/null)
+	url=$(systems::get_json_value "$release_json_path" ".assets[] | select(.name == \"${filename_pattern}\") | .browser_download_url" "$app_name" 2>/dev/null)
 
 	if [[ -n "$url" ]]; then
-		echo "$url"
-		return 0
+		if validators::check_https_url "$url"; then
+			echo "$url"
+			return 0
+		else
+			errors::handle_error "SECURITY_ERROR" "Rejected insecure HTTP URL for '${filename_pattern}': '$url'" "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"SECURITY_ERROR\", \"message\": \"Insecure HTTP URL rejected.\"}"
+			return 1
+		fi
 	fi
 
 	# If exact match fails, treat as regex pattern (for patterns with placeholders like "ghostty_%s.ppa2_amd64_25.04.deb")
@@ -86,11 +97,17 @@ repositories::find_asset_url() {
 	local escaped_pattern
 	escaped_pattern=$(printf '%s\n' "$filename_pattern" | sed 's/[]\/$*.^|()+{}[]/\\&/g; s/%s/.*/g')
 
-	url=$(systems::get_json_value "$release_json" ".assets[] | select(.name | test(\"${escaped_pattern}\")) | .browser_download_url" "$app_name" 2>/dev/null)
+	url=$(systems::get_json_value "$release_json_path" ".assets[] | select(.name | test(\"${escaped_pattern}\")) | .browser_download_url" "$app_name" 2>/dev/null)
 
 	if [[ -n "$url" ]]; then
-		echo "$url"
-		return 0
+		if validators::check_https_url "$url"; then
+			echo "$url"
+			return 0
+		else
+			errors::handle_error "SECURITY_ERROR" "Rejected insecure HTTP URL for '${filename_pattern}': '$url'" "$app_name"
+			updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"SECURITY_ERROR\", \"message\": \"Insecure HTTP URL rejected.\"}"
+			return 1
+		fi
 	fi
 
 	# If both methods fail, return error
@@ -102,12 +119,12 @@ repositories::find_asset_url() {
 # Find and extract a checksum for a given asset from a release.
 # Usage: repositories::find_asset_checksum "$release_json" "filename"
 repositories::find_asset_checksum() {
-local release_json="$1"
+local release_json_path="$1" # Now expects a file path
 local target_filename="$2"
 local app_name="$3"
 
 	local checksum_file_url
-	checksum_file_url=$(systems::get_json_value "$release_json" '.assets[] | select(.name | (endswith("sha256sum.txt") or endswith("checksums.txt"))) | .browser_download_url' "Repository Release Checksum URL")
+	checksum_file_url=$(systems::get_json_value "$release_json_path" '.assets[] | select(.name | (endswith("sha256sum.txt") or endswith("checksums.txt"))) | .browser_download_url' "Repository Release Checksum URL")
 	if [[ $? -ne 0 || -z "$checksum_file_url" ]]; then
 		return 0 # Not an error if checksum file doesn't exist
 	fi

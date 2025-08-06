@@ -172,12 +172,18 @@ systems::reattempt_command() {
 # Extract a value from a JSON string using jq.
 # Usage: systems::get_json_value "$json" ".field" "app_name"
 systems::get_json_value() {
-	local json_data="$1"
+	local json_source="$1" # Can be a JSON string or a file path
 	local jq_expression="$2"
 	local app_name="${3:-unknown}"
 	local result=""
 
-	result=$(echo "$json_data" | jq -r "$jq_expression // empty" 2>/dev/null)
+	# Check if json_source is a file path (starts with /tmp/ or similar)
+	if [[ -f "$json_source" ]]; then
+		result=$(jq -r "$jq_expression // empty" "$json_source" 2>/dev/null)
+	else
+		# Assume it's a JSON string
+		result=$(echo "$json_source" | jq -r "$jq_expression // empty" 2>/dev/null)
+	fi
 	local jq_exit_code=$?
 
 	if [[ "$jq_exit_code" -ne 0 ]]; then

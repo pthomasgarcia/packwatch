@@ -22,8 +22,8 @@ check_warp() {
 	installed_version=$(packages::get_installed_version "$app_key")
 
 	local url="https://app.warp.dev/get_warp?package=deb"
-	local html_content
-	if ! html_content=$(networks::fetch_cached_data "$url" "html") || [[ -z "$html_content" ]]; then
+	local html_content_path # This will now be a file path
+	if ! html_content_path=$(networks::fetch_cached_data "$url" "html") || [[ ! -f "$html_content_path" ]]; then
 		jq -n \
 			--arg status "error" \
 			--arg error_message "Failed to fetch download page for $name." \
@@ -33,7 +33,12 @@ check_warp() {
 	fi
 
 	local latest_version_raw
-	latest_version_raw=$(echo "$html_content" | grep -oP 'window\.warp_app_version="v\K[^"]+' | head -1)
+	# Read content from the file for regex matching
+	local html_content
+	html_content=$(cat "$html_content_path")
+	loggers::log_message "DEBUG" "Warp HTML content (first 500 chars): ${html_content:0:500}..."
+	latest_version_raw=$(echo "$html_content" | grep -oP '[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.stable_[0-9]+' | head -1)
+	loggers::log_message "DEBUG" "Extracted latest_version_raw for Warp: '$latest_version_raw'"
 
 	# Use the new utility function for consistency
 	local latest_version

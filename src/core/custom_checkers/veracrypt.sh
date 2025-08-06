@@ -23,13 +23,16 @@ check_veracrypt() {
 	installed_version=$(packages::get_installed_version "$app_key")
 
 	local url="https://veracrypt.fr/en/Downloads.html"
-	local page_content
-	if ! page_content=$(networks::fetch_cached_data "$url" "html"); then
+	local page_content_path # This will now be a file path
+	if ! page_content_path=$(networks::fetch_cached_data "$url" "html"); then
 		errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to fetch download page for $name." "veracrypt"
 		return 1
 	fi
 
 	local latest_version
+	# Read content from the file for regex matching
+	local page_content
+	page_content=$(cat "$page_content_path")
 	latest_version=$(echo "$page_content" | grep -oP 'VeraCrypt \K\d+\.\d+\.\d+' | head -n1)
 	if [[ -z "$latest_version" ]]; then
 		jq -n \

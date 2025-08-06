@@ -115,7 +115,7 @@ networks::fetch_cached_data() {
 	local cache_duration_val="${CACHE_DURATION:-300}" # Use global CACHE_DURATION
 	if [[ -f "$cache_file" ]] && [[ $(($(date +%s) - $(stat -c %Y "$cache_file"))) -lt "$cache_duration_val" ]]; then
 		loggers::log_message "DEBUG" "Using cached response for: '$url' (file: '$cache_file')"
-		cat "$cache_file"
+		echo "$cache_file" # Return the path to the cached file
 		return 0
 	else
 		networks::apply_rate_limit
@@ -129,6 +129,7 @@ networks::fetch_cached_data() {
 		local retry_delay_val="${NETWORK_CONFIG[RETRY_DELAY]:-5}"
 		if ! systems::reattempt_command "$max_retries_val" "$retry_delay_val" curl "${curl_args[@]}" "$url"; then
 			errors::handle_error "NETWORK_ERROR" "Failed to download '$url' after multiple attempts."
+			systems::unregister_temp_file "$temp_download_file" # Clean up failed download
 			return 1
 		fi
 
@@ -136,6 +137,7 @@ networks::fetch_cached_data() {
 		"json")
 			if ! jq . "$temp_download_file" >/dev/null 2>&1; then
 				errors::handle_error "VALIDATION_ERROR" "Fetched content for '$url' is not valid JSON."
+				systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
 				return 1
 			fi
 			;;
@@ -148,10 +150,12 @@ networks::fetch_cached_data() {
 
 		mv "$temp_download_file" "$cache_file" || {
 			errors::handle_error "PERMISSION_ERROR" "Failed to move temporary file '$temp_download_file' to cache '$cache_file' for '$url'"
+			systems::unregister_temp_file "$temp_download_file" # Clean up if move fails
 			return 1
 		}
+		systems::unregister_temp_file "$temp_download_file" # Unregister after successful move
 
-		cat "$cache_file"
+		echo "$cache_file" # Return the path to the cached file
 		return 0
 	fi
 }

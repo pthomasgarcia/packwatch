@@ -129,29 +129,29 @@ updates::_fetch_github_version() {
     local repo_name="$2"
     local app_name="$3"
 
-    local api_response
-    if ! api_response=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$repo_owner" "$repo_name"); then
+    local api_response_file # This will now be a file path
+    if ! api_response_file=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$repo_owner" "$repo_name"); then
         errors::handle_error "NETWORK_ERROR" "Failed to fetch GitHub releases for '$app_name'." "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to fetch GitHub releases.\"}"
         return 1
     fi
 
-    local latest_release_json
-    if ! latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response" '.[0]' "$app_name"); then
+    local latest_release_json_path # This will be the path to the JSON file
+    if ! latest_release_json_path=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response_file" '.[0]' "$app_name"); then
         errors::handle_error "PARSING_ERROR" "Failed to parse latest release information." "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to parse latest release information.\"}"
         return 1
     fi
 
     local latest_version
-    if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json" "$app_name"); then
+    if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json_path" "$app_name"); then
         errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get version from latest release.\"}"
         return 1
     fi
 
     echo "$latest_version"
-    echo "$latest_release_json"
+    echo "$latest_release_json_path" # Return the path to the JSON file
     return 0
 }
 
@@ -162,13 +162,16 @@ updates::_fetch_version_from_url() {
     local app_name="$3"
 
     local latest_version="0.0.0"
-    local api_response
-    if api_response=$(networks::fetch_cached_data "$version_url" "json") && [[ -n "$api_response" ]]; then
+    local api_response_file # This will now be a file path
+    if api_response_file=$(networks::fetch_cached_data "$version_url" "json") && [[ -f "$api_response_file" ]]; then
         local parsed_version
-        if parsed_version=$(versions::extract_from_json "$api_response" ".tag_name" "$app_name"); then
+        if parsed_version=$(versions::extract_from_json "$api_response_file" ".tag_name" "$app_name"); then
             latest_version="$parsed_version"
         else
-            if parsed_version=$(versions::extract_from_regex "$api_response" "$version_regex" "$app_name"); then
+            # If JSON extraction fails, try regex from the file content
+            local file_content
+            file_content=$(cat "$api_response_file")
+            if parsed_version=$(versions::extract_from_regex "$file_content" "$version_regex" "$app_name"); then
                 latest_version="$parsed_version"
             else
                 loggers::log_message "WARN" "Could not extract version from '$version_url' for '$app_name' using JSON or regex. Defaulting to 0.0.0."
@@ -771,8 +774,8 @@ updates::check_github_deb() {
     fetch_result=$(updates::_fetch_github_version "$repo_owner" "$repo_name" "$name") || return 1
     local latest_version
     latest_version=$(echo "$fetch_result" | head -n1)
-    local latest_release_json
-    latest_release_json=$(echo "$fetch_result" | tail -n +2)
+    local latest_release_json_path # This will be the path to the JSON file
+    latest_release_json_path=$(echo "$fetch_result" | tail -n +2)
 
     loggers::print_ui_line "  " "Installed: " "$installed_version"
     loggers::print_ui_line "  " "Source:    " "$source"
@@ -783,12 +786,12 @@ updates::check_github_deb() {
         
         # Use the new helper functions
         local download_url
-        if ! download_url=$(updates::_build_download_url "$latest_release_json" "$filename_pattern_template" "$latest_version" "$name"); then
+        if ! download_url=$(updates::_build_download_url "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name"); then
             return 1
         fi
 
         local expected_checksum
-        expected_checksum=$(updates::_extract_release_checksum "$latest_release_json" "$filename_pattern_template" "$latest_version" "$name")
+        expected_checksum=$(updates::_extract_release_checksum "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name")
 
         updates::process_deb_package \
             "$name" \
@@ -1052,17 +1055,17 @@ updates::check_appimage() {
 	fi
 
 	if [[ -n "$github_repo_owner" ]] && [[ -n "$github_repo_name" ]]; then
-		local api_response
-		if api_response=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$github_repo_owner" "$github_repo_name"); then # DI applied
-			local latest_release_json
-			if latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response" '.[0]' "$name"); then # DI applied
-				if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json" "$name"); then
+		local api_response_file # This will now be a file path
+		if api_response_file=$("$UPDATES_GET_LATEST_RELEASE_INFO_IMPL" "$github_repo_owner" "$github_repo_name"); then # DI applied
+			local latest_release_json_path # This will be the path to the JSON file
+			if latest_release_json_path=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response_file" '.[0]' "$name"); then # DI applied
+				if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json_path" "$name"); then
 					loggers::log_message "WARN" "Failed to parse version from GitHub release for '$name'. Will try direct download URL."
 				fi
 
 				local download_filename_from_url
 				download_filename_from_url="$(basename "$download_url" | cut -d'?' -f1)"
-				if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json" "$download_filename_from_url" "$name"); then loggers::log_message "WARN" "Failed to get GitHub checksum for '$name'."; fi
+				if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json_path" "$download_filename_from_url" "$name"); then loggers::log_message "WARN" "Failed to get GitHub checksum for '$name'."; fi
 				source="GitHub Releases"
 			fi
 		else
