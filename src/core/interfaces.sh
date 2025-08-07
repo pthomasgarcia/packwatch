@@ -40,9 +40,14 @@ interfaces::display_header() {
 	local total="$3"
 
 	loggers::print_message ""
-	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	interfaces::_print_separator
 	loggers::print_message "${FORMAT_BOLD}${COLOR_CYAN}[$current/$total] $app_name${FORMAT_RESET}"
-	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	interfaces::_print_separator
+}
+
+# Helper to print a standardized separator line
+interfaces::_print_separator() {
+	loggers::print_message "${FORMAT_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${FORMAT_RESET}"
 }
 
 # ------------------------------------------------------------------------------
@@ -67,7 +72,7 @@ interfaces::confirm_prompt() {
 	fi
 
 	# Use /dev/tty to ensure prompt works under sudo or piped input
-	read -rep "$message$prompt_suffix" response </dev/tty || true
+	read -r -e -p "$message$prompt_suffix" response </dev/tty || true
 
 	local lower_response
 	lower_response="${response,,}"
@@ -88,7 +93,7 @@ interfaces::confirm_prompt() {
 interfaces::print_application_header() {
 	loggers::print_message ""
 	loggers::print_message "${FORMAT_BOLD}🔄 $APP_NAME: $APP_DESCRIPTION${FORMAT_RESET}"
-	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	interfaces::_print_separator
 }
 
 # ------------------------------------------------------------------------------
@@ -98,7 +103,7 @@ interfaces::print_application_header() {
 # Display the update summary
 interfaces::print_summary() {
 	loggers::print_message ""
-	loggers::print_message "${FORMAT_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${FORMAT_RESET}"
+	interfaces::_print_separator
 	loggers::print_message "${FORMAT_BOLD}Update Summary:${FORMAT_RESET}"
 	loggers::print_message "  ${COLOR_GREEN}✓ Up to date:${FORMAT_RESET}    $(counters::get_up_to_date)"
 	loggers::print_message "  ${COLOR_YELLOW}⬆ Updated:${FORMAT_RESET}       $(counters::get_updated)"
@@ -106,7 +111,7 @@ interfaces::print_summary() {
 	if [[ $(counters::get_skipped) -gt 0 ]]; then
 		loggers::print_message "  ${COLOR_CYAN}🞨 Skipped/Disabled:${FORMAT_RESET} $(counters::get_skipped)"
 	fi
-	loggers::print_message "${FORMAT_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${FORMAT_RESET}"
+	interfaces::_print_separator
 }
 
 # ------------------------------------------------------------------------------

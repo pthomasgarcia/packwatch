@@ -1,11 +1,15 @@
-refactor(updates): Centralize installation flow and config retrieval
+refactor(ui): Centralize ANSI color and formatting constants
 
-This commit introduces a significant refactoring to centralize common logic, reduce code duplication, and improve the overall structure of the application.
+This commit refactors the shell scripts to centralize ANSI color and text formatting definitions, improving code consistency and maintainability.
 
-- **Centralized Installation Flow:**
-  - A new generic function, `updates::process_installation`, has been created in `src/core/updates.sh`. This function encapsulates the common logic for handling user prompts, dry runs, and updating the installed version JSON file.
-  - The specific installation handlers for `deb`, `appimage`, `script`, and `flatpak` have been refactored to use this new centralized function, which dramatically reduces code duplication and makes the installation process more consistent.
+- **Centralized ANSI Constants:**
+  - All ANSI escape codes for colors and text formatting (e.g., bold) have been consolidated into `readonly` global variables in `src/core/globals.sh`.
 
-- **Centralized Config Retrieval:**
-  - A new function, `configs::get_app_config`, has been added to `src/core/configs.sh` to provide a single, consistent way to retrieve an application's configuration from the global state.
-  - The `updates::check_application` function has been updated to use this new helper, simplifying its logic.
+- **Removed Redundant Helpers:**
+  - The local `_color_*` and `_bold` helper functions have been removed from `interfaces.sh` and `loggers.sh`, eliminating code duplication.
+
+- **Standardized UI Output:**
+  - All UI-related functions in `interfaces.sh`, `updates.sh`, `packages.sh`, and `validators.sh` have been updated to use the new global constants, ensuring a consistent look and feel.
+
+- **Simplified `print_ui_line`:**
+  - The `loggers::print_ui_line` function has been simplified to accept a color constant directly, making it more straightforward to use.
