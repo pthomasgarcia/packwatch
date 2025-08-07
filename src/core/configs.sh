@@ -77,20 +77,26 @@ configs::load_network_settings() {
         CACHE_DURATION=300
     }
 
-    # Load NETWORK_CONFIG associative array
+    # Always initialize NETWORK_CONFIG with defaults first
+    configs::_set_default_network_settings
+
+    # Overlay user-supplied values from JSON if present and non-empty
     local network_config_json
     network_config_json=$(systems::get_json_value "$settings_content" '.network_config' "Network Configuration Block") || {
         loggers::log_message "WARN" "Missing 'network_config' block in network settings. Using defaults."
-        configs::_set_default_network_settings
+        loggers::log_message "DEBUG" "Loaded network settings from '$network_settings_file' (defaults only)"
         return 0
     }
 
-    local entry_json
-    while IFS= read -r entry_json; do
-        local key=$(echo "$entry_json" | jq -r '.key')
-        local value=$(echo "$entry_json" | jq -r '.value')
-        NETWORK_CONFIG["$key"]="$value"
-    done < <(echo "$network_config_json" | jq -c 'to_entries[]')
+    # Only overlay if network_config_json is not null or empty
+    if [[ -n "$network_config_json" && "$network_config_json" != "null" ]]; then
+        local entry_json
+        while IFS= read -r entry_json; do
+            local key=$(echo "$entry_json" | jq -r '.key')
+            local value=$(echo "$entry_json" | jq -r '.value')
+            NETWORK_CONFIG["$key"]="$value"
+        done < <(echo "$network_config_json" | jq -c 'to_entries[]')
+    fi
 
     loggers::log_message "DEBUG" "Loaded network settings from '$network_settings_file'"
     return 0
@@ -152,7 +158,7 @@ configs::validate_single_config_file() {
     enabled_status_str=$(systems::require_json_value "$file_content" '.enabled' 'enabled status' "$filename") || return 1
     app_data_str=$(systems::require_json_value "$file_content" '.application' 'application block' "$filename") || return 1
 
-    if [[ "$enabled_status_str" != "true" && "$enabled_status_str" != "false" ]]; then
+    if ! echo "$file_content" | jq -e '(.enabled|type) == "boolean"' >/dev/null 2>&1; then
         errors::handle_error "CONFIG_ERROR" "Field 'enabled' in '$filename' must be a boolean (true/false)."
         return 1
     fi
@@ -320,14 +326,14 @@ configs::populate_globals_from_json() {
 
     local extracted_data
     extracted_data=$(echo "$merged_json_array" | jq -c '
-		reduce .[] as $item ({
-			apps_to_check: [],
-			applications: {}
-		};
-		.apps_to_check += [$item.app_key] |
-		.applications += {($item.app_key): $item.application}
-		)
-	')
+        reduce .[] as $item ({
+            apps_to_check: [],
+            applications: {}
+        };
+        .apps_to_check += [$item.app_key] |
+        .applications += {($item.app_key): $item.application}
+        )
+    ')
 
     mapfile -t CUSTOM_APP_KEYS < <(echo "$extracted_data" | jq -r '.apps_to_check[]')
     applications_json=$(echo "$extracted_data" | jq -c '.applications')
@@ -337,13 +343,13 @@ configs::populate_globals_from_json() {
         [[ -z "$app_key" || -z "$prop_key" || "$prop_key" == "_comment"* ]] && continue
         ALL_APP_CONFIGS["${app_key}_${prop_key}"]="$prop_value"
     done < <(echo "$applications_json" | jq -r '
-		to_entries[] |
-		.key as $app_key |
-		.value |
-		to_entries[] |
-		select(.key | startswith("_comment") | not) |
-		[$app_key, .key, .value] | @tsv
-	')
+        to_entries[] |
+        .key as $app_key |
+        .value |
+        to_entries[] |
+        select(.key | startswith("_comment") | not) |
+        [$app_key, .key, .value] | @tsv
+    ')
 }
 
 # ------------------------------------------------------------------------------
@@ -410,88 +416,88 @@ configs::create_default_files() {
     default_app_configs=$(
         cat <<'EOF'
 {
-	   "VeraCrypt": {
-		   "app_key": "VeraCrypt",
-		"enabled": true,
-		"application": {
-			"name": "VeraCrypt",
-			"type": "custom",
-			"package_name": "veracrypt",
-			"gpg_key_id": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
-			"gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
-			"custom_checker_script": "veracrypt.sh",
-			"custom_checker_func": "check_veracrypt"
-		}
-	},
-	"Ghostty": {
-		"app_key": "Ghostty",
-		"enabled": true,
-		"application": {
-			"name": "Ghostty",
-			"type": "github_deb",
-			"package_name": "ghostty",
-			"repo_owner": "mkasberg",
-			"repo_name": "ghostty-ubuntu",
-			"filename_pattern_template": "ghostty_%s.ppa2_amd64_25.04.deb"
-		}
-	},
-	"Tabby": {
-		"app_key": "Tabby",
-		"enabled": true,
-		"application": {
-			"name": "Tabby",
-			"type": "github_deb",
-			"package_name": "tabby-terminal",
-			"repo_owner": "Eugeny",
-			"repo_name": "tabby",
-			"filename_pattern_template": "tabby-%s-linux-x64.deb"
-		}
-	},
-	"Warp": {
-		"app_key": "Warp",
-		"enabled": true,
-		"application": {
-			"name": "Warp",
-			"type": "custom",
-			"package_name": "warp-terminal",
-			"custom_checker_script": "warp.sh",
-			"custom_checker_func": "check_warp"
-		}
-	},
-	"WaveTerm": {
-		"app_key": "WaveTerm",
-		"enabled": true,
-		"application": {
-			"name": "WaveTerm",
-			"type": "github_deb",
-			"package_name": "waveterm",
-			"repo_owner": "wavetermdev",
-			"repo_name": "waveterm",
-			"filename_pattern_template": "waveterm-linux-amd64-%s.deb"
-		}
-	},
-	"Cursor": {
-		"app_key": "Cursor",
-		"enabled": true,
-		"application": {
-			"name": "Cursor",
-			"type": "custom",
-			"install_path": "$HOME/Applications/cursor",
-			"custom_checker_script": "cursor.sh",
-			"custom_checker_func": "check_cursor"
-		}
-	},
-	"Zed": {
-		"app_key": "Zed",
-		"enabled": true,
-		"application": {
-			"name": "Zed",
-			"type": "custom",
-			"flatpak_app_id": "dev.zed.Zed",
-			"custom_checker_script": "zed.sh",
-			"custom_checker_func": "check_zed"
-		}
-	}
+       "VeraCrypt": {
+           "app_key": "VeraCrypt",
+        "enabled": true,
+        "application": {
+            "name": "VeraCrypt",
+            "type": "custom",
+            "package_name": "veracrypt",
+            "gpg_key_id": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
+            "gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
+            "custom_checker_script": "veracrypt.sh",
+            "custom_checker_func": "check_veracrypt"
+        }
+    },
+    "Ghostty": {
+        "app_key": "Ghostty",
+        "enabled": true,
+        "application": {
+            "name": "Ghostty",
+            "type": "github_deb",
+            "package_name": "ghostty",
+            "repo_owner": "mkasberg",
+            "repo_name": "ghostty-ubuntu",
+            "filename_pattern_template": "ghostty_%s.ppa2_amd64_25.04.deb"
+        }
+    },
+    "Tabby": {
+        "app_key": "Tabby",
+        "enabled": true,
+        "application": {
+            "name": "Tabby",
+            "type": "github_deb",
+            "package_name": "tabby-terminal",
+            "repo_owner": "Eugeny",
+            "repo_name": "tabby",
+            "filename_pattern_template": "tabby-%s-linux-x64.deb"
+        }
+    },
+    "Warp": {
+        "app_key": "Warp",
+        "enabled": true,
+        "application": {
+            "name": "Warp",
+            "type": "custom",
+            "package_name": "warp-terminal",
+            "custom_checker_script": "warp.sh",
+            "custom_checker_func": "check_warp"
+        }
+    },
+    "WaveTerm": {
+        "app_key": "WaveTerm",
+        "enabled": true,
+        "application": {
+            "name": "WaveTerm",
+            "type": "github_deb",
+            "package_name": "waveterm",
+            "repo_owner": "wavetermdev",
+            "repo_name": "waveterm",
+            "filename_pattern_template": "waveterm-linux-amd64-%s.deb"
+        }
+    },
+    "Cursor": {
+        "app_key": "Cursor",
+        "enabled": true,
+        "application": {
+            "name": "Cursor",
+            "type": "custom",
+            "install_path": "$HOME/Applications/cursor",
+            "custom_checker_script": "cursor.sh",
+            "custom_checker_func": "check_cursor"
+        }
+    },
+    "Zed": {
+        "app_key": "Zed",
+        "enabled": true,
+        "application": {
+            "name": "Zed",
+            "type": "custom",
+            "flatpak_app_id": "dev.zed.Zed",
+            "custom_checker_script": "zed.sh",
+            "custom_checker_func": "check_zed"
+        }
+    }
 }
 EOF
     )
@@ -527,12 +533,8 @@ EOF
 configs::get_app_config() {
     local app_key="$1"
     local app_config_nameref="$2"
-    if [[ -z "$app_config_nameref" ]]; then
-        loggers::log_message "ERROR" "configs::get_app_config: Second argument (nameref) is missing for app_key '$app_key'"
-        return 1
-    fi
-    if ! declare -p "$app_config_nameref" 2>/dev/null | grep -q 'declare -A'; then
-        loggers::log_message "ERROR" "configs::get_app_config: Second argument '$app_config_nameref' is not an associative array for app_key '$app_key'"
+    if [[ -z "$app_config_nameref" ]] || ! declare -p "$app_config_nameref" 2>/dev/null | grep -q 'declare -A'; then
+        loggers::log_message "ERROR" "configs::get_app_config: Second argument '$app_config_nameref' is missing or not an associative array for app_key '$app_key'"
         return 1
     fi
     local -n app_config_ref=$app_config_nameref # Nameref to the array in the caller's scope

@@ -22,6 +22,8 @@ checker_utils::determine_status() {
     fi
 }
 
+# This helper only strips a hard-coded 'v' prefix from the version string.
+# It does not handle other prefixes like 'version-'.
 checker_utils::strip_version_prefix() {
     local version="$1"
     echo "${version#v}"

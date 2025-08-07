@@ -19,28 +19,32 @@ _get_gpg_fingerprint_as_user() {
     local gpg_output=""
     local gpg_error_output=""
 
+    local gpg_status=0
     if [[ -z "$ORIGINAL_USER" ]]; then
         loggers::log_message "ERROR" "ORIGINAL_USER is not set. Cannot perform GPG operation as original user. Falling back to root."
         gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
+        gpg_status=$?
     elif ! getent passwd "$ORIGINAL_USER" &>/dev/null; then
         loggers::log_message "ERROR" "ORIGINAL_USER '$ORIGINAL_USER' does not exist. Cannot perform GPG operation as original user. Falling back to root."
         gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
+        gpg_status=$?
     elif [[ ! -d "$ORIGINAL_HOME" ]]; then
         loggers::log_message "ERROR" "ORIGINAL_HOME '$ORIGINAL_HOME' is not a valid directory. Cannot perform GPG operation as original user. Falling back to root."
         gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
+        gpg_status=$?
     elif [[ ! -d "$ORIGINAL_HOME/.gnupg" ]]; then
         loggers::log_message "ERROR" "GPG home directory '$ORIGINAL_HOME/.gnupg' does not exist. Cannot perform GPG operation as original user. Falling back to root."
         gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
+        gpg_status=$?
     else
         # Attempt as original user, capturing stderr
         gpg_output=$(sudo -u "$ORIGINAL_USER" GNUPGHOME="$ORIGINAL_HOME/.gnupg" \
             gpg --fingerprint --with-colons "$key_id" 2>&1)
+        gpg_status=$?
     fi
 
-    # Check if gpg_output contains error indicators or if gpg command failed
-    if echo "$gpg_output" | grep -qE "(gpg:|error:|failed|No public key)"; then
-        gpg_error_output="$gpg_output" # Capture the full output as error
-        loggers::log_message "ERROR" "GPG command failed or returned an error: $gpg_error_output"
+    if [[ $gpg_status -ne 0 ]]; then
+        loggers::log_message "ERROR" "GPG command failed or returned an error: $gpg_output"
         return 1 # Indicate failure
     fi
 

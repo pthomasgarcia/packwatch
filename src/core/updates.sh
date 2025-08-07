@@ -80,9 +80,9 @@ updates::process_installation() {
     current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
     local prompt_msg
-    prompt_msg="Do you want to install ${FORMAT_BOLD}"$app_name"${FORMAT_RESET} v$latest_version?"
+    prompt_msg="Do you want to install ${FORMAT_BOLD}${app_name}${FORMAT_RESET} v${latest_version}?"
     if [[ "$current_installed_version" != "0.0.0" ]]; then
-        prompt_msg="Do you want to update ${FORMAT_BOLD}"$app_name"${FORMAT_RESET} to v$latest_version?"
+        prompt_msg="Do you want to update ${FORMAT_BOLD}${app_name}${FORMAT_RESET} to v${latest_version}?"
     fi
 
     notifiers::send_notification "$app_name Update Available" "v$latest_version ready for install" "normal"

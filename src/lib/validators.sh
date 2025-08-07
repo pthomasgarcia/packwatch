@@ -112,7 +112,6 @@ validators::verify_gpg_key() {
         return 1
     fi
 
-    -------
     local actual_fingerprint
 
     # Ensure gpg.sh is sourced to use _get_gpg_fingerprint_as_user
@@ -123,12 +122,6 @@ validators::verify_gpg_key() {
 
     if [[ -z "$actual_fingerprint" ]]; then
         loggers::log_message "ERROR" "GPG fingerprint retrieval failed for key ID '$key_id'. This may indicate a security downgrade if falling back to root."
-        # The _get_gpg_fingerprint_as_user function already logs specific errors.
-        # We return 1 here if the fingerprint is empty, indicating a failure to retrieve.
-        return 1
-    fi
-
-    if [[ -z "$actual_fingerprint" ]]; then
         errors::handle_error "GPG_ERROR" "GPG key not found in keyring for user '$ORIGINAL_USER': '$key_id'" "$app_name"
         loggers::log_message "INFO" "Please import the GPG key manually and verify its fingerprint:"
         loggers::log_message "INFO" "  gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys '$key_id'"

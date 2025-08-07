@@ -52,11 +52,10 @@ systems::create_temp_file() {
     local template="$1"
     template=$(systems::sanitize_filename "$template")
     local temp_file
-    temp_file=$(mktemp "/tmp/${template}.XXXXXX")
-    if [[ -z "$temp_file" ]]; then
+    temp_file=$(mktemp "/tmp/${template}.XXXXXX") || {
         errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: $template"
         return 1
-    fi
+    }
     TEMP_FILES+=("$temp_file")
     echo "$temp_file"
     return 0

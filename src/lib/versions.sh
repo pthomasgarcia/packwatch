@@ -44,12 +44,26 @@ versions::compare_strings() {
     if [[ -z "$v1" ]]; then v1="0"; fi
     if [[ -z "$v2" ]]; then v2="0"; fi
 
-    if dpkg --compare-versions "$v1" gt "$v2" 2>/dev/null; then
-        return 0
-    elif dpkg --compare-versions "$v1" lt "$v2" 2>/dev/null; then
-        return 2
+    if command -v dpkg &>/dev/null; then
+        if dpkg --compare-versions "$v1" gt "$v2" 2>/dev/null; then
+            return 0
+        elif dpkg --compare-versions "$v1" lt "$v2" 2>/dev/null; then
+            return 2
+        else
+            return 1
+        fi
     else
-        return 1
+        # Fallback: use sort -V for version comparison
+        # Returns: 0 if v1 > v2, 1 if v1 == v2, 2 if v1 < v2
+        local sorted
+        sorted=$(printf "%s\n%s\n" "$v1" "$v2" | sort -V)
+        if [[ "$sorted" == "$v2\n$v1" ]]; then
+            return 0 # v1 > v2
+        elif [[ "$sorted" == "$v1\n$v2" ]]; then
+            return 2 # v1 < v2
+        else
+            return 1 # v1 == v2 or error
+        fi
     fi
 }
 
