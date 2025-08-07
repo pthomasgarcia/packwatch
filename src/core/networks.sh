@@ -214,7 +214,7 @@ networks::download_file() {
 	loggers::print_ui_line "  " "→ " "Downloading $(basename "$dest_path")..." >&2 # Redirect to stderr
 
 	if [[ ${DRY_RUN:-0} -eq 1 ]]; then
-		loggers::print_ui_line "    " "[DRY RUN] " "Would download: '$url'" _color_yellow >&2 # Redirect to stderr
+		loggers::print_ui_line "    " "[DRY RUN] " "Would download: '$url'" "${COLOR_YELLOW}" >&2 # Redirect to stderr
 		return 0
 	fi
 

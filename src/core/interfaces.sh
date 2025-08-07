@@ -27,11 +27,6 @@
 # SECTION: Color and Formatting Helpers
 # ------------------------------------------------------------------------------
 
-_color_cyan() { echo -e "\033[36m$1\033[0m"; }
-_color_green() { echo -e "\033[32m$1\033[0m"; }
-_color_yellow() { echo -e "\033[33m$1\033[0m"; }
-_color_red() { echo -e "\033[31m$1\033[0m"; }
-_bold() { echo -e "\033[1m$1\033[0m"; }
 
 # ------------------------------------------------------------------------------
 # SECTION: Application Header Display
@@ -46,7 +41,7 @@ interfaces::display_header() {
 
 	loggers::print_message ""
 	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	loggers::print_message "$(_bold "$(_color_cyan "[$current/$total] $app_name")")"
+	loggers::print_message "${FORMAT_BOLD}${COLOR_CYAN}[$current/$total] $app_name${FORMAT_RESET}"
 	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
@@ -72,7 +67,7 @@ interfaces::confirm_prompt() {
 	fi
 
 	# Use /dev/tty to ensure prompt works under sudo or piped input
-	read -rp "$(_bold "$message")$prompt_suffix" response </dev/tty || true
+	read -rep "$message$prompt_suffix" response </dev/tty || true
 
 	local lower_response
 	lower_response="${response,,}"
@@ -92,7 +87,7 @@ interfaces::confirm_prompt() {
 # Display the main application header
 interfaces::print_application_header() {
 	loggers::print_message ""
-	loggers::print_message "$(_bold "🔄 $APP_NAME: $APP_DESCRIPTION")"
+	loggers::print_message "${FORMAT_BOLD}🔄 $APP_NAME: $APP_DESCRIPTION${FORMAT_RESET}"
 	loggers::print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
@@ -103,15 +98,15 @@ interfaces::print_application_header() {
 # Display the update summary
 interfaces::print_summary() {
 	loggers::print_message ""
-	loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
-	loggers::print_message "$(_bold "Update Summary:")"
-	loggers::print_message "  $(_color_green "✓ Up to date:")    $(counters::get_up_to_date)"
-	loggers::print_message "  $(_color_yellow "⬆ Updated:")       $(counters::get_updated)"
-	loggers::print_message "  $(_color_red "✗ Failed:")        $(counters::get_failed)"
+	loggers::print_message "${FORMAT_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${FORMAT_RESET}"
+	loggers::print_message "${FORMAT_BOLD}Update Summary:${FORMAT_RESET}"
+	loggers::print_message "  ${COLOR_GREEN}✓ Up to date:${FORMAT_RESET}    $(counters::get_up_to_date)"
+	loggers::print_message "  ${COLOR_YELLOW}⬆ Updated:${FORMAT_RESET}       $(counters::get_updated)"
+	loggers::print_message "  ${COLOR_RED}✗ Failed:${FORMAT_RESET}        $(counters::get_failed)"
 	if [[ $(counters::get_skipped) -gt 0 ]]; then
-		loggers::print_message "  $(_color_cyan "🞨 Skipped/Disabled:") $(counters::get_skipped)"
+		loggers::print_message "  ${COLOR_CYAN}🞨 Skipped/Disabled:${FORMAT_RESET} $(counters::get_skipped)"
 	fi
-	loggers::print_message "$(_bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")"
+	loggers::print_message "${FORMAT_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${FORMAT_RESET}"
 }
 
 # ------------------------------------------------------------------------------
@@ -121,8 +116,8 @@ interfaces::print_summary() {
 # Display installation help information
 interfaces::print_installation_help() {
 	loggers::print_message ""
-	loggers::print_message "$(_bold "To install core dependencies:")"
-	loggers::print_message "  $(_color_cyan "$INSTALL_CMD")"
+	loggers::print_message "${FORMAT_BOLD}To install core dependencies:${FORMAT_RESET}"
+	loggers::print_message "  ${COLOR_CYAN}$INSTALL_CMD${FORMAT_RESET}"
 	loggers::print_message ""
 	loggers::print_message "Additional notes:"
 	loggers::print_message "  • For 'notify-send': install 'libnotify-bin'"
@@ -138,7 +133,7 @@ interfaces::print_installation_help() {
 interfaces::notify_execution_mode() {
 	if [[ "${DRY_RUN:-0}" -eq 1 ]]; then # Use default value for DRY_RUN for robustness
 		loggers::print_message ""
-		loggers::print_message "$(_color_yellow "🚀 Running in DRY RUN mode - no installations or file modifications will be performed.")"
+		loggers::print_message "${COLOR_YELLOW}🚀 Running in DRY RUN mode - no installations or file modifications will be performed.${FORMAT_RESET}"
 	fi
 }
 
@@ -149,13 +144,13 @@ interfaces::notify_execution_mode() {
 # Display home determination error to user
 interfaces::print_home_determination_error() {
 	local error_msg="$1"
-	loggers::print_message "$(_color_red "⚠️  $error_msg")" >&2
+	loggers::print_message "${COLOR_RED}⚠️  $error_msg${FORMAT_RESET}" >&2
 }
 
 # Display general error to user
 interfaces::print_error_to_user() {
 	local error_msg="$1"
-	loggers::print_message "$(_color_red "❌ Error: $error_msg")" >&2
+	loggers::print_message "${COLOR_RED}❌ Error: $error_msg${FORMAT_RESET}" >&2
 }
 
 # ------------------------------------------------------------------------------
@@ -164,7 +159,7 @@ interfaces::print_error_to_user() {
 
 # Display debug state snapshot to user
 interfaces::print_debug_state_snapshot() {
-	loggers::print_message "$(_color_cyan "🔍 Debug Information:")" >&2
+	loggers::print_message "${COLOR_CYAN}🔍 Debug Information:${FORMAT_RESET}" >&2
 	loggers::print_message "   CORE_DIR: $CORE_DIR" >&2
 	loggers::print_message "   CONFIG_ROOT: $CONFIG_ROOT" >&2
 	loggers::print_message "   CONFIG_DIR: $CONFIG_DIR" >&2

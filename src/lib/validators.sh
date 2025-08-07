@@ -96,7 +96,7 @@ validators::verify_checksum() {
 	fi
 
 	loggers::log_message "DEBUG" "Checksum verified for '$file_path'"
-	loggers::print_ui_line "  " "✓ " "Checksum verified." _color_green
+	loggers::print_ui_line "  " "✓ " "Checksum verified." "${COLOR_GREEN}"
 	return 0
 }
 
@@ -147,7 +147,7 @@ validators::verify_gpg_key() {
 	fi
 
 	loggers::log_message "DEBUG" "GPG key verification successful for: '$key_id'"
-	loggers::print_ui_line "  " "✓ " "GPG key verified: $key_id" _color_green
+	loggers::print_ui_line "  " "✓ " "GPG key verified: $key_id" "${COLOR_GREEN}"
 	return 0
 }
 
