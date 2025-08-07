@@ -27,7 +27,6 @@
 # SECTION: Color and Formatting Helpers
 # ------------------------------------------------------------------------------
 
-
 # ------------------------------------------------------------------------------
 # SECTION: Application Header Display
 # ------------------------------------------------------------------------------
@@ -35,19 +34,19 @@
 # Display a standardized application header.
 # Usage: interfaces::display_header "AppName" 1 5
 interfaces::display_header() {
-	local app_name="$1"
-	local current="$2"
-	local total="$3"
+    local app_name="$1"
+    local current="$2"
+    local total="$3"
 
-	loggers::print_message ""
-	interfaces::_print_separator
-	loggers::print_message "${FORMAT_BOLD}${COLOR_CYAN}[$current/$total] $app_name${FORMAT_RESET}"
-	interfaces::_print_separator
+    loggers::print_message ""
+    interfaces::_print_separator
+    loggers::print_message "${FORMAT_BOLD}${COLOR_CYAN}[$current/$total] $app_name${FORMAT_RESET}"
+    interfaces::_print_separator
 }
 
 # Helper to print a standardized separator line
 interfaces::_print_separator() {
-	loggers::print_message "${FORMAT_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${FORMAT_RESET}"
+    loggers::print_message "${FORMAT_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${FORMAT_RESET}"
 }
 
 # ------------------------------------------------------------------------------
@@ -60,29 +59,29 @@ interfaces::_print_separator() {
 #   default_resp_char - 'Y' or 'N' (default: 'N')
 # Returns 0 for yes, 1 for no.
 interfaces::confirm_prompt() {
-	local message="$1"
-	local default_resp_char="${2:-N}" # 'Y' or 'N'
-	local prompt_suffix=""
-	local response
+    local message="$1"
+    local default_resp_char="${2:-N}" # 'Y' or 'N'
+    local prompt_suffix=""
+    local response
 
-	if [[ "$default_resp_char" == "Y" ]]; then
-		prompt_suffix=" (Y/n): "
-	else
-		prompt_suffix=" (y/N): "
-	fi
+    if [[ "$default_resp_char" == "Y" ]]; then
+        prompt_suffix=" (Y/n): "
+    else
+        prompt_suffix=" (y/N): "
+    fi
 
-	# Use /dev/tty to ensure prompt works under sudo or piped input
-	read -r -e -p "$message$prompt_suffix" response </dev/tty || true
+    # Use /dev/tty to ensure prompt works under sudo or piped input
+    read -r -e -p "$message$prompt_suffix" response </dev/tty || true
 
-	local lower_response
-	lower_response="${response,,}"
+    local lower_response
+    lower_response="${response,,}"
 
-	case "$lower_response" in
-	"y" | "yes") return 0 ;;
-	"n" | "no") return 1 ;;
-	"") [[ "$default_resp_char" == "Y" ]] && return 0 || return 1 ;;
-	*) return 1 ;;
-	esac
+    case "$lower_response" in
+    "y" | "yes") return 0 ;;
+    "n" | "no") return 1 ;;
+    "") [[ "$default_resp_char" == "Y" ]] && return 0 || return 1 ;;
+    *) return 1 ;;
+    esac
 }
 
 # ------------------------------------------------------------------------------
@@ -91,9 +90,9 @@ interfaces::confirm_prompt() {
 
 # Display the main application header
 interfaces::print_application_header() {
-	loggers::print_message ""
-	loggers::print_message "${FORMAT_BOLD}🔄 $APP_NAME: $APP_DESCRIPTION${FORMAT_RESET}"
-	interfaces::_print_separator
+    loggers::print_message ""
+    loggers::print_message "${FORMAT_BOLD}🔄 $APP_NAME: $APP_DESCRIPTION${FORMAT_RESET}"
+    interfaces::_print_separator
 }
 
 # ------------------------------------------------------------------------------
@@ -102,16 +101,16 @@ interfaces::print_application_header() {
 
 # Display the update summary
 interfaces::print_summary() {
-	loggers::print_message ""
-	interfaces::_print_separator
-	loggers::print_message "${FORMAT_BOLD}Update Summary:${FORMAT_RESET}"
-	loggers::print_message "  ${COLOR_GREEN}✓ Up to date:${FORMAT_RESET}    $(counters::get_up_to_date)"
-	loggers::print_message "  ${COLOR_YELLOW}⬆ Updated:${FORMAT_RESET}       $(counters::get_updated)"
-	loggers::print_message "  ${COLOR_RED}✗ Failed:${FORMAT_RESET}        $(counters::get_failed)"
-	if [[ $(counters::get_skipped) -gt 0 ]]; then
-		loggers::print_message "  ${COLOR_CYAN}🞨 Skipped/Disabled:${FORMAT_RESET} $(counters::get_skipped)"
-	fi
-	interfaces::_print_separator
+    loggers::print_message ""
+    interfaces::_print_separator
+    loggers::print_message "${FORMAT_BOLD}Update Summary:${FORMAT_RESET}"
+    loggers::print_message "  ${COLOR_GREEN}✓ Up to date:${FORMAT_RESET}    $(counters::get_up_to_date)"
+    loggers::print_message "  ${COLOR_YELLOW}⬆ Updated:${FORMAT_RESET}       $(counters::get_updated)"
+    loggers::print_message "  ${COLOR_RED}✗ Failed:${FORMAT_RESET}        $(counters::get_failed)"
+    if [[ $(counters::get_skipped) -gt 0 ]]; then
+        loggers::print_message "  ${COLOR_CYAN}🞨 Skipped/Disabled:${FORMAT_RESET} $(counters::get_skipped)"
+    fi
+    interfaces::_print_separator
 }
 
 # ------------------------------------------------------------------------------
@@ -120,13 +119,13 @@ interfaces::print_summary() {
 
 # Display installation help information
 interfaces::print_installation_help() {
-	loggers::print_message ""
-	loggers::print_message "${FORMAT_BOLD}To install core dependencies:${FORMAT_RESET}"
-	loggers::print_message "  ${COLOR_CYAN}$INSTALL_CMD${FORMAT_RESET}"
-	loggers::print_message ""
-	loggers::print_message "Additional notes:"
-	loggers::print_message "  • For 'notify-send': install 'libnotify-bin'"
-	loggers::print_message "  • For 'flatpak': see https://flatpak.org/setup/"
+    loggers::print_message ""
+    loggers::print_message "${FORMAT_BOLD}To install core dependencies:${FORMAT_RESET}"
+    loggers::print_message "  ${COLOR_CYAN}$INSTALL_CMD${FORMAT_RESET}"
+    loggers::print_message ""
+    loggers::print_message "Additional notes:"
+    loggers::print_message "  • For 'notify-send': install 'libnotify-bin'"
+    loggers::print_message "  • For 'flatpak': see https://flatpak.org/setup/"
 }
 
 # ------------------------------------------------------------------------------
@@ -136,10 +135,10 @@ interfaces::print_installation_help() {
 # Notify the user if the script is running in dry-run mode.
 # Usage: interfaces::notify_execution_mode
 interfaces::notify_execution_mode() {
-	if [[ "${DRY_RUN:-0}" -eq 1 ]]; then # Use default value for DRY_RUN for robustness
-		loggers::print_message ""
-		loggers::print_message "${COLOR_YELLOW}🚀 Running in DRY RUN mode - no installations or file modifications will be performed.${FORMAT_RESET}"
-	fi
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then # Use default value for DRY_RUN for robustness
+        loggers::print_message ""
+        loggers::print_message "${COLOR_YELLOW}🚀 Running in DRY RUN mode - no installations or file modifications will be performed.${FORMAT_RESET}"
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -148,14 +147,14 @@ interfaces::notify_execution_mode() {
 
 # Display home determination error to user
 interfaces::print_home_determination_error() {
-	local error_msg="$1"
-	loggers::print_message "${COLOR_RED}⚠️  $error_msg${FORMAT_RESET}" >&2
+    local error_msg="$1"
+    loggers::print_message "${COLOR_RED}⚠️  $error_msg${FORMAT_RESET}" >&2
 }
 
 # Display general error to user
 interfaces::print_error_to_user() {
-	local error_msg="$1"
-	loggers::print_message "${COLOR_RED}❌ Error: $error_msg${FORMAT_RESET}" >&2
+    local error_msg="$1"
+    loggers::print_message "${COLOR_RED}❌ Error: $error_msg${FORMAT_RESET}" >&2
 }
 
 # ------------------------------------------------------------------------------
@@ -164,15 +163,15 @@ interfaces::print_error_to_user() {
 
 # Display debug state snapshot to user
 interfaces::print_debug_state_snapshot() {
-	loggers::print_message "${COLOR_CYAN}🔍 Debug Information:${FORMAT_RESET}" >&2
-	loggers::print_message "   CORE_DIR: $CORE_DIR" >&2
-	loggers::print_message "   CONFIG_ROOT: $CONFIG_ROOT" >&2
-	loggers::print_message "   CONFIG_DIR: $CONFIG_DIR" >&2
-	loggers::print_message "   CACHE_DIR: $CACHE_DIR" >&2
-	loggers::print_message "   ORIGINAL_USER: $ORIGINAL_USER" >&2
-	loggers::print_message "   ORIGINAL_HOME: $ORIGINAL_HOME" >&2
-	loggers::print_message "   DRY_RUN: $DRY_RUN" >&2
-	loggers::print_message "   VERBOSE: $VERBOSE" >&2
+    loggers::print_message "${COLOR_CYAN}🔍 Debug Information:${FORMAT_RESET}" >&2
+    loggers::print_message "   CORE_DIR: $CORE_DIR" >&2
+    loggers::print_message "   CONFIG_ROOT: $CONFIG_ROOT" >&2
+    loggers::print_message "   CONFIG_DIR: $CONFIG_DIR" >&2
+    loggers::print_message "   CACHE_DIR: $CACHE_DIR" >&2
+    loggers::print_message "   ORIGINAL_USER: $ORIGINAL_USER" >&2
+    loggers::print_message "   ORIGINAL_HOME: $ORIGINAL_HOME" >&2
+    loggers::print_message "   DRY_RUN: $DRY_RUN" >&2
+    loggers::print_message "   VERBOSE: $VERBOSE" >&2
 }
 
 # ==============================================================================
