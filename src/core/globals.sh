@@ -15,13 +15,10 @@
 # --- Application Metadata ---
 readonly APP_NAME="Packwatch"
 readonly APP_DESCRIPTION="Application Update Checker"
+readonly SCRIPT_VERSION="2.0.0"
 
-SCRIPT_VERSION="2.0.0"
-readonly SCRIPT_VERSION
-
-SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME="$(basename "$0")"
 export SCRIPT_NAME
-readonly SCRIPT_NAME
 
 # --- ANSI Formatting Constants ---
 readonly COLOR_RED=$'\033[0;31m'
@@ -33,33 +30,30 @@ readonly FORMAT_BOLD=$'\033[1m'
 readonly FORMAT_RESET=$'\033[0m'
 
 # --- Path Configuration ---
-CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
-readonly CONFIG_ROOT
-
-CONFIG_DIR="$CONFIG_ROOT/conf.d"
-readonly CONFIG_DIR
+readonly CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
+readonly CONFIG_DIR="$CONFIG_ROOT/conf.d"
 
 # Cache directory - exported for subprocesses that may need it
-export CACHE_DIR="/tmp/app-updater-cache"
+CACHE_DIR="/tmp/app-updater-cache"
+export CACHE_DIR
 
 # --- Required System Dependencies ---
-readonly -a REQUIRED_COMMANDS=(
+readonly REQUIRED_COMMANDS=(
     "wget" "curl" "gpg" "jq" "dpkg"
     "sha256sum" "lsb_release" "getent"
 )
 
 # --- User Context ---
-ORIGINAL_USER="${SUDO_USER:-$USER}"
-readonly ORIGINAL_USER
+readonly ORIGINAL_USER="${SUDO_USER:-$USER}"
 
 # Initialize deferred error message variable (not exported)
-_home_determination_error=""
+HOME_ERROR=""
 if [[ -n "${SUDO_USER:-}" ]]; then
-    determined_home=$(getent passwd "$SUDO_USER" | cut -d: -f6 || true)
-    if [[ -n "$determined_home" ]]; then
-        readonly ORIGINAL_HOME="$determined_home"
+    DETERMINED_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6 || true)
+    if [[ -n "$DETERMINED_HOME" ]]; then
+        readonly ORIGINAL_HOME="$DETERMINED_HOME"
     else
-        _home_determination_error="Could not determine home directory for SUDO_USER: '$SUDO_USER'. Falling back to current HOME."
+        HOME_ERROR="Could not determine home directory for SUDO_USER: '$SUDO_USER'. Falling back to current HOME."
         readonly ORIGINAL_HOME="$HOME"
     fi
 else

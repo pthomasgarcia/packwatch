@@ -117,7 +117,7 @@ EOF
 # SECTION: CLI Argument Parsing
 # ------------------------------------------------------------------------------
 
-# Parse command-line arguments and populate global input_app_keys_from_cli.
+# Parse command-line arguments and populate global INPUT_APP_KEYS_FROM_CLI.
 # Usage: cli::parse_arguments "$@"
 cli::parse_arguments() {
     local apps_specified_on_cmdline=0

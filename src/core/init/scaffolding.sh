@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1090,SC1091
+
+# Packwatch Phase 2: Scaffolding
+# Purpose: Load modules that provide the core application framework, including
+# configuration management, state counters, and basic user notifications.
+# These are essential building blocks before the main runtime logic.
+
+# Required: globals.sh, systems.sh, loggers.sh, errors.sh (from Phase 0)
+#           validators.sh, interfaces.sh, cli.sh (from Phase 1)
+
+# Strict sourcing order:
+# 1. configs.sh: Central to loading application configurations.
+# 2. counters.sh: Manages application-wide statistics.
+# 3. notifiers.sh: Handles desktop notifications.
+# 4. util/checker_utils.sh: Basic utilities for custom checkers.
+#    (Placed here because custom checkers might be referenced early in config loading)
+
+source "$CORE_DIR/configs.sh"
+source "$CORE_DIR/../lib/counters.sh"
+source "$CORE_DIR/../lib/notifiers.sh"
+source "$CORE_DIR/../util/checker_utils.sh"
+
+# Any module sourced by this phase should implement an idempotent guard
+# (e.g., PACKWATCH_MODULE_LOADED).

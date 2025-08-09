@@ -195,7 +195,7 @@ updates::_build_download_url() {
     local app_name="$4"
 
     local download_filename
-    download_filename=$(printf "%s" "$filename_template" "$version")
+    download_filename=$(printf "$filename_template" "$version")
 
     local download_url
     download_url=$(repositories::find_asset_url "$release_json" "$download_filename" "$app_name")
@@ -498,7 +498,7 @@ updates::_rename_deb_file() {
     local app_name="$4"
 
     local target_filename
-    target_filename=$(printf "%s" "$template" "$version")
+    target_filename=$(printf "$template" "$version")
     target_filename=$(systems::sanitize_filename "$target_filename")
     local new_path="/tmp/$target_filename"
 
