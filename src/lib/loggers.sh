@@ -13,16 +13,11 @@
 #
 #   Then use:
 #     loggers::log_message "INFO" "This is an info message"
-#     loggers::print_ui_line "  " "✓ " "Success!" _color_green
 #     loggers::print_message "Simple message"
 #
 # Dependencies:
 #   - None
 # ==============================================================================
-
-# ------------------------------------------------------------------------------
-# SECTION: Color and Formatting Helpers
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # SECTION: Logger Functions
@@ -55,21 +50,6 @@ loggers::log_message() {
         printf '[%s] [PID:%s] [INFO] %s\n' "$timestamp" "$pid" "$message" >&2
         ;;
     esac
-}
-
-# User-facing progress/status message (to STDOUT), with optional color constant.
-# Usage: loggers::print_ui_line "  " "✓ " "Success!" "${COLOR_GREEN}"
-loggers::print_ui_line() {
-    local indent="$1" # e.g., "  "
-    local prefix="$2" # e.g., "✓ "
-    local message="$3"
-    local color_constant="${4:-}" # Directly accepts the ANSI color constant (e.g., ${COLOR_GREEN})
-
-    if [[ -n "$color_constant" ]]; then
-        printf "%s%s%b%b%b\n" "$indent" "$prefix" "$color_constant" "$message" "$FORMAT_RESET"
-    else
-        printf "%s%s%b\n" "$indent" "$prefix" "$message"
-    fi
 }
 
 # Simple message to STDOUT (legacy, unstructured).

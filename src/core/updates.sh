@@ -96,7 +96,7 @@ updates::process_installation() {
             if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
                 loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name' in dry run."
             fi
-            loggers::print_ui_line "  " "[DRY RUN] " "Installation simulated for ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_YELLOW}"
+            interfaces::print_ui_line "  " "[DRY RUN] " "Installation simulated for ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_YELLOW}"
             return 0
         fi
 
@@ -221,7 +221,7 @@ updates::_extract_release_checksum() {
 
     local expected_checksum
     if ! expected_checksum=$(repositories::find_asset_checksum "$release_json" "$download_filename" "$app_name"); then
-        loggers::print_ui_line "  " "✗ " "Failed to get GitHub checksum." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Failed to get GitHub checksum." "${COLOR_RED}"
         echo ""
         return 0
     fi
@@ -294,44 +294,44 @@ updates::check_script() {
     if ! validators::check_url_format "$download_url"; then
         errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
-        loggers::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
         return 1
     fi
     if ! validators::check_url_format "$version_url"; then
         errors::handle_error "CONFIG_ERROR" "Invalid version URL in configuration" "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid version URL configured.\"}"
-        loggers::print_ui_line "  " "✗ " "Invalid version URL configured." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Invalid version URL configured." "${COLOR_RED}"
         return 1
     fi
     if [[ -z "$version_regex" ]]; then
         errors::handle_error "CONFIG_ERROR" "Missing version regex in configuration" "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Missing version regex configured.\"}"
-        loggers::print_ui_line "  " "✗ " "Missing version regex configured." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Missing version regex configured." "${COLOR_RED}"
         return 1
     fi
 
     local installed_version
     installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
-    loggers::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
+    interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
 
     # Use the new helper function
     local latest_version
     latest_version=$(updates::_fetch_version_from_url "$version_url" "$version_regex" "$name")
 
-    loggers::print_ui_line "  " "Installed: " "$installed_version"
-    loggers::print_ui_line "  " "Source:    " "$source"
-    loggers::print_ui_line "  " "Latest:    " "$latest_version"
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
 
     if updates::is_needed "$installed_version" "$latest_version"; then
-        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
         updates::process_script_installation \
             "${name}" \
             "${latest_version}" \
             "${download_url}" \
             "${app_key}"
     else
-        loggers::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
     fi
 
@@ -366,7 +366,7 @@ _format_bytes() {
 updates::on_download_start() {
     local app_name="$1"
     local file_size="$2"                                                                         # Can be 'unknown' or actual size
-    loggers::print_ui_line "  " "→ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
+    interfaces::print_ui_line "  " "→ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
     loggers::log_message "INFO" "Starting download for $app_name (Size: $file_size)."
 }
 
@@ -375,33 +375,33 @@ updates::on_download_progress() {
     local downloaded="$2"
     local total="$3"
     local percent=$(((downloaded * 100) / total))
-    loggers::print_ui_line "  " "⤓ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: $percent% ($(_format_bytes "$downloaded") / $(_format_bytes "$total"))" >&2 # Redirect to stderr
+    interfaces::print_ui_line "  " "⤓ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: $percent% ($(_format_bytes "$downloaded") / $(_format_bytes "$total"))" >&2 # Redirect to stderr
     # Note: Requires underlying networks::download_file to call this callback.
 }
 
 updates::on_download_complete() {
     local app_name="$1"
     local file_path="$2"
-    loggers::print_ui_line "  " "✓ " "Download for ${FORMAT_BOLD}$app_name${FORMAT_RESET} complete." "${COLOR_GREEN}" >&2 # Redirect to stderr
+    interfaces::print_ui_line "  " "✓ " "Download for ${FORMAT_BOLD}$app_name${FORMAT_RESET} complete." "${COLOR_GREEN}" >&2 # Redirect to stderr
     loggers::log_message "INFO" "Download complete for $app_name: $file_path"
 }
 
 updates::on_install_start() {
     local app_name="$1"
-    loggers::print_ui_line "  " "→ " "Preparing to install ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
+    interfaces::print_ui_line "  " "→ " "Preparing to install ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
     loggers::log_message "INFO" "Starting installation for $app_name."
 }
 
 updates::on_install_complete() {
     local app_name="$1"
-    loggers::print_ui_line "  " "✓ " "${FORMAT_BOLD}$app_name${FORMAT_RESET} installed/updated successfully." "${COLOR_GREEN}" >&2 # Redirect to stderr
+    interfaces::print_ui_line "  " "✓ " "${FORMAT_BOLD}$app_name${FORMAT_RESET} installed/updated successfully." "${COLOR_GREEN}" >&2 # Redirect to stderr
     loggers::log_message "INFO" "Installation complete for $app_name."
     notifiers::send_notification "${app_name} Updated" "Successfully installed." "normal"
 }
 
 updates::on_install_skipped() {
     local app_name="$1"
-    loggers::print_ui_line "  " "🞨 " "Installation for ${FORMAT_BOLD}$app_name${FORMAT_RESET} skipped." "${COLOR_YELLOW}" >&2 # Redirect to stderr
+    interfaces::print_ui_line "  " "🞨 " "Installation for ${FORMAT_BOLD}$app_name${FORMAT_RESET} skipped." "${COLOR_YELLOW}" >&2 # Redirect to stderr
     loggers::log_message "INFO" "Installation skipped for $app_name."
 }
 
@@ -555,7 +555,7 @@ updates::_verify_gpg_signature() {
     if ! temp_sig_path=$(systems::create_temp_file "${app_name}_sig"); then return 1; fi
     temp_sig_path="${temp_sig_path}.sig"
 
-    loggers::print_ui_line "  " "→ " "Downloading signature for verification..."
+    interfaces::print_ui_line "  " "→ " "Downloading signature for verification..."
 
     # Use dependency injection for download_file
     if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$sig_url" "$temp_sig_path" ""; then
@@ -564,7 +564,7 @@ updates::_verify_gpg_signature() {
         return 1
     fi
 
-    loggers::print_ui_line "  " "→ " "Verifying signature..."
+    interfaces::print_ui_line "  " "→ " "Verifying signature..."
     # Ensure gpg.sh is sourced to use _get_gpg_fingerprint_as_user
     # shellcheck source=/dev/null
     source "$LIB_DIR/gpg.sh"
@@ -598,7 +598,7 @@ updates::_verify_gpg_signature() {
 
     if [[ "$gpg_verify_status" -eq 0 ]]; then
         loggers::log_message "INFO" "✓ Signature verification passed."
-        loggers::print_ui_line "  " "✓ " "Signature verification passed." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "✓ " "Signature verification passed." "${COLOR_GREEN}"
         return 0
     else
         errors::handle_error "GPG_ERROR" "Signature verification FAILED for '$app_name' DEB. Aborting installation due to potential tampering." "$app_name"
@@ -619,7 +619,7 @@ updates::_compare_deb_checksums() {
     local needs_update=0
     local final_downloaded_version="$downloaded_version"
 
-    loggers::print_ui_line "  " "→ " "Comparing package checksums for ${FORMAT_BOLD}$app_name${FORMAT_RESET}..."
+    interfaces::print_ui_line "  " "→ " "Comparing package checksums for ${FORMAT_BOLD}$app_name${FORMAT_RESET}..."
 
     local current_deb_path="/var/cache/apt/archives/${package_name}_${installed_version}_amd64.deb"
     if [[ -f "$current_deb_path" ]]; then
@@ -629,7 +629,7 @@ updates::_compare_deb_checksums() {
         downloaded_checksum=$(sha256sum "$temp_file" | cut -d' ' -f1)
 
         if [[ "$downloaded_checksum" != "$current_checksum" ]]; then
-            loggers::print_ui_line "  " "✓ " "New package detected (different checksum)." "${COLOR_GREEN}"
+            interfaces::print_ui_line "  " "✓ " "New package detected (different checksum)." "${COLOR_GREEN}"
             needs_update=1
             final_downloaded_version="${downloaded_version}-new-checksum"
         else
@@ -638,7 +638,7 @@ updates::_compare_deb_checksums() {
     else
         loggers::log_message "INFO" "No cached DEB file found for '$package_name' ('$current_deb_path') for checksum comparison. Cannot confirm if new version by checksum if versions are identical."
         if versions::compare_strings "$installed_version" "0.0.0" -eq 1; then
-            loggers::print_ui_line "  " "→ " "Assuming installation is needed (app not installed or cached DEB missing)."
+            interfaces::print_ui_line "  " "→ " "Assuming installation is needed (app not installed or cached DEB missing)."
             needs_update=1
         fi
     fi
@@ -764,7 +764,7 @@ updates::check_github_deb() {
     local filename_pattern_template="${app_config_ref[filename_pattern_template]}"
     local source="GitHub Releases"
 
-    loggers::print_ui_line "  " "→ " "Checking GitHub releases for ${FORMAT_BOLD}$name${FORMAT_RESET}..."
+    interfaces::print_ui_line "  " "→ " "Checking GitHub releases for ${FORMAT_BOLD}$name${FORMAT_RESET}..."
 
     local installed_version
     installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
@@ -777,12 +777,12 @@ updates::check_github_deb() {
     local latest_release_json_path # This will be the path to the JSON file
     latest_release_json_path=$(echo "$fetch_result" | tail -n +2)
 
-    loggers::print_ui_line "  " "Installed: " "$installed_version"
-    loggers::print_ui_line "  " "Source:    " "$source"
-    loggers::print_ui_line "  " "Latest:    " "$latest_version"
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
 
     if updates::is_needed "$installed_version" "$latest_version"; then
-        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
         # Use the new helper functions
         local download_url
@@ -805,7 +805,7 @@ updates::check_github_deb() {
             "$expected_checksum" \
             "sha256"
     else
-        loggers::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
     fi
 
@@ -829,7 +829,7 @@ updates::check_direct_deb() {
     if ! validators::check_url_format "$download_url"; then
         errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
-        loggers::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
         return 1
     fi
 
@@ -837,7 +837,7 @@ updates::check_direct_deb() {
     installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
     # Always show "Checking ..." at the start
-    loggers::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
+    interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
 
     # Verbose log lines: Installed and Source first
     if [[ $VERBOSE -eq 1 ]]; then
@@ -863,7 +863,7 @@ updates::check_direct_deb() {
     downloaded_version=$(versions::normalize "$("$UPDATES_EXTRACT_DEB_VERSION_IMPL" "$temp_download_file")") # DI applied
 
     if [[ "$downloaded_version" == "0.0.0" ]]; then
-        loggers::print_ui_line "  " "✗ " "Failed to extract version from downloaded package for '$name'. Will try checksum." "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "✗ " "Failed to extract version from downloaded package for '$name'. Will try checksum." "${COLOR_YELLOW}"
     fi
 
     # Verbose log line: Latest after fetch
@@ -873,9 +873,9 @@ updates::check_direct_deb() {
     fi
 
     # Standardized summary output
-    loggers::print_ui_line "  " "Installed: " "$installed_version"
-    loggers::print_ui_line "  " "Source:    " "$source"
-    loggers::print_ui_line "  " "Latest:    " "$downloaded_version"
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$downloaded_version"
 
     local needs_update=0
     if updates::is_needed "$installed_version" "$downloaded_version"; then
@@ -895,7 +895,7 @@ updates::check_direct_deb() {
     fi
 
     if [[ "$needs_update" -eq 1 ]]; then
-        loggers::print_ui_line "  " "⬆ " "New version available: $downloaded_version" "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⬆ " "New version available: $downloaded_version" "${COLOR_YELLOW}"
         updates::process_deb_package \
             "$name" \
             "$app_key" \
@@ -908,7 +908,7 @@ updates::check_direct_deb() {
             "" \
             "sha256"
     else
-        loggers::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
         rm -f "$temp_download_file"
         systems::unregister_temp_file "$temp_download_file"
@@ -1024,13 +1024,13 @@ updates::check_appimage() {
     if ! validators::check_url_format "$download_url"; then
         errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
-        loggers::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
         return 1
     fi
     if ! validators::check_file_path "$install_path"; then
         errors::handle_error "CONFIG_ERROR" "Invalid install path in configuration" "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid install path configured.\"}"
-        loggers::print_ui_line "  " "✗ " "Invalid install path configured." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Invalid install path configured." "${COLOR_RED}"
         return 1
     fi
 
@@ -1042,7 +1042,7 @@ updates::check_appimage() {
     installed_version=$(versions::normalize "$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key")") # DI applied
 
     # Always show "Checking ..." at the start
-    loggers::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
+    interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
 
     local latest_version=""
     local expected_checksum=""
@@ -1091,12 +1091,12 @@ updates::check_appimage() {
     fi
 
     # Standardized summary output
-    loggers::print_ui_line "  " "Installed: " "$installed_version"
-    loggers::print_ui_line "  " "Source:    " "$source"
-    loggers::print_ui_line "  " "Latest:    " "$latest_version"
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
 
     if updates::is_needed "$installed_version" "$latest_version"; then
-        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
         updates::process_appimage_file \
             "${name}" \
             "${latest_version}" \
@@ -1106,7 +1106,7 @@ updates::check_appimage() {
             "$checksum_algorithm" \
             "$app_key"
     elif [[ "$installed_version" == "0.0.0" && "$latest_version" != "0.0.0" ]]; then
-        loggers::print_ui_line "  " "⬆ " "App not installed. Installing $latest_version." "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⬆ " "App not installed. Installing $latest_version." "${COLOR_YELLOW}"
         updates::process_appimage_file \
             "${name}" \
             "${latest_version}" \
@@ -1116,7 +1116,7 @@ updates::check_appimage() {
             "$checksum_algorithm" \
             "$app_key"
     else
-        loggers::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
     fi
 
@@ -1143,22 +1143,22 @@ updates::process_flatpak_app() {
     if ! command -v flatpak &>/dev/null; then
         errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot update $app_name." "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
-        loggers::print_ui_line "  " "✗ " "Flatpak not installed. Cannot update ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot update ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_RED}"
         return 1
     fi
     if ! flatpak remotes | grep -q flathub; then
-        loggers::print_ui_line "  " "→ " "Adding Flathub remote..."
+        interfaces::print_ui_line "  " "→ " "Adding Flathub remote..."
         flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || {
             errors::handle_error "INSTALLATION_ERROR" "Failed to add Flathub remote. Cannot update $app_name." "$app_name"
             updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to add Flathub remote.\"}"
-            loggers::print_ui_line "  " "✗ " "Failed to add Flathub remote." "${COLOR_RED}"
+            interfaces::print_ui_line "  " "✗ " "Failed to add Flathub remote." "${COLOR_RED}"
             return 1
         }
     fi
-    loggers::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
+    interfaces::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
     flatpak update --appstream -y || {
         loggers::log_message "WARN" "Failed to update Flatpak appstream data for $app_name. Installation might proceed but information could be stale."
-        loggers::print_ui_line "  " "! " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "! " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
     }
 
     # Use the generic process_installation function
@@ -1189,11 +1189,11 @@ updates::check_flatpak() {
     if ! command -v flatpak &>/dev/null; then
         errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot check $name." "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
-        loggers::print_ui_line "  " "✗ " "Flatpak not installed. Cannot check ${FORMAT_BOLD}$name${FORMAT_RESET}." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot check ${FORMAT_BOLD}$name${FORMAT_RESET}." "${COLOR_RED}"
         return 1
     fi
 
-    loggers::print_ui_line "  " "→ " "Checking Flatpak for ${FORMAT_BOLD}$name${FORMAT_RESET}..."
+    interfaces::print_ui_line "  " "→ " "Checking Flatpak for ${FORMAT_BOLD}$name${FORMAT_RESET}..."
 
     local latest_version="0.0.0"
     local flatpak_search_output
@@ -1206,26 +1206,26 @@ updates::check_flatpak() {
     else
         errors::handle_error "NETWORK_ERROR" "Failed to search Flatpak remote for '$name'." "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to search Flatpak remote.\"}"
-        loggers::print_ui_line "  " "✗ " "Failed to search Flatpak remote for '$name'. Cannot determine latest version." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Failed to search Flatpak remote for '$name'. Cannot determine latest version." "${COLOR_RED}"
         return 1
     fi
 
     local installed_version
     installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
-    loggers::print_ui_line "  " "Installed: " "$installed_version"
-    loggers::print_ui_line "  " "Source:    " "$source"
-    loggers::print_ui_line "  " "Latest:    " "$latest_version"
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
 
     if updates::is_needed "$installed_version" "$latest_version"; then
-        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
         updates::process_flatpak_app \
             "$name" \
             "$app_key" \
             "$latest_version" \
             "$flatpak_app_id"
     else
-        loggers::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
     fi
 
@@ -1250,7 +1250,7 @@ updates::handle_custom_check() {
     if [[ -z "$custom_checker_script" ]]; then
         errors::handle_error "CONFIG_ERROR" "Missing 'custom_checker_script' for custom app type" "$app_display_name"
         updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Missing custom_checker_script.\"}"
-        loggers::print_ui_line "  " "✗ " "Configuration error: Missing custom checker script." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Configuration error: Missing custom checker script." "${COLOR_RED}"
         return 1
     fi
 
@@ -1259,7 +1259,7 @@ updates::handle_custom_check() {
 
     # Export functions and variables for custom checker subshell
     export -f loggers::log_message
-    export -f loggers::print_ui_line
+    export -f interfaces::print_ui_line
     export -f systems::get_json_value
     export -f systems::require_json_value
     export -f systems::create_temp_file
@@ -1284,7 +1284,7 @@ updates::handle_custom_check() {
     done < <(declare -F | awk '{print $3}' | grep -E '^(networks|packages|versions|validators|systems)::')
 
     # Always show "Checking ..." at the start
-    loggers::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$app_display_name${FORMAT_RESET} for latest version..."
+    interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$app_display_name${FORMAT_RESET} for latest version..."
 
     local custom_checker_output=""
     local custom_checker_func="${app_config_ref[custom_checker_func]}"
@@ -1323,15 +1323,15 @@ updates::handle_custom_check() {
     local error_type_from_checker
     error_type_from_checker=$(echo "$custom_checker_output" | jq -r '.error_type // "CUSTOM_CHECKER_ERROR"')
 
-    loggers::print_ui_line "  " "Installed: " "$installed_version"
-    loggers::print_ui_line "  " "Source:    " "$source"
-    loggers::print_ui_line "  " "Latest:    " "$latest_version"
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
 
     if [[ "$status" == "success" ]] && updates::is_needed "$installed_version" "$latest_version"; then
         local install_type
         install_type=$(echo "$custom_checker_output" | jq -r '.install_type // "unknown"')
 
-        loggers::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
         case "$install_type" in
         "deb")
@@ -1377,19 +1377,19 @@ updates::handle_custom_check() {
                 "$flatpak_app_id_from_output"
             ;;
         *)
-            loggers::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
+            interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
             return 1
             ;;
         esac
     elif [[ "$status" == "no_update" || "$status" == "success" ]]; then
-        loggers::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
     elif [[ "$status" == "error" ]]; then
         errors::handle_error "$error_type_from_checker" "$error_message" "$app_display_name"
-        loggers::print_ui_line "  " "✗ " "Error: $error_message" "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Error: $error_message" "${COLOR_RED}"
         return 1
     else
-        loggers::print_ui_line "  " "✗ " "Unknown status from checker." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Unknown status from checker." "${COLOR_RED}"
         return 1
     fi
     return 0
@@ -1459,7 +1459,7 @@ updates::check_application() {
     # Validate the current application's configuration (Recommendation 4)
     local app_type="${_current_app_config[type]:-}"
     if ! updates::_validate_app_config "$app_type" "_current_app_config"; then
-        loggers::print_ui_line "  " "✗ " "Configuration error: Missing required fields." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Configuration error: Missing required fields." "${COLOR_RED}"
         counters::inc_failed
         loggers::print_message "" # Blank line after each app block
         return 1
@@ -1468,7 +1468,7 @@ updates::check_application() {
     if [[ -z "${_current_app_config[type]:-}" ]]; then
         errors::handle_error "CONFIG_ERROR" "Application '$app_key' missing 'type' field." "$app_display_name"
         updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"config_validation\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Application missing 'type' field.\"}"
-        loggers::print_ui_line "  " "✗ " "Configuration error: Missing app type." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Configuration error: Missing app type." "${COLOR_RED}"
         counters::inc_failed
         loggers::print_message ""
         return 1
@@ -1486,7 +1486,7 @@ updates::check_application() {
         updates::trigger_hooks POST_CHECK_HOOKS "$app_display_name" # Recommendation 10: Post-check hook (no JSON details available)
     else
         errors::handle_error "CONFIG_ERROR" "Unknown update type '$app_type'" "$app_display_name"
-        loggers::print_ui_line "  " "✗ " "Configuration error: Unknown update type." "${COLOR_RED}"
+        interfaces::print_ui_line "  " "✗ " "Configuration error: Unknown update type." "${COLOR_RED}"
         app_check_status=1
         updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"error_type\": \"CONFIG_ERROR\", \"message\": \"Unknown app type: $app_type\"}" # Recommendation 10: Error hook
     fi

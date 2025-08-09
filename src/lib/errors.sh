@@ -78,22 +78,6 @@ errors::handle_error() {
     return "$exit_code"
 }
 
-# Centralized error handler that exits immediately.
-# Usage: errors::handle_error_and_exit TYPE MESSAGE [APP_NAME] [CUSTOM_ERROR_TYPE]
-#   TYPE               - One of the keys in ERROR_CODES (default error type)
-#   MESSAGE            - Error message to log
-#   APP_NAME           - (Optional) Application name for context
-#   CUSTOM_ERROR_TYPE  - (Optional) Override error type (must be key in ERROR_CODES)
-errors::handle_error_and_exit() {
-    local error_type_code="$1"
-    local error_message="$2"
-    local app_name="${3:-unknown}"
-    local custom_error_type="${4:-}"
-
-    errors::handle_error "$error_type_code" "$error_message" "$app_name" "$custom_error_type"
-    exit "${ERROR_CODES[${custom_error_type:-$error_type_code}]:-1}"
-}
-
 # Helper for module-specific initialization errors.
 # Usage: errors::handle_module_error MODULE FUNCTION [ERROR_TYPE]
 #   MODULE      - Module name (e.g., "packages", "configs")
