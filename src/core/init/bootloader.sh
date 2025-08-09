@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090,SC1091
+# Idempotent guard for bootloader module
+if [ -n "${PACKWATCH_BOOTLOADER_LOADED:-}" ]; then
+    return 0
+fi
+PACKWATCH_BOOTLOADER_LOADED=1
 
 # Packwatch Phase 0: Bootloader
 # Purpose: Initialize the most fundamental environment for safe execution.

@@ -36,7 +36,7 @@ check_warp() {
 	# Read content from the file for regex matching
 	local html_content
 	html_content=$(cat "$html_content_path")
-	loggers::log_message "DEBUG" "Warp HTML content (first 500 chars): ${html_content:0:500}..."
+	# loggers::log_message "DEBUG" "Warp HTML content (first 500 chars): ${html_content:0:500}..."
 	latest_version_raw=$(echo "$html_content" | grep -oP '[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.stable_[0-9]+' | head -1)
 	loggers::log_message "DEBUG" "Extracted latest_version_raw for Warp: '$latest_version_raw'"
 

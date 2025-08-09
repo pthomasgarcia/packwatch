@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090,SC1091
+# Idempotent guard for extensions module
+if [ -n "${PACKWATCH_EXTENSIONS_LOADED:-}" ]; then
+    return 0
+fi
+PACKWATCH_EXTENSIONS_LOADED=1
 
 # Packwatch Phase 4: Extensions
 # Purpose: Load optional modules or specialized custom checker scripts only if they are

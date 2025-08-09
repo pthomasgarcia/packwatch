@@ -1,15 +1,13 @@
-refactor(ui): Centralize ANSI color and formatting constants
+refactor(core): Relocate UI printing from loggers to interfaces
 
-This commit refactors the shell scripts to centralize ANSI color and text formatting definitions, improving code consistency and maintainability.
+This commit refactors the codebase to improve separation of concerns by moving the user-facing print function from the logging module to the interface module.
 
-- **Centralized ANSI Constants:**
-  - All ANSI escape codes for colors and text formatting (e.g., bold) have been consolidated into `readonly` global variables in `src/core/globals.sh`.
+- **Relocated `print_ui_line`:**
+  - The `print_ui_line` function, responsible for printing formatted status messages to the user, has been moved from `src/lib/loggers.sh` to `src/core/interfaces.sh`.
+  - This change clarifies the distinction between internal application logging (`loggers.sh`) and user interface presentation (`interfaces.sh`).
 
-- **Removed Redundant Helpers:**
-  - The local `_color_*` and `_bold` helper functions have been removed from `interfaces.sh` and `loggers.sh`, eliminating code duplication.
+- **Updated Function Calls:**
+  - All calls to the old `loggers::print_ui_line` across the application (in `updates.sh`, `packages.sh`, `networks.sh`, and `validators.sh`) have been updated to `interfaces::print_ui_line`.
 
-- **Standardized UI Output:**
-  - All UI-related functions in `interfaces.sh`, `updates.sh`, `packages.sh`, and `validators.sh` have been updated to use the new global constants, ensuring a consistent look and feel.
-
-- **Simplified `print_ui_line`:**
-  - The `loggers::print_ui_line` function has been simplified to accept a color constant directly, making it more straightforward to use.
+- **Removed Unused Error Helper:**
+  - The redundant `errors::handle_error_and_exit` function was removed from `src/lib/errors.sh`, as its functionality is already covered by `errors::handle_error`.

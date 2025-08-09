@@ -35,9 +35,9 @@ interfaces::print_ui_line() {
     local color_constant="${4:-}" # Directly accepts the ANSI color constant (e.g., ${COLOR_GREEN})
 
     if [[ -n "$color_constant" ]]; then
-        printf "%s%s%b%b%b\n" "$indent" "$prefix" "$color_constant" "$message" "$FORMAT_RESET"
+        printf "%s%s%b%s%b\n" "$indent" "$prefix" "$color_constant" "$message" "$FORMAT_RESET"
     else
-        printf "%s%s%b\n" "$indent" "$prefix" "$message"
+        printf "%s%s%s\n" "$indent" "$prefix" "$message"
     fi
 }
 

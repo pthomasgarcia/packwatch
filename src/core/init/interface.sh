@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090,SC1091
+# Idempotent guard for interface module
+if [ -n "${PACKWATCH_INTERFACE_LOADED:-}" ]; then
+    return 0
+fi
+PACKWATCH_INTERFACE_LOADED=1
 
 # Packwatch Phase 1: Interface
 # Purpose: Load modules necessary for Command Line Interface (CLI) parsing and user output

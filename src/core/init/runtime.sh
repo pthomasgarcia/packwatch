@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090,SC1091
+# Idempotent guard for runtime module
+if [ -n "${PACKWATCH_RUNTIME_LOADED:-}" ]; then
+    return 0
+fi
+PACKWATCH_RUNTIME_LOADED=1
 
 # Packwatch Phase 3a: Runtime
 # Purpose: Load core application mechanisms and utilities.

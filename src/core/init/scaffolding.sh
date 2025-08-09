@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090,SC1091
+# Idempotent guard for scaffolding module
+if [ -n "${PACKWATCH_SCAFFOLDING_LOADED:-}" ]; then
+    return 0
+fi
+PACKWATCH_SCAFFOLDING_LOADED=1
 
 # Packwatch Phase 2: Scaffolding
 # Purpose: Load modules that provide the core application framework, including

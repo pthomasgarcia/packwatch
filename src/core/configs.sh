@@ -36,10 +36,12 @@
 declare -A CONFIG_SCHEMA
 declare -A ALL_APP_CONFIGS
 declare -a CUSTOM_APP_KEYS
+
 # Global network configuration settings
 declare -g CACHE_DIR
 declare -g CACHE_DURATION
 declare -A -g NETWORK_CONFIG # -g makes it global, -A makes it associative
+
 # Helper to set default network settings
 configs::_set_default_network_settings() {
     CACHE_DIR="/tmp/packwatch_cache"
@@ -50,55 +52,76 @@ configs::_set_default_network_settings() {
     NETWORK_CONFIG["RATE_LIMIT"]=1
     NETWORK_CONFIG["RETRY_DELAY"]=2
 }
+
+# Apply environment variable overrides (if present)
+# ENV → JSON → defaults
+configs::_apply_env_overrides() {
+    # Scalars
+    [[ -n "${PACKWATCH_CACHE_DIR:-}"      ]] && CACHE_DIR="$PACKWATCH_CACHE_DIR"
+    [[ -n "${PACKWATCH_CACHE_DURATION:-}" ]] && CACHE_DURATION="$PACKWATCH_CACHE_DURATION"
+
+    # Map entries
+    [[ -n "${PACKWATCH_MAX_RETRIES:-}" ]] && NETWORK_CONFIG["MAX_RETRIES"]="$PACKWATCH_MAX_RETRIES"
+    [[ -n "${PACKWATCH_TIMEOUT:-}"     ]] && NETWORK_CONFIG["TIMEOUT"]="$PACKWATCH_TIMEOUT"
+    [[ -n "${PACKWATCH_USER_AGENT:-}"  ]] && NETWORK_CONFIG["USER_AGENT"]="$PACKWATCH_USER_AGENT"
+    [[ -n "${PACKWATCH_RATE_LIMIT:-}"  ]] && NETWORK_CONFIG["RATE_LIMIT"]="$PACKWATCH_RATE_LIMIT"
+    [[ -n "${PACKWATCH_RETRY_DELAY:-}" ]] && NETWORK_CONFIG["RETRY_DELAY"]="$PACKWATCH_RETRY_DELAY"
+}
+
 # Load global network settings from a dedicated JSON file.
 # Usage: configs::load_network_settings "$CONFIG_ROOT/network_settings.json"
 configs::load_network_settings() {
     local network_settings_file="$1"
 
-    if [[ ! -f "$network_settings_file" ]]; then
-        loggers::log_message "WARN" "Network settings file not found: '$network_settings_file'. Using defaults."
-        configs::_set_default_network_settings
-        return 0
-    fi
-
-    local settings_content
-    settings_content=$(<"$network_settings_file")
-    if ! jq -e . "$network_settings_file" >/dev/null 2>&1; then
-        errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in network settings file: '$network_settings_file'"
-        return 1
-    fi
-
-    CACHE_DIR=$(systems::get_json_value "$settings_content" '.cache_dir' "Network Cache Directory") || {
-        loggers::log_message "WARN" "Missing 'cache_dir' in network settings. Using default: /tmp/packwatch_cache"
-        CACHE_DIR="/tmp/packwatch_cache"
-    }
-    CACHE_DURATION=$(systems::get_json_value "$settings_content" '.cache_duration' "Network Cache Duration") || {
-        loggers::log_message "WARN" "Missing 'cache_duration' in network settings. Using default: 300"
-        CACHE_DURATION=300
-    }
-
-    # Always initialize NETWORK_CONFIG with defaults first
+    # Start with hardcoded fallbacks
     configs::_set_default_network_settings
 
-    # Overlay user-supplied values from JSON if present and non-empty
-    local network_config_json
-    network_config_json=$(systems::get_json_value "$settings_content" '.network_config' "Network Configuration Block") || {
-        loggers::log_message "WARN" "Missing 'network_config' block in network settings. Using defaults."
-        loggers::log_message "DEBUG" "Loaded network settings from '$network_settings_file' (defaults only)"
-        return 0
-    }
+    # Overlay JSON if present and valid
+    if [[ -f "$network_settings_file" ]]; then
+        local settings_content
+        settings_content=$(<"$network_settings_file")
 
-    # Only overlay if network_config_json is not null or empty
-    if [[ -n "$network_config_json" && "$network_config_json" != "null" ]]; then
-        local entry_json
-        while IFS= read -r entry_json; do
-            local key=$(echo "$entry_json" | jq -r '.key')
-            local value=$(echo "$entry_json" | jq -r '.value')
-            NETWORK_CONFIG["$key"]="$value"
-        done < <(echo "$network_config_json" | jq -c 'to_entries[]')
+        if ! jq -e . "$network_settings_file" >/dev/null 2>&1; then
+            errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in network settings file: '$network_settings_file'"
+            # Even on error, keep defaults, then apply ENV overrides below
+        else
+            local v
+
+            v=$(systems::get_json_value "$settings_content" '.cache_dir' "Network Cache Directory") && {
+                [[ -n "$v" && "$v" != "null" ]] && CACHE_DIR="$v"
+            }
+
+            v=$(systems::get_json_value "$settings_content" '.cache_duration' "Network Cache Duration") && {
+                [[ -n "$v" && "$v" != "null" ]] && CACHE_DURATION="$v"
+            }
+
+            local network_config_json
+            network_config_json=$(systems::get_json_value "$settings_content" '.network_config' "Network Configuration Block") || {
+                loggers::log_message "WARN" "Missing 'network_config' block in network settings. Using defaults for NETWORK_CONFIG."
+                network_config_json=
+            }
+
+            if [[ -n "$network_config_json" && "$network_config_json" != "null" ]]; then
+                # Normalize keys to uppercase to match defaults (e.g., max_retries -> MAX_RETRIES)
+                while IFS= read -r entry_json; do
+                    local key value key_upper
+                    key=$(echo "$entry_json"   | jq -r '.key')
+                    value=$(echo "$entry_json" | jq -r '.value')
+                    key_upper=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+                    [[ -n "$key_upper" && "$key_upper" != "NULL" ]] && NETWORK_CONFIG["$key_upper"]="$value"
+                done < <(echo "$network_config_json" | jq -c 'to_entries[]')
+            fi
+
+            loggers::log_message "DEBUG" "Loaded network settings from '$network_settings_file'"
+        fi
+    else
+        loggers::log_message "WARN" "Network settings file not found: '$network_settings_file'. Using defaults."
     fi
 
-    loggers::log_message "DEBUG" "Loaded network settings from '$network_settings_file'"
+    # Finally, overlay ENV overrides
+    configs::_apply_env_overrides
+
+    loggers::log_message "DEBUG" "Effective network settings: CACHE_DIR='$CACHE_DIR', CACHE_DURATION='$CACHE_DURATION', MAX_RETRIES='${NETWORK_CONFIG["MAX_RETRIES"]}', TIMEOUT='${NETWORK_CONFIG["TIMEOUT"]}', USER_AGENT='${NETWORK_CONFIG["USER_AGENT"]}', RATE_LIMIT='${NETWORK_CONFIG["RATE_LIMIT"]}', RETRY_DELAY='${NETWORK_CONFIG["RETRY_DELAY"]}'"
     return 0
 }
 
@@ -375,7 +398,7 @@ configs::validate_loaded_app_count() {
 # ------------------------------------------------------------------------------
 
 # Orchestrate loading configuration from the modular directory.
-# Usage: configs::load_modular_directory
+# Usage: configs::load_modular_directory()
 configs::load_modular_directory() {
     if ! configs::load_network_settings "$CONFIG_ROOT/network_settings.json"; then
         return 1

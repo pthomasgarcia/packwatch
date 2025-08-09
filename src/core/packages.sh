@@ -19,6 +19,7 @@
 #   - loggers.sh
 #   - notifiers.sh
 #   - systems.sh
+#   - interfaces.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -186,10 +187,10 @@ packages::install_deb_package() {
         return 1
     fi
 
-    interfaces::print_ui_line "  " "→ " "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..."
+    interfaces::print_ui_line "  " "→ " "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." >&2
 
     if [[ ${DRY_RUN:-0} -eq 1 ]]; then
-        interfaces::print_ui_line "    " "[DRY RUN] " "Would install v$version from: '$deb_file'" "${COLOR_YELLOW}"
+        interfaces::print_ui_line "    " "[DRY RUN] " "Would install v$version from: '$deb_file'" "${COLOR_YELLOW}" >&2
         packages::update_installed_version_json "$app_key" "$version"
         return 0
     fi
@@ -217,7 +218,7 @@ packages::install_deb_package() {
         loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
     fi
 
-    interfaces::print_ui_line "  " "✓ " "Successfully installed ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version" "${COLOR_GREEN}"
+    interfaces::print_ui_line "  " "✓ " "Successfully installed ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version" "${COLOR_GREEN}" >&2
     notifiers::send_notification "$app_name Updated" "Successfully installed v$version" "normal"
     return 0
 }

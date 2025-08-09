@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090,SC1091
+# Idempotent guard for business module
+if [ -n "${PACKWATCH_BUSINESS_LOADED:-}" ]; then
+    return 0
+fi
+PACKWATCH_BUSINESS_LOADED=1
 
 # Packwatch Phase 3b: Business
 # Purpose: Load the central module that defines the application's core business logic,

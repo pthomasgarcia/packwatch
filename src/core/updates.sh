@@ -863,7 +863,7 @@ updates::check_direct_deb() {
     downloaded_version=$(versions::normalize "$("$UPDATES_EXTRACT_DEB_VERSION_IMPL" "$temp_download_file")") # DI applied
 
     if [[ "$downloaded_version" == "0.0.0" ]]; then
-        interfaces::print_ui_line "  " "✗ " "Failed to extract version from downloaded package for '$name'. Will try checksum." "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "! " "Failed to extract version from downloaded package for '$name'. Will try checksum." "${COLOR_YELLOW}"
     fi
 
     # Verbose log line: Latest after fetch
