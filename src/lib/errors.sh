@@ -78,17 +78,6 @@ errors::handle_error() {
     return "$exit_code"
 }
 
-# Helper for module-specific initialization errors.
-# Usage: errors::handle_module_error MODULE FUNCTION [ERROR_TYPE]
-#   MODULE      - Module name (e.g., "packages", "configs")
-#   FUNCTION    - Function name (e.g., "initialize_installed_versions_file")
-#   ERROR_TYPE  - (Optional) Error type, defaults to VALIDATION_ERROR
-errors::handle_module_error() {
-    local module="$1"
-    local function="$2"
-    local error_type_code="${3:-VALIDATION_ERROR}"
-    errors::handle_error_and_exit "$error_type_code" "Failed to initialize $module::$function" "core"
-}
 
 # ==============================================================================
 # END OF MODULE

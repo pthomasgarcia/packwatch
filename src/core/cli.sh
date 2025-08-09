@@ -138,7 +138,8 @@ cli::parse_arguments() {
             ;;
         --cache-duration)
             if [[ -z "$2" ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
-                errors::handle_error_and_exit "CLI_ERROR" "Option --cache-duration requires a positive integer." "cli"
+                errors::handle_error "CLI_ERROR" "Option --cache-duration requires a positive integer." "cli"
+                return 1
             fi
             CACHE_DURATION="$2"
             shift 2
@@ -153,7 +154,8 @@ cli::parse_arguments() {
             exit 0
             ;;
         -*)
-            errors::handle_error_and_exit "CLI_ERROR" "Unknown option: '$1'" "cli"
+            errors::handle_error "CLI_ERROR" "Unknown option: '$1'" "cli"
+            return 1
             ;;
         *)
             _CLI_APP_KEYS+=("$1") # Direct assignment to module state
@@ -214,8 +216,9 @@ cli::determine_apps_to_check() {
 
         # If no valid apps after filtering, handle error
         if [[ ${#apps_ref[@]} -eq 0 ]]; then
-            errors::handle_error_and_exit "CLI_ERROR" \
+            errors::handle_error "CLI_ERROR" \
                 "No valid application keys specified on command line found in enabled configurations. Exiting." "cli"
+            return 1
         fi
     fi
 }

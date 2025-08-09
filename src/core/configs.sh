@@ -339,33 +339,33 @@ configs::get_validated_apps_json() {
 # SECTION: Populate Globals from Merged JSON
 # ------------------------------------------------------------------------------
 
-# Populate the global config variables from a merged JSON array.
-# Usage: configs::populate_globals_from_json "$merged_json_array"
+# Replace current jq processing with batch processing
 configs::populate_globals_from_json() {
     local merged_json_array="$1"
-
-    local apps_to_check_json="[]"
-    local applications_json="{}"
-
+    
+    # Process all at once
     local extracted_data
     extracted_data=$(echo "$merged_json_array" | jq -c '
         reduce .[] as $item ({
             apps_to_check: [],
-            applications: {}
+            applications: {},
+            all_fields: {}  # New field to store all key-value pairs
         };
         .apps_to_check += [$item.app_key] |
-        .applications += {($item.app_key): $item.application}
+        .applications += {($item.app_key): $item.application} |
+        .all_fields += {($item.app_key): ($item.application | to_entries | map({key: .key, value: .value}) | from_entries)}
         )
     ')
-
+    
+    # Populate CUSTOM_APP_KEYS
     mapfile -t CUSTOM_APP_KEYS < <(echo "$extracted_data" | jq -r '.apps_to_check[]')
-    applications_json=$(echo "$extracted_data" | jq -c '.applications')
-
-    local app_key prop_key prop_value
+    
+    # Populate ALL_APP_CONFIGS in one go
     while IFS=$'\t' read -r app_key prop_key prop_value; do
         [[ -z "$app_key" || -z "$prop_key" || "$prop_key" == "_comment"* ]] && continue
         ALL_APP_CONFIGS["${app_key}_${prop_key}"]="$prop_value"
-    done < <(echo "$applications_json" | jq -r '
+    done < <(echo "$extracted_data" | jq -r '
+        .all_fields | 
         to_entries[] |
         .key as $app_key |
         .value |

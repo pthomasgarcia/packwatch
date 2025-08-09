@@ -32,6 +32,47 @@ declare -a TEMP_FILES=()
 declare -a BACKGROUND_PIDS=()
 
 # ------------------------------------------------------------------------------
+# SECTION: JSON Parsing Cache (ADD THIS NEW SECTION HERE)
+# ------------------------------------------------------------------------------
+
+# Add to systems.sh
+declare -gA _jq_cache=() # Global cache for parsed JSON
+
+# Parse entire JSON once and cache results
+systems::cache_json_fields() {
+    local json_data="$1"
+    local cache_key="$2" # Unique identifier for this JSON
+    
+    # Clear previous cache entries for this key
+    for key in "${!_jq_cache[@]}"; do
+        if [[ "$key" == "$cache_key"* ]]; then
+            unset "_jq_cache[$key]"
+        fi
+    done
+    
+    # Parse all fields at once and store in cache
+    while IFS=$'\t' read -r key value; do
+        _jq_cache["${cache_key}_${key}"]="$value"
+    done < <(echo "$json_data" | jq -r 'to_entries[] | "\(.key)\t\(.value)"' 2>/dev/null)
+    
+    # Store original JSON for fallback
+    _jq_cache["$cache_key"]="$json_data"
+}
+
+# Get cached JSON value
+systems::get_cached_json_value() {
+    local cache_key="$1"
+    local field="$2"
+    echo "${_jq_cache["${cache_key}_${field}"]:-}"
+}
+
+# Clear JSON cache
+systems::clear_json_cache() {
+    unset _jq_cache
+    declare -gA _jq_cache=()
+}
+
+# ------------------------------------------------------------------------------
 # SECTION: Filename Sanitization
 # ------------------------------------------------------------------------------
 
@@ -170,28 +211,42 @@ systems::reattempt_command() {
 
 # Extract a value from a JSON string using jq.
 # Usage: systems::get_json_value "$json" ".field" "app_name"
+# Modify systems::get_json_value in systems.sh
 systems::get_json_value() {
-    local json_source="$1" # Can be a JSON string or a file path
+    local json_source="$1"
     local jq_expression="$2"
     local app_name="${3:-unknown}"
-    local result=""
-
-    # Check if json_source is a file path (starts with /tmp/ or similar)
+    
+    # Handle file paths as before
     if [[ -f "$json_source" ]]; then
-        result=$(jq -r "$jq_expression // empty" "$json_source" 2>/dev/null)
-    else
-        # Assume it's a JSON string
-        result=$(echo "$json_source" | jq -r "$jq_expression // empty" 2>/dev/null)
+        jq -r "$jq_expression // empty" "$json_source" 2>/dev/null
+        return $?
     fi
-    local jq_exit_code=$?
-
-    if [[ "$jq_exit_code" -ne 0 ]]; then
-        errors::handle_error "VALIDATION_ERROR" "Failed to parse JSON for '$app_name' with expression: $jq_expression" "$app_name"
-        return 1
+    
+    # For JSON strings, check if it's a simple field access
+    if [[ "$jq_expression" =~ ^\.[a-zA-Z0-9_]+$ ]]; then
+        local field_name="${jq_expression#.}"
+        local cache_key="json_$(echo "$json_source" | md5sum | cut -d' ' -f1)"
+        
+        # Check cache first
+        if [[ -n "${_jq_cache["${cache_key}_${field_name}"]+isset}" ]]; then
+            echo "${_jq_cache["${cache_key}_${field_name}"]}"
+            return 0
+        fi
+        
+        # Cache all fields if not already done
+        if [[ -z "${_jq_cache["$cache_key"]+isset}" ]]; then
+            systems::cache_json_fields "$json_source" "$cache_key"
+        fi
+        
+        # Return cached value
+        echo "${_jq_cache["${cache_key}_${field_name}"]:-}"
+        return 0
     fi
-
-    echo "$result"
-    return 0
+    
+    # Fallback to direct jq for complex expressions
+    echo "$json_source" | jq -r "$jq_expression // empty" 2>/dev/null
+    return $?
 }
 
 # Extract and validate a required value from a JSON string using jq.
@@ -224,7 +279,7 @@ systems::require_json_value() {
 # ------------------------------------------------------------------------------
 
 # Check that all required system dependencies are available.
-# Calls errors::handle_error_and_exit if dependencies are missing.
+# Calls errors::handle_error if dependencies are missing.
 # Usage: systems::check_dependencies
 systems::check_dependencies() {
     loggers::log_message "INFO" "Performing system dependency check..."
@@ -242,8 +297,9 @@ systems::check_dependencies() {
     if [[ ${#missing_cmds[@]} -gt 0 ]]; then
         # Print installation help message BEFORE exiting
         interfaces::print_installation_help # Ensure this function is called
-        errors::handle_error_and_exit "DEPENDENCY_ERROR" \
+        errors::handle_error "DEPENDENCY_ERROR" \
             "Missing required core commands: ${missing_cmds[*]}. Please install them." "core"
+        return 1
     fi
 
     loggers::log_message "INFO" "All core system dependencies found."
