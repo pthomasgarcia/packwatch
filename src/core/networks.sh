@@ -161,6 +161,24 @@ networks::fetch_cached_data() {
         return 0
     fi
 }
+networks::require_https_or_fail() {
+    local url="$1" allow_http="${2:-0}"
+    if (( allow_http != 1 )) && ! validators::check_https_url "$url"; then
+        errors::handle_error "NETWORK_ERROR" "Refusing insecure URL: '$url'"
+        return 1
+    fi
+}
+
+networks::download_text_to_cache() {
+    local url="$1"
+    networks::require_https_or_fail "$url" "${ALLOW_INSECURE_HTTP:-0}" || return 1
+    local tmp; tmp=$(systems::create_temp_file "sidecar") || return 1
+    local -a args; mapfile -t args < <(networks::build_curl_args "$tmp" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-4}")
+    if ! systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl "${args[@]}" "$url"; then
+        errors::handle_error "NETWORK_ERROR" "Failed to download: $url"; return 1
+    fi
+    echo "$tmp"
+}
 # Get the effective URL after redirects.
 # Usage: networks::get_effective_url "url"
 networks::get_effective_url() {
@@ -212,6 +230,9 @@ networks::download_file() {
     local dest_path="$2"
     local expected_checksum="$3"
     local checksum_algorithm="${4:-sha256}"
+    local allow_http="${5:-0}" # New parameter for allowing HTTP
+
+    networks::require_https_or_fail "$url" "$allow_http" || return 1
 
     interfaces::print_ui_line "  " "→ " "Downloading $(basename "$dest_path")..." >&2 # Redirect to stderr
 

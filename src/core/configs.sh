@@ -207,9 +207,19 @@ configs::validate_single_config_file() {
 
     IFS=',' read -ra fields <<<"$required_fields"
     for field in "${fields[@]}"; do
-        if ! systems::require_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null; then
-            return 1
-        fi
+        # List of new optional fields that should not be strictly required
+        case "$field" in
+            "checksum_url" | "checksum_algorithm" | "sig_url" | "gpg_key_id" | "gpg_fingerprint" | "allow_insecure_http")
+                # These fields are optional, so we use get_json_value which doesn't error on absence
+                systems::get_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null
+                ;;
+            *)
+                # All other fields are still strictly required
+                if ! systems::require_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null; then
+                    return 1
+                fi
+                ;;
+        esac
     done
 
     case "$app_type" in

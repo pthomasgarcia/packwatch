@@ -1,7 +1,7 @@
 {
-  "appimage": "name,download_url,install_path",
-  "custom": "custom_checker_func,custom_checker_script,name",
-  "direct_deb": "download_url,name,package_name",
-  "github_deb": "filename_pattern_template,name,package_name,repo_name,repo_owner",
-  "script": "download_url,name,version_regex,version_url"
+  "appimage": "name,download_url,install_path,checksum_url,checksum_algorithm,sig_url,gpg_key_id,gpg_fingerprint,allow_insecure_http",
+  "custom": "custom_checker_func,custom_checker_script,name,checksum_url,checksum_algorithm,sig_url,gpg_key_id,gpg_fingerprint,allow_insecure_http",
+  "direct_deb": "download_url,name,package_name,checksum_url,checksum_algorithm,sig_url,gpg_key_id,gpg_fingerprint,allow_insecure_http",
+  "github_deb": "filename_pattern_template,name,package_name,repo_name,repo_owner,checksum_url,checksum_algorithm,sig_url,gpg_key_id,gpg_fingerprint,allow_insecure_http",
+  "script": "download_url,name,version_regex,version_url,checksum_url,checksum_algorithm,sig_url,gpg_key_id,gpg_fingerprint,allow_insecure_http"
 }

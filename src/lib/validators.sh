@@ -144,6 +144,17 @@ validators::verify_gpg_key() {
     interfaces::print_ui_line "  " "✓ " "GPG key verified: $key_id" "${COLOR_GREEN}"
     return 0
 }
+validators::extract_checksum_from_file() {
+    local checksum_file="$1"
+    local target_name="$2"
+    [[ -f "$checksum_file" ]] || return 1
+    local line
+    if [[ -n "$target_name" ]]; then
+        line=$(grep -Ei "^[0-9a-f]{64}\s+(\*|)${target_name//\./\\.}\s*$" "$checksum_file" | head -n1)
+    fi
+    line=${line:-$(head -n1 "$checksum_file")}
+    awk '{print $1}' <<<"$line"
+}
 
 # ==============================================================================
 # END OF MODULE
