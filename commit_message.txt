@@ -1,13 +1,19 @@
-refactor(core): Relocate UI printing from loggers to interfaces
+feat(security): Enforce HTTPS and add robust GPG/checksum validation
 
-This commit refactors the codebase to improve separation of concerns by moving the user-facing print function from the logging module to the interface module.
+This commit introduces major security enhancements by enforcing HTTPS by default and implementing a more secure and flexible GPG and checksum verification system.
 
-- **Relocated `print_ui_line`:**
-  - The `print_ui_line` function, responsible for printing formatted status messages to the user, has been moved from `src/lib/loggers.sh` to `src/core/interfaces.sh`.
-  - This change clarifies the distinction between internal application logging (`loggers.sh`) and user interface presentation (`interfaces.sh`).
+- **HTTPS Enforcement:**
+  - All network downloads now strictly require HTTPS unless explicitly overridden by a new `allow_insecure_http: true` flag in an application's configuration.
+  - A new `networks::require_https_or_fail` function centralizes this enforcement.
 
-- **Updated Function Calls:**
-  - All calls to the old `loggers::print_ui_line` across the application (in `updates.sh`, `packages.sh`, `networks.sh`, and `validators.sh`) have been updated to `interfaces::print_ui_line`.
+- **Robust GPG Verification:**
+  - Completely overhauled GPG verification in `gpg.sh` to use isolated, temporary keyrings for each check, preventing contamination of the user's main keyring.
+  - Added `gpg::verify_detached` to handle detached signatures and strictly validate the key's fingerprint against the one in the config.
+  - Keys can now be sourced automatically from URLs, keyservers, or WKD.
 
-- **Removed Unused Error Helper:**
-  - The redundant `errors::handle_error_and_exit` function was removed from `src/lib/errors.sh`, as its functionality is already covered by `errors::handle_error`.
+- **Expanded Checksum & Signature Support:**
+  - The configuration `schema.json` has been updated to accept new optional fields: `checksum_url`, `sig_url`, `gpg_key_id`, and `gpg_fingerprint`.
+  - Added a `validators::extract_checksum_from_file` helper to parse checksums from downloaded files (e.g., `sha256sum.txt`).
+
+- **Configuration Validation:**
+  - Updated `configs.sh` to correctly handle these new optional security fields during validation, ensuring they don't cause errors if absent.

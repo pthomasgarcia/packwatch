@@ -235,10 +235,13 @@ updates::_extract_release_checksum() {
 # ------------------------------------------------------------------------------
 
 updates::process_script_installation() {
-    local app_name="$1"
+    local -n app_config_ref=$1 # Now accepts app_config_ref directly
     local latest_version="$2"
     local download_url="$3"
-    local app_key="$4"
+
+    local app_name="${app_config_ref[name]}"
+    local app_key="${app_config_ref[app_key]}"
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}" # Get from config
 
     if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$app_key" ]]; then
         errors::handle_error "VALIDATION_ERROR" "Invalid parameters for script update flow (version, URL, or app_key missing)" "$app_name"
@@ -257,13 +260,19 @@ updates::process_script_installation() {
     fi
     TEMP_FILES+=("$temp_script_path")
 
-    updates::on_download_start "$app_name" "unknown"                                # Hook
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_script_path" ""; then # DI applied
+    updates::on_download_start "$app_name" "unknown"
+    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_script_path" "" "" "$allow_http"; then # DI applied, added allow_http
         errors::handle_error "NETWORK_ERROR" "Failed to download script" "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download script.\"}"
         return 1
     fi
     updates::on_download_complete "$app_name" "$temp_script_path" # Hook
+
+    # Perform verification after download
+    if ! updates::verify_downloaded_artifact app_config_ref "$temp_script_path" "$download_url"; then
+        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded script: '$app_name'." "$app_name"
+        return 1
+    fi
 
     if ! chmod +x "$temp_script_path"; then
         errors::handle_error "PERMISSION_ERROR" "Failed to make script executable: '$temp_script_path'" "$app_name"
@@ -326,10 +335,9 @@ updates::check_script() {
     if updates::is_needed "$installed_version" "$latest_version"; then
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
         updates::process_script_installation \
-            "${name}" \
+            app_config_ref \
             "${latest_version}" \
-            "${download_url}" \
-            "${app_key}"
+            "${download_url}"
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
@@ -606,6 +614,71 @@ updates::_verify_gpg_signature() {
         return 1
     fi
 }
+# Centralized helper to perform checksum and GPG verification for a downloaded artifact.
+# Usage: updates::verify_downloaded_artifact app_config_nameref downloaded_file_path download_url
+# Returns 0 on success (all configured verifications pass or no verifications configured), 1 on failure.
+updates::verify_downloaded_artifact() {
+    local -n app_config_ref=$1
+    local downloaded_file_path="$2"
+    local download_url="$3" # Original download URL, used for .sig default
+
+    local app_name="${app_config_ref[name]}"
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
+
+    loggers::log_message "DEBUG" "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
+
+    # 1. Checksum Verification
+    local checksum_url="${app_config_ref[checksum_url]:-}"
+    local checksum_algorithm="${app_config_ref[checksum_algorithm]:-sha256}"
+    if [[ -n "$checksum_url" ]]; then
+        interfaces::print_ui_line "  " "→ " "Downloading checksum for verification..."
+        local csf; csf=$(networks::download_text_to_cache "$checksum_url" "$allow_http") || {
+            errors::handle_error "NETWORK_ERROR" "Failed to download checksum file from '$checksum_url'" "$app_name"
+            return 1
+        }
+        local expected_checksum; expected_checksum=$(validators::extract_checksum_from_file "$csf" "$(basename "$downloaded_file_path" | cut -d'?' -f1)")
+        systems::unregister_temp_file "$csf" # Clean up checksum file
+
+        if [[ -z "$expected_checksum" ]]; then
+            errors::handle_error "VALIDATION_ERROR" "Could not extract checksum from '$checksum_url' for '$app_name'." "$app_name"
+            return 1
+        fi
+
+        loggers::log_message "DEBUG" "Performing checksum verification for '$app_name'. Expected: '$expected_checksum', Algorithm: '$checksum_algorithm'"
+        if ! validators::verify_checksum "$downloaded_file_path" "$expected_checksum" "$checksum_algorithm"; then
+            errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
+            return 1
+        fi
+    else
+        loggers::log_message "DEBUG" "No checksum_url configured for '$app_name'. Skipping checksum verification."
+    fi
+
+    # 2. GPG Signature Verification
+    local gpg_key_id="${app_config_ref[gpg_key_id]:-}"
+    local gpg_fingerprint="${app_config_ref[gpg_fingerprint]:-}"
+    local sig_url_override="${app_config_ref[sig_url]:-}"
+
+    if [[ -n "$gpg_key_id" ]] && [[ -n "$gpg_fingerprint" ]]; then
+        local sig_download_url="${sig_url_override:-${download_url}.sig}"
+        interfaces::print_ui_line "  " "→ " "Downloading signature for verification..."
+        local sigf; sigf=$(networks::download_text_to_cache "$sig_download_url" "$allow_http") || {
+            errors::handle_error "NETWORK_ERROR" "Failed to download signature file from '$sig_download_url'" "$app_name"
+            return 1
+        }
+
+        loggers::log_message "DEBUG" "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
+        if ! gpg::verify_detached "$downloaded_file_path" "$sigf" "$gpg_key_id" "$gpg_fingerprint" "user_keyring" ""; then
+            errors::handle_error "GPG_ERROR" "GPG signature verification failed for '$app_name'." "$app_name"
+            systems::unregister_temp_file "$sigf" # Clean up signature file
+            return 1
+        fi
+        systems::unregister_temp_file "$sigf" # Clean up signature file
+    else
+        loggers::log_message "DEBUG" "No gpg_key_id or gpg_fingerprint configured for '$app_name'. Skipping GPG verification."
+    fi
+
+    return 0
+}
 
 # Extracted helper for checksum-based update detection for DEB files
 updates::_compare_deb_checksums() {
@@ -654,6 +727,7 @@ updates::_prepare_deb_file() {
     local deb_file_to_install="$3"
     local expected_checksum="$4"
     local checksum_algorithm="$5"
+    local allow_http="${6:-0}" # New parameter
 
     local final_deb_path
     if [[ -n "$deb_file_to_install" && -f "$deb_file_to_install" ]]; then
@@ -693,16 +767,17 @@ updates::_prepare_deb_file() {
 # ------------------------------------------------------------------------------
 
 updates::process_deb_package() {
-    local app_name="$1"
-    local app_key="$2"
-    local gpg_key_id="$3"
-    local gpg_fingerprint="$4"
-    local deb_filename_template="$5"
-    local latest_version="$6"
-    local download_url="$7"
-    local deb_file_to_install="${8:-}"
-    local expected_checksum="${9:-}"
-    local checksum_algorithm="${10:-sha256}"
+    local -n app_config_ref=$1 # Now accepts app_config_ref directly
+    local deb_filename_template="$2"
+    local latest_version="$3"
+    local download_url="$4"
+    local deb_file_to_install="${5:-}"
+
+    local app_name="${app_config_ref[name]}"
+    local app_key="${app_config_ref[app_key]}"
+    local expected_checksum="${app_config_ref[checksum_url]:-}" # Get from config
+    local checksum_algorithm="${app_config_ref[checksum_algorithm]:-sha256}" # Get from config
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}" # Get from config
 
     if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url"; then
         errors::handle_error "VALIDATION_ERROR" "Invalid parameters for DEB update flow" "$app_name"
@@ -710,22 +785,13 @@ updates::process_deb_package() {
         return 1
     fi
 
-    # Create a local config array for GPG verification helper
-    declare -A local_app_config=(
-        ["name"]="$app_name"
-        ["app_key"]="$app_key"
-        ["gpg_key_id"]="$gpg_key_id"
-        ["gpg_fingerprint"]="$gpg_fingerprint"
-    )
-
     # Prepare DEB file
     local final_deb_path
-    if ! final_deb_path=$(updates::_prepare_deb_file "$app_name" "$download_url" "$deb_file_to_install" "$expected_checksum" "$checksum_algorithm"); then return 1; fi
+    if ! final_deb_path=$(updates::_prepare_deb_file "$app_name" "$download_url" "$deb_file_to_install" "$expected_checksum" "$checksum_algorithm" "$allow_http"); then return 1; fi # Pass allow_http
 
-    # Handle GPG verification
-    if ! updates::_handle_gpg_verification local_app_config "$final_deb_path" "$download_url"; then
-        loggers::log_message "ERROR" "GPG verification failed for $app_name. Aborting installation."
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"GPG_ERROR\", \"message\": \"GPG verification failed.\"}"
+    # Perform centralized verification
+    if ! updates::verify_downloaded_artifact app_config_ref "$final_deb_path" "$download_url"; then
+        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded DEB package: '$app_name'." "$app_name"
         return 1
     fi
 
@@ -794,16 +860,11 @@ updates::check_github_deb() {
         expected_checksum=$(updates::_extract_release_checksum "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name")
 
         updates::process_deb_package \
-            "$name" \
-            "$app_key" \
-            "${app_config_ref[gpg_key_id]:-}" \
-            "${app_config_ref[gpg_fingerprint]:-}" \
+            app_config_ref \
             "$filename_pattern_template" \
             "$latest_version" \
             "$download_url" \
-            "" \
-            "$expected_checksum" \
-            "sha256"
+            "" # deb_file_to_install (empty for github_deb)
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
@@ -851,13 +912,21 @@ updates::check_direct_deb() {
     base_filename_from_url=$(systems::sanitize_filename "$base_filename_from_url")
     if ! temp_download_file=$(systems::create_temp_file "${base_filename_from_url}"); then return 1; fi
 
-    updates::on_download_start "$name" "unknown"                                      # Hook
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_download_file" ""; then # DI applied
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
+
+    updates::on_download_start "$name" "unknown"
+    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_download_file" "" "" "$allow_http"; then # DI applied, added allow_http
         errors::handle_error "NETWORK_ERROR" "Failed to download package for '$name'." "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download package.\"}"
         return 1
     fi
     updates::on_download_complete "$name" "$temp_download_file" # Hook
+
+    # Perform verification after download
+    if ! updates::verify_downloaded_artifact app_config_ref "$temp_download_file" "$download_url"; then
+        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded package: '$name'." "$name"
+        return 1
+    fi
 
     local downloaded_version
     downloaded_version=$(versions::normalize "$("$UPDATES_EXTRACT_DEB_VERSION_IMPL" "$temp_download_file")") # DI applied
@@ -897,16 +966,11 @@ updates::check_direct_deb() {
     if [[ "$needs_update" -eq 1 ]]; then
         interfaces::print_ui_line "  " "⬆ " "New version available: $downloaded_version" "${COLOR_YELLOW}"
         updates::process_deb_package \
-            "$name" \
-            "$app_key" \
-            "${app_config_ref[gpg_key_id]:-}" \
-            "${app_config_ref[gpg_fingerprint]:-}" \
+            app_config_ref \
             "$deb_filename_template" \
             "$downloaded_version" \
             "$download_url" \
-            "$temp_download_file" \
-            "" \
-            "sha256"
+            "$temp_download_file"
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
@@ -926,9 +990,10 @@ updates::process_appimage_file() {
     local latest_version="$2"
     local download_url="$3"
     local install_target_full_path="$4"
-    local expected_checksum="$5"
-    local checksum_algorithm="${6:-sha256}"
-    local app_key="$7"
+    local app_key="$5" # Reordered app_key
+    local expected_checksum="${6:-}" # Reordered expected_checksum
+    local checksum_algorithm="${7:-sha256}" # Reordered checksum_algorithm
+    local allow_http="${8:-0}" # New parameter
 
     if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$install_target_full_path" ]] || [[ -z "$app_key" ]]; then
         errors::handle_error "VALIDATION_ERROR" "Invalid parameters for AppImage update flow (version, URL, install path, or app_key missing)" "$app_name"
@@ -947,13 +1012,21 @@ updates::process_appimage_file() {
     fi
     TEMP_FILES+=("$temp_appimage_path")
 
-    updates::on_download_start "$app_name" "unknown"                                                                          # Hook
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "$expected_checksum" "$checksum_algorithm"; then # DI applied
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}" # Get from config
+
+    updates::on_download_start "$app_name" "unknown"
+    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "$expected_checksum" "$checksum_algorithm" "$allow_http"; then # DI applied, added allow_http
         errors::handle_error "NETWORK_ERROR" "Failed to download AppImage" "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download AppImage.\"}"
         return 1
     fi
     updates::on_download_complete "$app_name" "$temp_appimage_path" # Hook
+
+    # Perform verification after download
+    if ! updates::verify_downloaded_artifact app_config_ref "$temp_appimage_path" "$download_url"; then
+        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded AppImage: '$app_name'." "$app_name"
+        return 1
+    fi
 
     if ! chmod +x "$temp_appimage_path"; then
         errors::handle_error "PERMISSION_ERROR" "Failed to make AppImage executable: '$temp_appimage_path'" "$app_name"
@@ -1102,9 +1175,10 @@ updates::check_appimage() {
             "${latest_version}" \
             "${download_url}" \
             "${appimage_file_path_current}" \
-            "$expected_checksum" \
-            "$checksum_algorithm" \
-            "$app_key"
+            "$app_key" \
+            "${app_config_ref[checksum_url]:-}" \
+            "${app_config_ref[checksum_algorithm]:-sha256}" \
+            "${app_config_ref[allow_insecure_http]:-0}"
     elif [[ "$installed_version" == "0.0.0" && "$latest_version" != "0.0.0" ]]; then
         interfaces::print_ui_line "  " "⬆ " "App not installed. Installing $latest_version." "${COLOR_YELLOW}"
         updates::process_appimage_file \
@@ -1112,9 +1186,10 @@ updates::check_appimage() {
             "${latest_version}" \
             "${download_url}" \
             "${appimage_file_path_current}" \
-            "$expected_checksum" \
-            "$checksum_algorithm" \
-            "$app_key"
+            "$app_key" \
+            "${app_config_ref[checksum_url]:-}" \
+            "${app_config_ref[checksum_algorithm]:-sha256}" \
+            "${app_config_ref[allow_insecure_http]:-0}"
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
@@ -1281,7 +1356,8 @@ updates::handle_custom_check() {
     # Only export _public_ interfaces of other modules used by custom checkers
     while IFS= read -r func; do
         export -f "$func" 2>/dev/null || true
-    done < <(declare -F | awk '{print $3}' | grep -E '^(networks|packages|versions|validators|systems)::')
+    done < <(declare -F | awk '{print $3}' | grep -E '^(networks|packages|versions|validators|systems|updates)::') # Added updates
+    export -f updates::verify_downloaded_artifact # Explicitly export the new function
 
     # Always show "Checking ..." at the start
     interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$app_display_name${FORMAT_RESET} for latest version..."
@@ -1343,14 +1419,11 @@ updates::handle_custom_check() {
             gpg_fingerprint_from_output=$(echo "$custom_checker_output" | jq -r '.gpg_fingerprint')
 
             updates::process_deb_package \
-                "${app_config_ref[name]}" \
-                "${app_config_ref[app_key]}" \
-                "$gpg_key_id_from_output" \
-                "$gpg_fingerprint_from_output" \
+                app_config_ref \
                 "${app_config_ref[deb_filename_template]:-}" \
                 "$latest_version" \
                 "$download_url_from_output" \
-                "" "" "sha256"
+                "" # deb_file_to_install (empty for custom deb)
             ;;
         "appimage")
             local download_url_from_output install_target_path_from_output
@@ -1362,9 +1435,10 @@ updates::handle_custom_check() {
                 "${latest_version}" \
                 "${download_url_from_output}" \
                 "${install_target_path_from_output}" \
-                "" \
-                "sha256" \
-                "${app_config_ref[app_key]}"
+                "${app_config_ref[app_key]}" \
+                "${app_config_ref[checksum_url]:-}" \
+                "${app_config_ref[checksum_algorithm]:-sha256}" \
+                "${app_config_ref[allow_insecure_http]:-0}"
             ;;
         "flatpak")
             local flatpak_app_id_from_output
