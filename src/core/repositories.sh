@@ -140,7 +140,9 @@ repositories::find_asset_checksum() {
     if networks::download_file "$checksum_file_url" "$temp_checksum_file" ""; then
         local checksum_file_content
         checksum_file_content=$(cat "$temp_checksum_file")
-        extracted_checksum=$(echo "$checksum_file_content" | grep -oP "^\s*[0-9a-fA-F]+\s+[\*]?${target_filename}\s*$" | awk '{print $1}' | head -n1)
+        extracted_checksum=$(echo "$checksum_file_content" \
+            | grep -Ei "^[0-9a-f]{64}\s+(\*|)${target_filename//\./\\.}\s*$" \
+            | awk '{print $1}' | head -n1)
     else
         loggers::log_message "WARN" "Failed to download checksum file from '$checksum_file_url'"
     fi

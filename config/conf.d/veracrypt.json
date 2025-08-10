@@ -7,7 +7,8 @@
     "package_name": "veracrypt",
     "custom_checker_script": "veracrypt.sh",
     "custom_checker_func": "check_veracrypt",
-    "gpg_key_id": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
-    "gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE"
+    "gpg_key_id": "680D16DE",
+    "gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
+    "allow_insecure_http": 0
   }
 }

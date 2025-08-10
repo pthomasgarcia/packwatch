@@ -1,19 +1,15 @@
-feat(security): Enforce HTTPS and add robust GPG/checksum validation
+refactor(core): Centralize artifact verification and streamline update handlers
 
-This commit introduces major security enhancements by enforcing HTTPS by default and implementing a more secure and flexible GPG and checksum verification system.
+This commit introduces a major architectural improvement by centralizing all post-download security checks into a single function and refactoring the update handlers to be more robust and maintainable.
 
-- **HTTPS Enforcement:**
-  - All network downloads now strictly require HTTPS unless explicitly overridden by a new `allow_insecure_http: true` flag in an application's configuration.
-  - A new `networks::require_https_or_fail` function centralizes this enforcement.
+- **Centralized Verification Function:**
+  - Created a new `updates::verify_downloaded_artifact` function that handles all checksum and GPG signature validation for any downloaded file.
+  - This function is now called by all update workflows (`deb`, `appimage`, `script`) immediately after download, ensuring consistent and secure verification.
 
-- **Robust GPG Verification:**
-  - Completely overhauled GPG verification in `gpg.sh` to use isolated, temporary keyrings for each check, preventing contamination of the user's main keyring.
-  - Added `gpg::verify_detached` to handle detached signatures and strictly validate the key's fingerprint against the one in the config.
-  - Keys can now be sourced automatically from URLs, keyservers, or WKD.
+- **Streamlined Update Handlers:**
+  - Refactored all `process_*` and `check_*` functions in `updates.sh` to accept the application's configuration via a nameref (`local -n`).
+  - This simplifies the function signatures and allows them to directly access all necessary configuration, including new security flags like `allow_insecure_http` and `checksum_url`.
 
-- **Expanded Checksum & Signature Support:**
-  - The configuration `schema.json` has been updated to accept new optional fields: `checksum_url`, `sig_url`, `gpg_key_id`, and `gpg_fingerprint`.
-  - Added a `validators::extract_checksum_from_file` helper to parse checksums from downloaded files (e.g., `sha256sum.txt`).
-
-- **Configuration Validation:**
-  - Updated `configs.sh` to correctly handle these new optional security fields during validation, ensuring they don't cause errors if absent.
+- **Improved Workflow:**
+  - The verification logic is now cleanly separated from the download and installation steps, improving code clarity and enforcing a secure "download, then verify, then install" workflow.
+  - Custom checkers can now also use the new centralized verification function, promoting code reuse and security.
