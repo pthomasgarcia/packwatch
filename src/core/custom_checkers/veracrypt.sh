@@ -31,7 +31,7 @@ check_veracrypt() {
     local installed_version
     installed_version=$(packages::get_installed_version "$app_key")
 
-    local url="https://veracrypt.fr/en/Downloads.html"
+    local url="https://veracrypt.io/en/Downloads.html"
     local page_content_path # This will now be a file path
     if ! page_content_path=$(networks::fetch_cached_data "$url" "html"); then
         errors::handle_error "CUSTOM_CHECKER_ERROR" "Failed to fetch download page for $name." "veracrypt"
@@ -90,6 +90,13 @@ check_veracrypt() {
     local output_status
     output_status=$(checker_utils::determine_status "$installed_version" "$latest_version")
 
+    # Extract PGP signature URL for the x86_64 AppImage from the downloads page
+    local escaped_ver
+    escaped_ver=$(printf '%s' "$latest_version" | sed 's/\./\\./g')
+    local sig_url
+    sig_url=$(echo "$page_content" | grep -oP 'href="([^"]*VeraCrypt-'"$escaped_ver"'-x86_64\.AppImage\.sig)"' | head -n1 | sed -E 's/href="([^"]+)"/\1/')
+    sig_url=$(networks::decode_url "$sig_url")
+
     jq -n \
         --arg status "$output_status" \
         --arg latest_version "$latest_version" \
@@ -99,6 +106,7 @@ check_veracrypt() {
         --arg gpg_fingerprint "$gpg_fingerprint" \
         --arg source "Official Download Page" \
         --arg error_type "NONE" \
+        --arg sig_url "$sig_url" \
         '{
              "status": $status,
              "latest_version": $latest_version,
@@ -107,7 +115,8 @@ check_veracrypt() {
              "gpg_key_id": $gpg_key_id,
              "gpg_fingerprint": $gpg_fingerprint,
              "source": $source,
-             "error_type": $error_type
+             "error_type": $error_type,
+             "sig_url": $sig_url
            }'
 
     return 0

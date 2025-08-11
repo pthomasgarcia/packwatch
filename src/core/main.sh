@@ -28,6 +28,7 @@ CORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Define the base path for the init phase modules
 INIT_DIR="$CORE_DIR/init"
 readonly CORE_DIR INIT_DIR
+# main.sh (or your loader)
 
 # ------------------------------------------------------------------------------
 # Phase 0: Bootloader (Essential foundation for logging and error handling)

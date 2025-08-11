@@ -47,7 +47,26 @@ done
 
 # Load GPG if any configured app requires it
 if [[ $_packwatch_need_gpg -eq 1 ]]; then
-  source "$CORE_DIR/../lib/gpg.sh"
+  # Derive CORE_DIR if not already set.
+  # extensions.sh lives at: .../src/core/init/extensions.sh
+  # => one level up from this file is .../src/core
+  if [[ -z "${CORE_DIR:-}" ]]; then
+    _packwatch_this_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    CORE_DIR="$(cd -- "${_packwatch_this_dir}/.." && pwd)"
+  fi
+
+  # Single authoritative location for gpg.sh relative to CORE_DIR
+  _packwatch_gpg_path="${CORE_DIR}/../lib/gpg.sh"
+  if [[ -f "$_packwatch_gpg_path" ]]; then
+    # shellcheck source=/dev/null
+    source "$_packwatch_gpg_path"
+  else
+    loggers::log_message "ERROR" \
+      "gpg.sh not found at expected path: ${_packwatch_gpg_path} (CORE_DIR=${CORE_DIR})" \
+      "extensions"
+  fi
+
+  unset _packwatch_this_dir _packwatch_gpg_path
 fi
 
 # Load only the specific custom checker modules that are needed
@@ -81,6 +100,3 @@ done
 # --- Cleanup local variables to avoid leaking into global namespace ---
 # Variables prefixed with _packwatch_ to reduce risk of collision
 unset _packwatch_need_gpg _packwatch_needed_custom_checkers _packwatch_app_key _packwatch_cfg _packwatch_checker_script _packwatch_checker_path
-
-# Any module sourced by this phase should implement an idempotent guard
-# (e.g., PACKWATCH_MODULE_LOADED).

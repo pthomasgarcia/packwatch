@@ -116,6 +116,144 @@ repositories::find_asset_url() {
     return 1
 }
 
+# Find and extract a checksum for a given asset from a release's body text.
+# Usage: repositories::extract_checksum_from_release_body "$release_json_path" "$checksum_pattern" "$app_name" "$checksum_algorithm"
+repositories::extract_checksum_from_release_body() {
+    local release_json_path="$1"
+    local checksum_pattern="$2"
+    local app_name="${3:-Unknown}"
+    local checksum_algorithm="${4:-sha256}"
+    local expected_checksum=""
+
+    if [[ -z "$checksum_pattern" ]]; then
+        loggers::log_message "DEBUG" "No checksum_pattern provided for '$app_name'. Skipping body checksum extraction."
+        echo ""
+        return 0
+    fi
+
+    if [[ ! -f "$release_json_path" ]]; then
+        loggers::log_message "ERROR" "Release JSON file not found: '$release_json_path' (app: $app_name)"
+        echo ""
+        return 1
+    fi
+
+    # Extract the release body from the JSON file
+    local release_body
+    release_body=$(jq -r '.body // ""' "$release_json_path" 2>/dev/null)
+    if [[ $? -ne 0 || -z "$release_body" ]]; then
+        loggers::log_message "WARN" "Failed to extract release body from JSON for '$app_name'."
+        echo ""
+        return 0
+    fi
+
+    # Normalize line endings
+    release_body=$(printf '%s' "$release_body" | tr -d '\r')
+
+    # Map algorithm -> valid length and header markers (case-insensitive match)
+    local valid_length header_markers=()
+    case "${checksum_algorithm,,}" in
+        sha512)
+            valid_length=128
+            header_markers=("SHA512SUMS" "SHA-512" "SHA512")
+            ;;
+        sha256|*)
+            checksum_algorithm="sha256"
+            valid_length=64
+            header_markers=("SHA256SUMS" "SHA-256" "SHA256")
+            ;;
+    esac
+
+    # Escape pattern for grep -E anchoring (regex-safe)
+    local regex_safe_pattern
+    regex_safe_pattern=$(printf '%s' "$checksum_pattern" | sed 's/[.[\*^$+?{|}()\\]/\\&/g')
+
+    # Helper: pick first matching line (by length + filename) from a blob
+    _pick_matching_line() {
+        # Args: 1=blob
+        grep -E "^[0-9a-fA-F]{${valid_length}}[[:space:]]+(\*|)?${regex_safe_pattern}([[:space:]]|\$)" <<<"$1" | head -n1
+    }
+
+    # Try to capture the algorithm-specific checksum code block
+    local checksum_block="" in_correct_section=0 in_code_block=0
+    while IFS= read -r line; do
+        # case-insensitive header detect
+        local UL=${line^^}
+        if (( in_correct_section == 0 )); then
+            for mk in "${header_markers[@]}"; do
+                if [[ "$UL" == *"$mk"* ]]; then
+                    in_correct_section=1
+                    break
+                fi
+            done
+            [[ $in_correct_section -eq 1 ]] && continue
+        fi
+
+        # enter/exit code block (support ``` and ```lang)
+        if (( in_correct_section == 1 )) && [[ $line == \`\`\`* ]]; then
+            if (( in_code_block == 0 )); then
+                in_code_block=1
+                continue
+            else
+                # end of the first code block after the header
+                break
+            fi
+        fi
+
+        # capture inside code block
+        if (( in_code_block == 1 )); then
+            checksum_block+="$line"$'\n'
+        fi
+    done <<< "$release_body"
+
+    # 1) Prefer match from the captured block (right algorithm)
+    local matching_line=""
+    if [[ -n "$checksum_block" ]]; then
+        matching_line=$(_pick_matching_line "$checksum_block")
+    fi
+
+    # 2) If not found, search ANYWHERE in the body, but still enforce hash length + filename
+    if [[ -z "$matching_line" ]]; then
+        matching_line=$(_pick_matching_line "$release_body")
+    fi
+
+    # 3) If still not found, scan each fenced block as a last resort
+    if [[ -z "$matching_line" ]]; then
+        local block="" fence=0
+        while IFS= read -r line; do
+            if [[ $line == \`\`\`* ]]; then
+                if (( fence == 0 )); then
+                    fence=1; block=""
+                else
+                    # close block, try match
+                    local m; m=$(_pick_matching_line "$block")
+                    if [[ -n "$m" ]]; then matching_line="$m"; break; fi
+                    fence=0; block=""
+                fi
+                continue
+            fi
+            (( fence == 1 )) && block+="$line"$'\n'
+        done <<< "$release_body"
+    fi
+
+    if [[ -n "$matching_line" ]]; then
+        # Extract checksum (first field) and validate
+        expected_checksum=$(awk '{print $1}' <<<"$matching_line" | tr -d '[:space:]')
+        if [[ -n "$expected_checksum" ]] \
+           && [[ ${#expected_checksum} -eq $valid_length ]] \
+           && [[ "$expected_checksum" =~ ^[0-9a-fA-F]+$ ]]; then
+            echo "$expected_checksum"
+            return 0
+        fi
+        loggers::log_message "WARN" "Extracted checksum for '$app_name' has invalid format/length for $checksum_algorithm."
+        echo ""
+        return 0
+    else
+        loggers::log_message "WARN" "No line found for '$checksum_pattern' with $checksum_algorithm in release body for '$app_name'."
+        echo ""
+        return 0
+    fi
+}
+
 # Find and extract a checksum for a given asset from a release.
 # Usage: repositories::find_asset_checksum "$release_json" "filename"
 repositories::find_asset_checksum() {

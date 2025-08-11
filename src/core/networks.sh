@@ -254,15 +254,17 @@ networks::download_file() {
         return 1
     fi
 
-    if [[ -n "$expected_checksum" ]]; then
-        loggers::log_message "DEBUG" "Attempting checksum verification for '$dest_path' with expected: '$expected_checksum', algorithm: '$checksum_algorithm'"
-        if ! validators::verify_checksum "$dest_path" "$expected_checksum" "$checksum_algorithm"; then
-            errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for downloaded file: '$dest_path'"
-            return 1
-        fi
-    else
-        loggers::log_message "DEBUG" "No expected checksum provided for '$dest_path'. Skipping verification."
-    fi
+    # Checksum verification is now handled in updates::verify_downloaded_artifact
+    # Keeping this commented out for future reference if needed.
+    # if [[ -n "$expected_checksum" ]]; then
+    #     loggers::log_message "DEBUG" "Attempting checksum verification for '$dest_path' with expected: '$expected_checksum', algorithm: '$checksum_algorithm'"
+    #     if ! validators::verify_checksum "$dest_path" "$expected_checksum" "$checksum_algorithm"; then
+    #         errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for downloaded file: '$dest_path'"
+    #         return 1
+    #     fi
+    # else
+    #     loggers::log_message "DEBUG" "No expected checksum provided for '$dest_path'. Skipping verification."
+    # fi
 
     return 0
 }

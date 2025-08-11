@@ -7,6 +7,9 @@
         "package_name": "fastfetch",
         "repo_owner": "fastfetch-cli",
         "repo_name": "fastfetch",
-        "filename_pattern_template": "fastfetch-linux-amd64.deb"
+        "filename_pattern_template": "fastfetch-linux-amd64.deb",
+        "checksum_algorithm": "sha256",
+        "checksum_pattern": "fastfetch-linux",
+        "allow_insecure_http": 0
     }
 }
