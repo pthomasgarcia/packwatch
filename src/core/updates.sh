@@ -245,7 +245,8 @@ updates::_extract_release_checksum() {
             "$checksum_algorithm")
     else
         local download_filename
-        download_filename=$(printf "%s" "$filename_template" "$version")
+        # shellcheck disable=SC2059
+		download_filename=$(printf "$filename_template" "$version")
         expected_checksum=$(repositories::find_asset_checksum \
             "$release_json" \
             "$download_filename" \
@@ -456,20 +457,23 @@ declare -a PRE_CHECK_HOOKS
 declare -a POST_CHECK_HOOKS
 declare -a PRE_INSTALL_HOOKS
 declare -a POST_INSTALL_HOOKS
+declare -a POST_VERIFY_HOOKS
 declare -a ERROR_HOOKS
 
 updates::register_hook() {
-    local hook_type="$1"
-    local function_name="$2"
-    case "$hook_type" in
-    "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
-    "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
+  local hook_type="$1"
+  local function_name="$2"
+  case "$hook_type" in
+    "pre_check")   PRE_CHECK_HOOKS+=("$function_name") ;;
+    "post_check")  POST_CHECK_HOOKS+=("$function_name") ;;
     "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
     "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
-    "error") ERROR_HOOKS+=("$function_name") ;;
+    "error")       ERROR_HOOKS+=("$function_name") ;;
+    "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;  # ← add this line
     *) loggers::log_message "WARN" "Unknown hook type: $hook_type" ;;
-    esac
+  esac
 }
+
 
 updates::trigger_hooks() {
     local hooks_array_name="$1" # Name of the array variable
@@ -569,6 +573,33 @@ updates::verify_downloaded_artifact() {
 
     loggers::log_message "DEBUG" "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
 
+    # Emit a post-verify hook payload
+    # $1=kind ("checksum"|"signature"), $2=success (0/1), $3=expected, $4=actual, $5=algorithm (or "pgp")
+    _emit_verify_hook() {
+        local _kind="$1" _ok="$2" _expected="$3" _actual="$4" _algo="$5"
+        local _success_json
+        _success_json=$( [[ "$_ok" -eq 1 ]] && echo true || echo false )
+        local _details
+        _details=$(jq -n \
+            --arg phase "verify" \
+            --arg kind "$_kind" \
+            --arg algorithm "$_algo" \
+            --arg expected "$_expected" \
+            --arg actual "$_actual" \
+            --arg file "$downloaded_file_path" \
+            --arg url  "$download_url" \
+            --arg key_id "${gpg_key_id:-}" \
+            --arg fingerprint "${gpg_fingerprint:-}" \
+            --arg app "$app_name" \
+            --arg time "$(date -Is)" \
+            --arg source "updates::verify_downloaded_artifact" \
+            --argjson success "$_success_json" \
+            '{phase:$phase, kind:$kind, success:$success, algorithm:$algorithm,
+              expected:$expected, actual:$actual, file:$file, url:$url,
+              key_id:$key_id, fingerprint:$fingerprint, app:$app, time:$time, source:$source}')
+        updates::trigger_hooks POST_VERIFY_HOOKS "$app_name" "$_details"
+    }
+
     # -----------------------------
     # 1) CHECKSUM VERIFICATION (optional)
     # -----------------------------
@@ -581,8 +612,10 @@ updates::verify_downloaded_artifact() {
             local checksum_url="${app_config_ref[checksum_url]:-}"
             if [[ -n "$checksum_url" ]]; then
                 interfaces::print_ui_line "  " "→ " "Downloading checksum for verification..."
-                local csf; csf=$(networks::download_text_to_cache "$checksum_url" "$allow_http") || {
+                local csf
+                csf=$(networks::download_text_to_cache "$checksum_url" "$allow_http") || {
                     errors::handle_error "NETWORK_ERROR" "Failed to download checksum file from '$checksum_url'" "$app_name"
+                    _emit_verify_hook "checksum" 0 "<download-error>" "<no-hash>" "${checksum_algorithm,,}"
                     return 1
                 }
                 expected_checksum=$(validators::extract_checksum_from_file "$csf" "$(basename "$downloaded_file_path" | cut -d'?' -f1)")
@@ -603,13 +636,15 @@ updates::verify_downloaded_artifact() {
 
             if [[ "$expected_checksum" == "$actual_checksum" ]]; then
                 interfaces::print_ui_line "  " "✓ " "Checksum verified." "${COLOR_GREEN}"
+                _emit_verify_hook "checksum" 1 "$expected_checksum" "$actual_checksum" "${checksum_algorithm,,}"
             else
                 interfaces::print_ui_line "  " "✗ " "Checksum verification FAILED for '$app_name'." "${COLOR_RED}"
+                _emit_verify_hook "checksum" 0 "$expected_checksum" "$actual_checksum" "${checksum_algorithm,,}"
                 errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
                 return 1
             fi
         fi
-        # If no checksum found/configured and skip_checksum!=1, stay silent (no warning spam).
+        # If no checksum found/configured and skip_checksum!=1, remain silent to avoid noise.
     fi
 
     # -----------------------------
@@ -622,45 +657,51 @@ updates::verify_downloaded_artifact() {
     if [[ -n "$gpg_key_id" ]] && [[ -n "$gpg_fingerprint" ]]; then
         local sig_download_url="${sig_url_override:-${download_url}.sig}"
         interfaces::print_ui_line "  " "→ " "Downloading signature for verification..."
-        local sigf; sigf=$(networks::download_text_to_cache "$sig_download_url" "$allow_http") || {
+        local sigf
+        sigf=$(networks::download_text_to_cache "$sig_download_url" "$allow_http") || {
+            interfaces::print_ui_line "  " "✗ " "Signature download failed." "${COLOR_RED}"
+            _emit_verify_hook "signature" 0 "$gpg_fingerprint" "<download-error>" "pgp"
             errors::handle_error "NETWORK_ERROR" "Failed to download signature file from '$sig_download_url'" "$app_name"
             return 1
         }
 
         # Ensure GPG helpers are loaded (idempotent)
-		if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
-			# Derive CORE_DIR if missing. updates.sh lives in .../src/core
-			if [[ -z "${CORE_DIR:-}" ]]; then
-				local _upd_this_dir
-				_upd_this_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-				CORE_DIR="$_upd_this_dir"
-				unset _upd_this_dir
-			fi
-			local _gpg_path="${CORE_DIR}/../lib/gpg.sh"
-			if [[ -f "$_gpg_path" ]]; then
-				# shellcheck source=/dev/null
-				source "$_gpg_path"
-			fi
-			unset _gpg_path
-		fi
+        if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
+            if [[ -z "${CORE_DIR:-}" ]]; then
+                local _upd_this_dir
+                _upd_this_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+                CORE_DIR="$_upd_this_dir"
+                unset _upd_this_dir
+            fi
+            local _gpg_path="${CORE_DIR}/../lib/gpg.sh"
+            if [[ -f "$_gpg_path" ]]; then
+                # shellcheck source=/dev/null
+                source "$_gpg_path"
+            fi
+            unset _gpg_path
+        fi
 
-		# Hard fail if the function is still missing
-		if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
-			systems::unregister_temp_file "$sigf"
-			errors::handle_error "GPG_ERROR" "Missing gpg functions (gpg.sh not sourced)." "$app_name"
-			return 1
-		fi
+        # Hard fail if the function is still missing
+        if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
+            systems::unregister_temp_file "$sigf"
+            interfaces::print_ui_line "  " "✗ " "Missing GPG helpers." "${COLOR_RED}"
+            _emit_verify_hook "signature" 0 "$gpg_fingerprint" "<no-helper>" "pgp"
+            errors::handle_error "GPG_ERROR" "Missing gpg functions (gpg.sh not sourced)." "$app_name"
+            return 1
+        fi
 
         # Verify signature
         loggers::log_message "DEBUG" "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
         if ! gpg::verify_detached "$downloaded_file_path" "$sigf" "$gpg_key_id" "$gpg_fingerprint" "user_keyring" ""; then
             systems::unregister_temp_file "$sigf"
-            errors::handle_error "GPG_ERROR" "GPG signature verification failed for '$app_name'." "$app_name"
             interfaces::print_ui_line "  " "✗ " "Signature verification FAILED." "${COLOR_RED}"
+            _emit_verify_hook "signature" 0 "$gpg_fingerprint" "<no-hash>" "pgp"
+            errors::handle_error "GPG_ERROR" "GPG signature verification failed for '$app_name'." "$app_name"
             return 1
         fi
         systems::unregister_temp_file "$sigf"
         interfaces::print_ui_line "  " "✓ " "Signature verified." "${COLOR_GREEN}"
+        _emit_verify_hook "signature" 1 "$gpg_fingerprint" "<no-hash>" "pgp"
     else
         loggers::log_message "DEBUG" "No gpg_key_id or gpg_fingerprint configured for '$app_name'. Skipping GPG verification."
     fi
@@ -1006,7 +1047,7 @@ updates::process_appimage_file() {
     local allow_http="${app_config_ref[allow_insecure_http]:-0}" # Get from config
 
     updates::on_download_start "$app_name" "unknown"
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "$expected_checksum" "$checksum_algorithm" "$allow_http"; then # DI applied, added allow_http
+    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "" "" "$allow_http"; then # DI applied, added allow_http
         errors::handle_error "NETWORK_ERROR" "Failed to download AppImage" "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download AppImage.\"}"
         return 1

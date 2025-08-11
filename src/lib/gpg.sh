@@ -87,9 +87,10 @@ gpg::verify_detached() {
         [[ "$home" != "${ORIGINAL_HOME:-$HOME}/.gnupg" ]] && rm -rf "$home"
         errors::handle_error "GPG_ERROR" "Signature verification failed"; return 1; }
     [[ "$home" != "${ORIGINAL_HOME:-$HOME}/.gnupg" ]] && rm -rf "$home"
-    interfaces::print_ui_line "  " "✓ " "Signature verified." "${COLOR_GREEN}"
+  
     return 0
 }
+
 # GPG module; prompts the user to import and verify a GPG key if not already present.
 # Args:
 #   $1: key_id (string) - The GPG key ID to import.

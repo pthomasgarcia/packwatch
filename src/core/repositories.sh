@@ -47,7 +47,6 @@ repositories::parse_version_from_release() {
     local app_name="$2"
 
     local raw_tag_name
-    local raw_tag_name
     raw_tag_name=$(systems::get_json_value "$release_json_path" '.tag_name' "$app_name")
     if [[ $? -ne 0 ]]; then
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get raw tag name.\"}"
@@ -71,33 +70,35 @@ repositories::parse_version_from_release() {
 }
 
 # Find a specific asset's download URL from a release JSON.
-# Usage: repositories::find_asset_url "$release_json" "pattern" "AppName"
+# Usage: repositories::find_asset_url "$release_json_path" "pattern" "AppName"
 repositories::find_asset_url() {
-    local release_json_path="$1" # Now expects a file path
+    local release_json_path="$1" # Path to a single release JSON object
     local filename_pattern="$2"
     local app_name="$3"
 
-    # First, try exact string matching (for patterns like "fastfetch-linux-amd64.deb")
-    local url
-    url=$(systems::get_json_value "$release_json_path" ".assets[] | select(.name == \"${filename_pattern}\") | .browser_download_url" "$app_name" 2>/dev/null)
-
-    if [[ -n "$url" ]]; then
-        if validators::check_https_url "$url"; then
-            echo "$url"
-            return 0
-        else
-            errors::handle_error "SECURITY_ERROR" "Rejected insecure HTTP URL for '${filename_pattern}': '$url'" "$app_name"
-            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"SECURITY_ERROR\", \"message\": \"Insecure HTTP URL rejected.\"}"
-            return 1
-        fi
-    fi
-
-    # If exact match fails, treat as regex pattern (for patterns with placeholders like "ghostty_%s.ppa2_amd64_25.04.deb")
-    # Escape special regex characters except %s which we'll handle as a placeholder
+    # Build a regex from the pattern:
+    # - Escape regex meta characters
+    # - Replace %s with .*
     local escaped_pattern
-    escaped_pattern=$(printf '%s\n' "$filename_pattern" | sed 's/[]\/$*.^|()+{}[]/\\&/g; s/%s/.*/g')
+    escaped_pattern=$(printf '%s' "$filename_pattern" \
+        | sed 's/[.[\*^$+?{|}()\\]/\\&/g; s/%s/.*/g')
 
-    url=$(systems::get_json_value "$release_json_path" ".assets[] | select(.name | test(\"${escaped_pattern}\")) | .browser_download_url" "$app_name" 2>/dev/null)
+    # Single jq pass:
+    # 1) exact name match
+    # 2) regex fallback
+    # Return the first URL found.
+    local url
+    url=$(
+        jq -r --arg pat "$filename_pattern" --arg re "$escaped_pattern" '
+          [
+            (.assets[]? | select(.name == $pat) | .browser_download_url),
+            (.assets[]? | select(.name | test($re)) | .browser_download_url)
+          ]
+          | flatten
+          | map(select(. != null))
+          | .[0] // empty
+        ' "$release_json_path" 2>/dev/null
+    )
 
     if [[ -n "$url" ]]; then
         if validators::check_https_url "$url"; then
@@ -105,14 +106,13 @@ repositories::find_asset_url() {
             return 0
         else
             errors::handle_error "SECURITY_ERROR" "Rejected insecure HTTP URL for '${filename_pattern}': '$url'" "$app_name"
-            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"SECURITY_ERROR\", \"message\": \"Insecure HTTP URL rejected.\"}"
+            updates::trigger_hooks ERROR_HOOKS "$app_name" '{"phase":"download","error_type":"SECURITY_ERROR","message":"Insecure HTTP URL rejected."}'
             return 1
         fi
     fi
 
-    # If both methods fail, return error
     errors::handle_error "NETWORK_ERROR" "Download URL not found or invalid for '${filename_pattern}'." "$app_name"
-    updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Download URL not found or invalid.\"}"
+    updates::trigger_hooks ERROR_HOOKS "$app_name" '{"phase":"download","error_type":"NETWORK_ERROR","message":"Download URL not found or invalid."}'
     return 1
 }
 
@@ -120,7 +120,7 @@ repositories::find_asset_url() {
 # Usage: repositories::extract_checksum_from_release_body "$release_json_path" "$checksum_pattern" "$app_name" "$checksum_algorithm"
 repositories::extract_checksum_from_release_body() {
     local release_json_path="$1"
-    local checksum_pattern="$2"
+    local checksum_pattern="$2"           # e.g. "fastfetch-linux-amd64/fastfetch-linux-amd64.deb"
     local app_name="${3:-Unknown}"
     local checksum_algorithm="${4:-sha256}"
     local expected_checksum=""
@@ -130,14 +130,13 @@ repositories::extract_checksum_from_release_body() {
         echo ""
         return 0
     fi
-
     if [[ ! -f "$release_json_path" ]]; then
         loggers::log_message "ERROR" "Release JSON file not found: '$release_json_path' (app: $app_name)"
         echo ""
         return 1
     fi
 
-    # Extract the release body from the JSON file
+    # Extract and normalize the release body
     local release_body
     release_body=$(jq -r '.body // ""' "$release_json_path" 2>/dev/null)
     if [[ $? -ne 0 || -z "$release_body" ]]; then
@@ -145,88 +144,88 @@ repositories::extract_checksum_from_release_body() {
         echo ""
         return 0
     fi
-
-    # Normalize line endings
     release_body=$(printf '%s' "$release_body" | tr -d '\r')
 
-    # Map algorithm -> valid length and header markers (case-insensitive match)
+    # Algorithm -> expected hex length + header markers
     local valid_length header_markers=()
     case "${checksum_algorithm,,}" in
-        sha512)
-            valid_length=128
-            header_markers=("SHA512SUMS" "SHA-512" "SHA512")
-            ;;
-        sha256|*)
-            checksum_algorithm="sha256"
-            valid_length=64
-            header_markers=("SHA256SUMS" "SHA-256" "SHA256")
-            ;;
+        sha512) valid_length=128; header_markers=("SHA512SUMS" "SHA-512" "SHA512");;
+        sha256|*) checksum_algorithm="sha256"; valid_length=64; header_markers=("SHA256SUMS" "SHA-256" "SHA256");;
     esac
 
-    # Escape pattern for grep -E anchoring (regex-safe)
-    local regex_safe_pattern
-    regex_safe_pattern=$(printf '%s' "$checksum_pattern" | sed 's/[.[\*^$+?{|}()\\]/\\&/g')
+    # Build candidate filename patterns to match against:
+    #  1) the provided pattern as-is (may include path)
+    #  2) its basename (in case body lists only the filename)
+    #  3) if the provided pattern has no slash but Fastfetch-style path exists, try known dirname prefix
+    # We also support a user-provided alternation using "|" (don’t escape the pipe).
+    IFS='|' read -r -a user_alts <<< "$checksum_pattern"
+    declare -a candidates=()
+    for p in "${user_alts[@]}"; do
+        candidates+=("$p")
+        candidates+=("$(basename -- "$p")")
+        # If no slash in p, add a fastfetch-style path variant as a fallback
+        if [[ "$p" != */* ]]; then
+            candidates+=("fastfetch-linux-amd64/$p")
+        fi
+    done
 
-    # Helper: pick first matching line (by length + filename) from a blob
-    _pick_matching_line() {
-        # Args: 1=blob
-        grep -E "^[0-9a-fA-F]{${valid_length}}[[:space:]]+(\*|)?${regex_safe_pattern}([[:space:]]|\$)" <<<"$1" | head -n1
+    # Escape each candidate for grep -E (except we already split alternations above)
+    _escape_for_egrep() { printf '%s' "$1" | sed 's/[.[\*^$+?{|}()\\]/\\&/g'; }
+
+    # Helper: try to find a matching line in provided blob using a filename candidate
+    _pick_matching_line_for() {
+        local blob="$1"
+        local fname="$2"
+        local re=$(_escape_for_egrep "$fname")
+        grep -E "^[0-9a-fA-F]{${valid_length}}[[:space:]]+(\*|)?${re}([[:space:]]|\$)" <<<"$blob" | head -n1
     }
 
-    # Try to capture the algorithm-specific checksum code block
+    # Prefer the algorithm’s code block under its header; otherwise search entire body
     local checksum_block="" in_correct_section=0 in_code_block=0
     while IFS= read -r line; do
-        # case-insensitive header detect
         local UL=${line^^}
         if (( in_correct_section == 0 )); then
             for mk in "${header_markers[@]}"; do
-                if [[ "$UL" == *"$mk"* ]]; then
-                    in_correct_section=1
-                    break
-                fi
+                if [[ "$UL" == *"$mk"* ]]; then in_correct_section=1; break; fi
             done
-            [[ $in_correct_section -eq 1 ]] && continue
+            (( in_correct_section == 1 )) && continue
         fi
-
-        # enter/exit code block (support ``` and ```lang)
         if (( in_correct_section == 1 )) && [[ $line == \`\`\`* ]]; then
-            if (( in_code_block == 0 )); then
-                in_code_block=1
-                continue
-            else
-                # end of the first code block after the header
-                break
+            if (( in_code_block == 0 )); then in_code_block=1; continue
+            else break
             fi
         fi
-
-        # capture inside code block
-        if (( in_code_block == 1 )); then
-            checksum_block+="$line"$'\n'
-        fi
+        (( in_code_block == 1 )) && checksum_block+="$line"$'\n'
     done <<< "$release_body"
 
-    # 1) Prefer match from the captured block (right algorithm)
+    # 1) Try candidates in the algorithm section block
     local matching_line=""
     if [[ -n "$checksum_block" ]]; then
-        matching_line=$(_pick_matching_line "$checksum_block")
+        for cand in "${candidates[@]}"; do
+            matching_line=$(_pick_matching_line_for "$checksum_block" "$cand")
+            [[ -n "$matching_line" ]] && break
+        done
     fi
 
-    # 2) If not found, search ANYWHERE in the body, but still enforce hash length + filename
+    # 2) Fallback: search the whole body
     if [[ -z "$matching_line" ]]; then
-        matching_line=$(_pick_matching_line "$release_body")
+        for cand in "${candidates[@]}"; do
+            matching_line=$(_pick_matching_line_for "$release_body" "$cand")
+            [[ -n "$matching_line" ]] && break
+        done
     fi
 
-    # 3) If still not found, scan each fenced block as a last resort
+    # 3) Last resort: scan each fenced block
     if [[ -z "$matching_line" ]]; then
         local block="" fence=0
         while IFS= read -r line; do
             if [[ $line == \`\`\`* ]]; then
-                if (( fence == 0 )); then
-                    fence=1; block=""
-                else
-                    # close block, try match
-                    local m; m=$(_pick_matching_line "$block")
-                    if [[ -n "$m" ]]; then matching_line="$m"; break; fi
+                if (( fence == 0 )); then fence=1; block=""; else
+                    for cand in "${candidates[@]}"; do
+                        local m; m=$(_pick_matching_line_for "$block" "$cand")
+                        if [[ -n "$m" ]]; then matching_line="$m"; break; fi
+                    done
+                    (( ${#matching_line} )) && break
                     fence=0; block=""
                 fi
                 continue
@@ -236,7 +235,6 @@ repositories::extract_checksum_from_release_body() {
     fi
 
     if [[ -n "$matching_line" ]]; then
-        # Extract checksum (first field) and validate
         expected_checksum=$(awk '{print $1}' <<<"$matching_line" | tr -d '[:space:]')
         if [[ -n "$expected_checksum" ]] \
            && [[ ${#expected_checksum} -eq $valid_length ]] \
@@ -248,7 +246,7 @@ repositories::extract_checksum_from_release_body() {
         echo ""
         return 0
     else
-        loggers::log_message "WARN" "No line found for '$checksum_pattern' with $checksum_algorithm in release body for '$app_name'."
+        loggers::log_message "WARN" "No line found for any of: '${candidates[*]}' with $checksum_algorithm in release body for '$app_name'."
         echo ""
         return 0
     fi
