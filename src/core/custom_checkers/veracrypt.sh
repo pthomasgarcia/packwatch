@@ -53,7 +53,7 @@ check_veracrypt() {
     fi
 
     local ubuntu_release
-    ubuntu_release=$(lsb_release -rs 2>/dev/null || echo "")
+    ubuntu_release=$(lsb_release -rs 2> /dev/null || echo "")
     local download_url_final=""
 
     if [[ -n "$ubuntu_release" ]]; then

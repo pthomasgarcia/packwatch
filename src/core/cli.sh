@@ -57,7 +57,7 @@ cli::get_available_app_keys_for_display() {
     for file_path in "${config_files[@]}"; do
         # Use jq to safely extract app_key and name. Fallback to filename if needed.
         local app_info
-        app_info=$(jq -r '{key: .app_key, name: .application.name} | "\(.key)---_---\(.name)"' "$file_path" 2>/dev/null)
+        app_info=$(jq -r '{key: .app_key, name: .application.name} | "\(.key)---_---\(.name)"' "$file_path" 2> /dev/null)
         if [[ -n "$app_info" ]]; then
             local key="${app_info%%---_---*}"
             local name="${app_info#*---_---}"
@@ -74,7 +74,7 @@ cli::get_available_app_keys_for_display() {
 # Display script usage information.
 # Usage: cli::show_usage
 cli::show_usage() {
-    cat <<EOF
+    cat << EOF
 Usage: $SCRIPT_NAME [OPTIONS] [APP_KEYS...]
 
 Check for updates to various applications and optionally install them.
@@ -99,7 +99,7 @@ EOF
         loggers::print_message "    $line"
     done < <(cli::get_available_app_keys_for_display)
 
-    cat <<EOF
+    cat << EOF
 
 Configuration directory: '$CONFIG_DIR'
 This script is an engine. All application definitions are loaded from the
@@ -124,43 +124,43 @@ cli::parse_arguments() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-        -h | --help)
-            cli::show_usage
-            exit 0
-            ;;
-        -v | --verbose)
-            VERBOSE=1
-            shift
-            ;;
-        -n | --dry-run)
-            DRY_RUN=1
-            shift
-            ;;
-        --cache-duration)
-            if [[ -z "$2" ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
-                errors::handle_error "CLI_ERROR" "Option --cache-duration requires a positive integer." "cli"
+            -h | --help)
+                cli::show_usage
+                exit 0
+                ;;
+            -v | --verbose)
+                VERBOSE=1
+                shift
+                ;;
+            -n | --dry-run)
+                DRY_RUN=1
+                shift
+                ;;
+            --cache-duration)
+                if [[ -z "$2" ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                    errors::handle_error "CLI_ERROR" "Option --cache-duration requires a positive integer." "cli"
+                    return 1
+                fi
+                CACHE_DURATION="$2"
+                shift 2
+                ;;
+            --create-config)
+                configs::create_default_files
+                loggers::print_message "Default configuration created/updated in: '$CONFIG_DIR'"
+                exit 0
+                ;;
+            --version)
+                echo "$SCRIPT_VERSION"
+                exit 0
+                ;;
+            -*)
+                errors::handle_error "CLI_ERROR" "Unknown option: '$1'" "cli"
                 return 1
-            fi
-            CACHE_DURATION="$2"
-            shift 2
-            ;;
-        --create-config)
-            configs::create_default_files
-            loggers::print_message "Default configuration created/updated in: '$CONFIG_DIR'"
-            exit 0
-            ;;
-        --version)
-            echo "$SCRIPT_VERSION"
-            exit 0
-            ;;
-        -*)
-            errors::handle_error "CLI_ERROR" "Unknown option: '$1'" "cli"
-            return 1
-            ;;
-        *)
-            _CLI_APP_KEYS+=("$1") # Direct assignment to module state
-            shift
-            ;;
+                ;;
+            *)
+                _CLI_APP_KEYS+=("$1") # Direct assignment to module state
+                shift
+                ;;
         esac
     done
 }

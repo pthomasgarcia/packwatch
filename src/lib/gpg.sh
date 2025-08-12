@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Idempotent guard for gpg module
+if [ -n "${PACKWATCH_GPG_LOADED:-}" ]; then
+    return 0
+fi
+PACKWATCH_GPG_LOADED=1
 
 # GPG module; provides functions for GPG key management and verification.
 #
@@ -9,48 +14,9 @@
 #   - loggers.sh
 # ==============================================================================
 
-# Internal helper to get GPG fingerprint as the original user, with robust error handling.
-# Args:
-#   $1: key_id (string) - The GPG key ID.
-# Returns:
-#   The GPG fingerprint if successful, empty string otherwise. Logs errors.
-_get_gpg_fingerprint_as_user() {
-    local key_id="$1"
-    local gpg_output=""
-    local gpg_error_output=""
-
-    local gpg_status=0
-    if [[ -z "$ORIGINAL_USER" ]]; then
-        loggers::log_message "ERROR" "ORIGINAL_USER is not set. Cannot perform GPG operation as original user. Falling back to root."
-        gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
-        gpg_status=$?
-    elif ! getent passwd "$ORIGINAL_USER" &>/dev/null; then
-        loggers::log_message "ERROR" "ORIGINAL_USER '$ORIGINAL_USER' does not exist. Cannot perform GPG operation as original user. Falling back to root."
-        gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
-        gpg_status=$?
-    elif [[ ! -d "$ORIGINAL_HOME" ]]; then
-        loggers::log_message "ERROR" "ORIGINAL_HOME '$ORIGINAL_HOME' is not a valid directory. Cannot perform GPG operation as original user. Falling back to root."
-        gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
-        gpg_status=$?
-    elif [[ ! -d "$ORIGINAL_HOME/.gnupg" ]]; then
-        loggers::log_message "ERROR" "GPG home directory '$ORIGINAL_HOME/.gnupg' does not exist. Cannot perform GPG operation as original user. Falling back to root."
-        gpg_output=$(gpg --fingerprint --with-colons "$key_id" 2>&1)
-        gpg_status=$?
-    else
-        # Attempt as original user, capturing stderr
-        gpg_output=$(sudo -u "$ORIGINAL_USER" GNUPGHOME="$ORIGINAL_HOME/.gnupg" \
-            gpg --fingerprint --with-colons "$key_id" 2>&1)
-        gpg_status=$?
-    fi
-
-    if [[ $gpg_status -ne 0 ]]; then
-        loggers::log_message "ERROR" "GPG command failed or returned an error: $gpg_output"
-        return 1 # Indicate failure
-    fi
-
-    echo "$gpg_output" | awk -F: '/^fpr:/ {print $10}' | head -n1
-    return 0 # Indicate success
-}
+# The _get_gpg_fingerprint_as_user function has been removed.
+# The new approach relies exclusively on temporary GPG keyrings for verification,
+# which is more robust and suitable for automation.
 
 _gpg_prepare_temp_keyring_with_key() {
     local source="$1" key_id="$2" key_url="$3"
@@ -58,37 +24,37 @@ _gpg_prepare_temp_keyring_with_key() {
     tmp=$(mktemp -d) || return 1
     chmod 700 "$tmp"
     case "$source" in
-    url)
-        local f="$tmp/key.asc"
-        curl -fsSL "$key_url" -o "$f" || {
+        url)
+            local f="$tmp/key.asc"
+            curl -fsSL "$key_url" -o "$f" || {
+                rm -rf "$tmp"
+                return 1
+            }
+            gpg --homedir "$tmp" --import "$f" > /dev/null 2>&1 || {
+                rm -rf "$tmp"
+                return 1
+            }
+            ;;
+        keyserver)
+            gpg --homedir "$tmp" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$key_id" > /dev/null 2>&1 || {
+                rm -rf "$tmp"
+                return 1
+            }
+            ;;
+        wkd)
+            GNUPGHOME="$tmp" gpg --auto-key-locate clear,wkd --locate-keys "$key_id" > /dev/null 2>&1 || {
+                rm -rf "$tmp"
+                return 1
+            }
+            ;;
+        user_keyring)
+            echo "${ORIGINAL_HOME:-$HOME}/.gnupg"
+            return 0
+            ;;
+        *)
             rm -rf "$tmp"
             return 1
-        }
-        gpg --homedir "$tmp" --import "$f" >/dev/null 2>&1 || {
-            rm -rf "$tmp"
-            return 1
-        }
-        ;;
-    keyserver)
-        gpg --homedir "$tmp" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$key_id" >/dev/null 2>&1 || {
-            rm -rf "$tmp"
-            return 1
-        }
-        ;;
-    wkd)
-        GNUPGHOME="$tmp" gpg --auto-key-locate clear,wkd --locate-keys "$key_id" >/dev/null 2>&1 || {
-            rm -rf "$tmp"
-            return 1
-        }
-        ;;
-    user_keyring)
-        echo "${ORIGINAL_HOME:-$HOME}/.gnupg"
-        return 0
-        ;;
-    *)
-        rm -rf "$tmp"
-        return 1
-        ;;
+            ;;
     esac
     echo "$tmp"
 }
@@ -98,14 +64,14 @@ gpg::verify_detached() {
     local home
     home=$(_gpg_prepare_temp_keyring_with_key "$source" "$key_id" "$key_url") || return 1
     local actual_fp
-    actual_fp=$(GNUPGHOME="$home" gpg --fingerprint --with-colons "$key_id" 2>/dev/null | awk -F: '/^fpr:/ {print $10}' | head -n1)
+    actual_fp=$(GNUPGHOME="$home" gpg --fingerprint --with-colons "$key_id" 2> /dev/null | awk -F: '/^fpr:/ {print $10}' | head -n1)
     local nx="${expected_fp//[[:space:]]/}" na="${actual_fp//[[:space:]]/}"
     if [[ -z "$na" || "$na" != "$nx" ]]; then
         [[ "$home" != "${ORIGINAL_HOME:-$HOME}/.gnupg" ]] && rm -rf "$home"
         errors::handle_error "GPG_ERROR" "Fingerprint mismatch. Expected $expected_fp, got ${actual_fp:-<none>}"
         return 1
     fi
-    GNUPGHOME="$home" gpg --verify "$sig" "$file" >/dev/null 2>&1 || {
+    GNUPGHOME="$home" gpg --verify "$sig" "$file" > /dev/null 2>&1 || {
         [[ "$home" != "${ORIGINAL_HOME:-$HOME}/.gnupg" ]] && rm -rf "$home"
         errors::handle_error "GPG_ERROR" "Signature verification failed"
         return 1
@@ -115,57 +81,6 @@ gpg::verify_detached() {
     return 0
 }
 
-# GPG module; prompts the user to import and verify a GPG key if not already present.
-# Args:
-#   $1: key_id (string) - The GPG key ID to import.
-#   $2: expected_fingerprint (string) - The expected fingerprint for verification.
-#   $3: app_name (string) - The name of the application for context in messages.
-# Returns:
-#   0 on success (key is present and verified or user confirmed manual import), 1 on failure.
-gpg::prompt_import_and_verify() {
-    local key_id="$1"
-    local expected_fingerprint="$2"
-    local app_name="$3"
-
-    loggers::print_message "→ Checking GPG key for $app_name..."
-
-    local actual_fingerprint
-    actual_fingerprint=$(_get_gpg_fingerprint_as_user "$key_id")
-
-    local normalized_expected="${expected_fingerprint//[[:space:]]/}"
-    local normalized_actual="${actual_fingerprint//[[:space:]]/}"
-
-    if [[ -n "$actual_fingerprint" ]] && [[ "$normalized_actual" == "$normalized_expected" ]]; then
-        loggers::print_message "✓ GPG key is already present and verified."
-        return 0
-    fi
-
-    loggers::print_message "⚠️  GPG key for $app_name (ID: $key_id) not found or fingerprint mismatch."
-    loggers::log_message "    To proceed with secure updates, you MUST manually import and verify this key."
-    loggers::log_message "    Please run the following commands in your terminal (as your regular user, NOT root):"
-    loggers::log_message ""
-    loggers::log_message "    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $key_id"
-    loggers::log_message "    gpg --fingerprint $key_id"
-    loggers::log_message ""
-    loggers::log_message "    Carefully compare the displayed fingerprint with the expected one:"
-    loggers::log_message "    Expected: $expected_fingerprint"
-    loggers::log_message "    Actual:   $actual_fingerprint (if present)"
-    loggers::log_message ""
-
-    if interfaces::confirm_prompt "Have you manually imported the key and verified its fingerprint?" "N"; then
-        # Re-check after user confirmation
-        actual_fingerprint=$(_get_gpg_fingerprint_as_user "$key_id")
-        normalized_actual="${actual_fingerprint//[[:space:]]/}"
-
-        if [[ -n "$actual_fingerprint" ]] && [[ "$normalized_actual" == "$normalized_expected" ]]; then
-            loggers::print_message "✓ GPG key successfully imported and verified by user."
-            return 0
-        else
-            errors::handle_error "GPG_ERROR" "GPG key import or fingerprint verification failed after manual attempt for $app_name." "$app_name"
-            return 1
-        fi
-    else
-        errors::handle_error "GPG_ERROR" "GPG key import and verification skipped by user for $app_name. Aborting secure update." "$app_name"
-        return 1
-    fi
-}
+# The gpg::prompt_import_and_verify function has been removed.
+# Interactive key import is not suitable for an automated, non-interactive context.
+# Key management should be handled by the user or a separate provisioning script.

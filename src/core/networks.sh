@@ -136,18 +136,18 @@ networks::fetch_cached_data() {
         fi
 
         case "$expected_type" in
-        "json")
-            if ! jq . "$temp_download_file" >/dev/null 2>&1; then
-                errors::handle_error "VALIDATION_ERROR" "Fetched content for '$url' is not valid JSON."
-                systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
-                return 1
-            fi
-            ;;
-        "html")
-            if ! grep -q '<html' "$temp_download_file" >/dev/null 2>&1 && ! grep -q '<!DOCTYPE html>' "$temp_download_file" >/dev/null 2>&1; then
-                loggers::log_message "WARN" "Fetched content for '$url' might not be valid HTML, but continuing."
-            fi
-            ;;
+            "json")
+                if ! jq . "$temp_download_file" > /dev/null 2>&1; then
+                    errors::handle_error "VALIDATION_ERROR" "Fetched content for '$url' is not valid JSON."
+                    systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
+                    return 1
+                fi
+                ;;
+            "html")
+                if ! grep -q '<html' "$temp_download_file" > /dev/null 2>&1 && ! grep -q '<!DOCTYPE html>' "$temp_download_file" > /dev/null 2>&1; then
+                    loggers::log_message "WARN" "Fetched content for '$url' might not be valid HTML, but continuing."
+                fi
+                ;;
         esac
 
         mv "$temp_download_file" "$cache_file" || {
@@ -218,7 +218,7 @@ networks::get_effective_url() {
 networks::url_exists() {
     local url="$1"
     networks::apply_rate_limit
-    if curl -s --head --fail -A "$(networks::_user_agent)" "$url" >/dev/null; then
+    if curl -s --head --fail -A "$(networks::_user_agent)" "$url" > /dev/null; then
         return 0
     else
         return 1

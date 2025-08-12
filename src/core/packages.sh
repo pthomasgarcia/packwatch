@@ -90,7 +90,7 @@ packages::update_installed_version_json() {
     }
 
     if [[ ! -f "$versions_file" ]]; then
-        echo '{}' >"$versions_file" || {
+        echo '{}' > "$versions_file" || {
             errors::handle_error "PERMISSION_ERROR" "Failed to initialize versions file: '$versions_file'"
             return 1
         }
@@ -100,11 +100,11 @@ packages::update_installed_version_json() {
     temp_versions_file=$(systems::create_temp_file "versions_update")
     if [[ $? -ne 0 ]]; then return 1; fi
 
-    if jq --arg key "$app_key" --arg version "$new_version" '.[$key] = $version' "$versions_file" >"$temp_versions_file"; then
+    if jq --arg key "$app_key" --arg version "$new_version" '.[$key] = $version' "$versions_file" > "$temp_versions_file"; then
         if mv "$temp_versions_file" "$versions_file"; then
             systems::unregister_temp_file "$temp_versions_file"
-            if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
-                chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2>/dev/null ||
+            if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
+                chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2> /dev/null ||
                     loggers::log_message "WARN" "Failed to change ownership of '$versions_file' to '$ORIGINAL_USER'."
             fi
             return 0
@@ -130,7 +130,7 @@ packages::initialize_installed_versions_file() {
             return 1
         }
 
-        echo '{}' >"$versions_file" || {
+        echo '{}' > "$versions_file" || {
             errors::handle_error "PERMISSION_ERROR" "Failed to create versions file: '$versions_file'"
             return 1
         }
@@ -160,7 +160,7 @@ packages::extract_deb_version() {
         return 1
     fi
 
-    version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null)
+    version=$(dpkg-deb -f "$deb_file" Version 2> /dev/null)
 
     if [[ -z "$version" ]]; then
         version=$(versions::extract_from_regex "$(basename "$deb_file")" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-zA-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$(basename "$deb_file")")

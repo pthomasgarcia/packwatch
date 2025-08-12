@@ -74,12 +74,12 @@ for _packwatch_checker_script in "${_packwatch_needed_custom_checkers[@]}"; do
     # Basic path sanitization before sourcing a dynamic script
     # This helps prevent simple path traversal attempts.
     case "$_packwatch_checker_script" in
-    */* | *..* | "~"*) # Disallow path separators, parent dirs, and home tilde
-        loggers::log_message "ERROR" \
-            "Attempted to source unsafe custom checker path: '$_packwatch_checker_script'. Skipping." \
-            "extensions"
-        continue
-        ;;
+        */* | *..* | "~"*) # Disallow path separators, parent dirs, and home tilde
+            loggers::log_message "ERROR" \
+                "Attempted to source unsafe custom checker path: '$_packwatch_checker_script'. Skipping." \
+                "extensions"
+            continue
+            ;;
     esac
 
     _packwatch_checker_path="$CORE_DIR/custom_checkers/$_packwatch_checker_script"

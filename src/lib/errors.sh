@@ -61,18 +61,18 @@ errors::handle_error() {
 
     # Optionally, send notifications for certain error types (requires notifiers.sh)
     case "$final_error_type" in
-    "NETWORK_ERROR")
-        notifiers::send_notification "Network Error" "$error_message" "critical"
-        ;;
-    "PERMISSION_ERROR")
-        notifiers::send_notification "Permission Error" "$error_message" "critical"
-        ;;
-    "GPG_ERROR")
-        notifiers::send_notification "GPG Error" "$error_message" "critical"
-        ;;
-    "INSTALLATION_ERROR")
-        notifiers::send_notification "Installation Error" "$error_message" "critical"
-        ;;
+        "NETWORK_ERROR")
+            notifiers::send_notification "Network Error" "$error_message" "critical"
+            ;;
+        "PERMISSION_ERROR")
+            notifiers::send_notification "Permission Error" "$error_message" "critical"
+            ;;
+        "GPG_ERROR")
+            notifiers::send_notification "GPG Error" "$error_message" "critical"
+            ;;
+        "INSTALLATION_ERROR")
+            notifiers::send_notification "Installation Error" "$error_message" "critical"
+            ;;
     esac
 
     return "$exit_code"

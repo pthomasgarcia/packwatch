@@ -85,16 +85,16 @@ interfaces::confirm_prompt() {
     fi
 
     # Use /dev/tty to ensure prompt works under sudo or piped input
-    read -r -e -p "$message$prompt_suffix" response </dev/tty || true
+    read -r -e -p "$message$prompt_suffix" response < /dev/tty || true
 
     local lower_response
     lower_response="${response,,}"
 
     case "$lower_response" in
-    "y" | "yes") return 0 ;;
-    "n" | "no") return 1 ;;
-    "") [[ "$default_resp_char" == "Y" ]] && return 0 || return 1 ;;
-    *) return 1 ;;
+        "y" | "yes") return 0 ;;
+        "n" | "no") return 1 ;;
+        "") [[ "$default_resp_char" == "Y" ]] && return 0 || return 1 ;;
+        *) return 1 ;;
     esac
 }
 

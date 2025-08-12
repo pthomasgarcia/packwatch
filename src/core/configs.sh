@@ -79,9 +79,9 @@ configs::load_network_settings() {
     # Overlay JSON if present and valid
     if [[ -f "$network_settings_file" ]]; then
         local settings_content
-        settings_content=$(<"$network_settings_file")
+        settings_content=$(< "$network_settings_file")
 
-        if ! jq -e . "$network_settings_file" >/dev/null 2>&1; then
+        if ! jq -e . "$network_settings_file" > /dev/null 2>&1; then
             errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in network settings file: '$network_settings_file'"
             # Even on error, keep defaults, then apply ENV overrides below
         else
@@ -140,8 +140,8 @@ configs::load_schema() {
     fi
 
     local schema_content
-    schema_content=$(<"$schema_file")
-    if ! jq -e . "$schema_file" >/dev/null 2>&1; then
+    schema_content=$(< "$schema_file")
+    if ! jq -e . "$schema_file" > /dev/null 2>&1; then
         errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in schema file: '$schema_file'"
         return 1
     fi
@@ -169,9 +169,9 @@ configs::validate_single_config_file() {
     local filename
     filename="$(basename "$config_file_path")"
     local file_content
-    file_content=$(<"$config_file_path")
+    file_content=$(< "$config_file_path")
 
-    if ! jq -e . "$config_file_path" >/dev/null 2>&1; then
+    if ! jq -e . "$config_file_path" > /dev/null 2>&1; then
         errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in: '$filename'"
         return 1
     fi
@@ -181,7 +181,7 @@ configs::validate_single_config_file() {
     enabled_status_str=$(systems::require_json_value "$file_content" '.enabled' 'enabled status' "$filename") || return 1
     app_data_str=$(systems::require_json_value "$file_content" '.application' 'application block' "$filename") || return 1
 
-    if ! echo "$file_content" | jq -e '(.enabled|type) == "boolean"' >/dev/null 2>&1; then
+    if ! echo "$file_content" | jq -e '(.enabled|type) == "boolean"' > /dev/null 2>&1; then
         errors::handle_error "CONFIG_ERROR" "Field 'enabled' in '$filename' must be a boolean (true/false)."
         return 1
     fi
@@ -205,87 +205,87 @@ configs::validate_single_config_file() {
         return 1
     fi
 
-    IFS=',' read -ra fields <<<"$required_fields"
+    IFS=',' read -ra fields <<< "$required_fields"
     for field in "${fields[@]}"; do
         # List of new optional fields that should not be strictly required
         case "$field" in
-        "checksum_url" | "checksum_algorithm" | "sig_url" | "gpg_key_id" | "gpg_fingerprint" | "allow_insecure_http")
-            # These fields are optional, so we use get_json_value which doesn't error on absence
-            systems::get_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null
-            ;;
-        *)
-            # All other fields are still strictly required
-            if ! systems::require_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null; then
-                return 1
-            fi
-            ;;
+            "checksum_url" | "checksum_algorithm" | "sig_url" | "gpg_key_id" | "gpg_fingerprint" | "allow_insecure_http")
+                # These fields are optional, so we use get_json_value which doesn't error on absence
+                systems::get_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" > /dev/null
+                ;;
+            *)
+                # All other fields are still strictly required
+                if ! systems::require_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" > /dev/null; then
+                    return 1
+                fi
+                ;;
         esac
     done
 
     case "$app_type" in
-    "github_deb" | "direct_deb")
-        local download_url_val
-        download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
-        if [[ -n "$download_url_val" ]] && ! validators::check_url_format "$download_url_val"; then
-            errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        ;;
-    "appimage")
-        local download_url_val install_path_val
-        download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
-        install_path_val=$(systems::get_json_value "$app_data_str" '.install_path' "$app_name_in_config") || return 1
+        "github_deb" | "direct_deb")
+            local download_url_val
+            download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
+            if [[ -n "$download_url_val" ]] && ! validators::check_url_format "$download_url_val"; then
+                errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            ;;
+        "appimage")
+            local download_url_val install_path_val
+            download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
+            install_path_val=$(systems::get_json_value "$app_data_str" '.install_path' "$app_name_in_config") || return 1
 
-        if ! validators::check_url_format "$download_url_val"; then
-            errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        if ! validators::check_file_path "$install_path_val"; then
-            errors::handle_error "CONFIG_ERROR" "Invalid install path format in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        ;;
-    "script")
-        local download_url_val version_url_val version_regex_val
-        download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
-        version_url_val=$(systems::get_json_value "$app_data_str" '.version_url' "$app_name_in_config") || return 1
-        version_regex_val=$(systems::get_json_value "$app_data_str" '.version_regex' "$app_name_in_config") || return 1
+            if ! validators::check_url_format "$download_url_val"; then
+                errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            if ! validators::check_file_path "$install_path_val"; then
+                errors::handle_error "CONFIG_ERROR" "Invalid install path format in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            ;;
+        "script")
+            local download_url_val version_url_val version_regex_val
+            download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
+            version_url_val=$(systems::get_json_value "$app_data_str" '.version_url' "$app_name_in_config") || return 1
+            version_regex_val=$(systems::get_json_value "$app_data_str" '.version_regex' "$app_name_in_config") || return 1
 
-        if ! validators::check_url_format "$download_url_val"; then
-            errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        if ! validators::check_url_format "$version_url_val"; then
-            errors::handle_error "CONFIG_ERROR" "Invalid version URL format in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        if [[ -z "$version_regex_val" ]]; then
-            errors::handle_error "CONFIG_ERROR" "Empty version regex in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        ;;
-    "flatpak")
-        local flatpak_app_id_val
-        flatpak_app_id_val=$(systems::get_json_value "$app_data_str" '.flatpak_app_id' "$app_name_in_config") || return 1
-        if [[ -z "$flatpak_app_id_val" ]]; then
-            errors::handle_error "CONFIG_ERROR" "Empty flatpak_app_id in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        ;;
-    "custom")
-        local custom_checker_script_val custom_checker_func_val
-        custom_checker_script_val=$(systems::get_json_value "$app_data_str" '.custom_checker_script' "$app_name_in_config") || return 1
-        custom_checker_func_val=$(systems::get_json_value "$app_data_str" '.custom_checker_func' "$app_name_in_config") || return 1
+            if ! validators::check_url_format "$download_url_val"; then
+                errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            if ! validators::check_url_format "$version_url_val"; then
+                errors::handle_error "CONFIG_ERROR" "Invalid version URL format in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            if [[ -z "$version_regex_val" ]]; then
+                errors::handle_error "CONFIG_ERROR" "Empty version regex in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            ;;
+        "flatpak")
+            local flatpak_app_id_val
+            flatpak_app_id_val=$(systems::get_json_value "$app_data_str" '.flatpak_app_id' "$app_name_in_config") || return 1
+            if [[ -z "$flatpak_app_id_val" ]]; then
+                errors::handle_error "CONFIG_ERROR" "Empty flatpak_app_id in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            ;;
+        "custom")
+            local custom_checker_script_val custom_checker_func_val
+            custom_checker_script_val=$(systems::get_json_value "$app_data_str" '.custom_checker_script' "$app_name_in_config") || return 1
+            custom_checker_func_val=$(systems::get_json_value "$app_data_str" '.custom_checker_func' "$app_name_in_config") || return 1
 
-        if [[ -z "$custom_checker_script_val" ]]; then
-            errors::handle_error "CONFIG_ERROR" "Empty custom_checker_script in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        if [[ -z "$custom_checker_func_val" ]]; then
-            errors::handle_error "CONFIG_ERROR" "Empty custom_checker_func in: '$filename'" "$app_name_in_config"
-            return 1
-        fi
-        ;;
+            if [[ -z "$custom_checker_script_val" ]]; then
+                errors::handle_error "CONFIG_ERROR" "Empty custom_checker_script in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            if [[ -z "$custom_checker_func_val" ]]; then
+                errors::handle_error "CONFIG_ERROR" "Empty custom_checker_func in: '$filename'" "$app_name_in_config"
+                return 1
+            fi
+            ;;
     esac
 
     return 0
@@ -321,7 +321,7 @@ configs::get_validated_apps_json() {
     for file in "${config_files[@]}"; do
         if configs::validate_single_config_file "$file"; then
             local file_content
-            file_content=$(<"$file")
+            file_content=$(< "$file")
             local enabled_status_check
             enabled_status_check=$(systems::get_json_value "$file_content" '.enabled' "$(basename "$file")")
             if [[ "$enabled_status_check" == "true" ]]; then
@@ -447,7 +447,7 @@ configs::create_default_files() {
 
     local default_app_configs
     default_app_configs=$(
-        cat <<'EOF'
+        cat << 'EOF'
 {
        "VeraCrypt": {
            "app_key": "VeraCrypt",
@@ -542,7 +542,7 @@ EOF
         local target_file="${target_conf_dir}/$filename"
 
         if [[ ! -f "$target_file" ]]; then
-            echo "$default_app_configs" | jq --arg key "$app_key" '.[$key]' >"$target_file"
+            echo "$default_app_configs" | jq --arg key "$app_key" '.[$key]' > "$target_file"
             if configs::validate_single_config_file "$target_file"; then
                 loggers::log_message "INFO" "Created default config file: '$target_file'"
             else
@@ -566,7 +566,7 @@ EOF
 configs::get_app_config() {
     local app_key="$1"
     local app_config_nameref="$2"
-    if [[ -z "$app_config_nameref" ]] || ! declare -p "$app_config_nameref" 2>/dev/null | grep -q 'declare -A'; then
+    if [[ -z "$app_config_nameref" ]] || ! declare -p "$app_config_nameref" 2> /dev/null | grep -q 'declare -A'; then
         loggers::log_message "ERROR" "configs::get_app_config: Second argument '$app_config_nameref' is missing or not an associative array for app_key '$app_key'"
         return 1
     fi

@@ -53,7 +53,7 @@ systems::cache_json_fields() {
     # Parse all fields at once and store in cache
     while IFS=$'\t' read -r key value; do
         _jq_cache["${cache_key}_${key}"]="$value"
-    done < <(echo "$json_data" | jq -r 'to_entries[] | "\(.key)\t\(.value)"' 2>/dev/null)
+    done < <(echo "$json_data" | jq -r 'to_entries[] | "\(.key)\t\(.value)"' 2> /dev/null)
 
     # Store original JSON for fallback
     _jq_cache["$cache_key"]="$json_data"
@@ -134,8 +134,8 @@ systems::unregister_temp_file() {
 # Usage: systems::_clean_background_processes
 systems::_clean_background_processes() {
     for pid in "${BACKGROUND_PIDS[@]}"; do
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
+        if kill -0 "$pid" 2> /dev/null; then
+            kill "$pid" 2> /dev/null || true
         fi
     done
 }
@@ -147,7 +147,7 @@ systems::_clean_background_processes() {
 # Clean up old cache files (older than 60 minutes).
 # Usage: systems::_clean_cache_files
 systems::_clean_cache_files() {
-    [[ -d "$CACHE_DIR" ]] && find "$CACHE_DIR" -type f -mmin +60 -delete 2>/dev/null
+    [[ -d "$CACHE_DIR" ]] && find "$CACHE_DIR" -type f -mmin +60 -delete 2> /dev/null
 }
 
 # ------------------------------------------------------------------------------
@@ -219,7 +219,7 @@ systems::get_json_value() {
 
     # Handle file paths as before
     if [[ -f "$json_source" ]]; then
-        jq -r "$jq_expression // empty" "$json_source" 2>/dev/null
+        jq -r "$jq_expression // empty" "$json_source" 2> /dev/null
         return $?
     fi
 
@@ -245,7 +245,7 @@ systems::get_json_value() {
     fi
 
     # Fallback to direct jq for complex expressions
-    echo "$json_source" | jq -r "$jq_expression // empty" 2>/dev/null
+    echo "$json_source" | jq -r "$jq_expression // empty" 2> /dev/null
     return $?
 }
 
@@ -289,7 +289,7 @@ systems::check_dependencies() {
     # because main.sh sources globals.sh and then lib modules.
 
     for cmd in "${REQUIRED_COMMANDS[@]}"; do
-        if ! command -v "$cmd" &>/dev/null; then
+        if ! command -v "$cmd" &> /dev/null; then
             missing_cmds+=("$cmd")
         fi
     done

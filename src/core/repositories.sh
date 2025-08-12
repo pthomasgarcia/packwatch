@@ -97,7 +97,7 @@ repositories::find_asset_url() {
           | flatten
           | map(select(. != null))
           | .[0] // empty
-        ' "$release_json_path" 2>/dev/null
+        ' "$release_json_path" 2> /dev/null
     )
 
     if [[ -n "$url" ]]; then
@@ -138,7 +138,7 @@ repositories::extract_checksum_from_release_body() {
 
     # Extract and normalize the release body
     local release_body
-    release_body=$(jq -r '.body // ""' "$release_json_path" 2>/dev/null)
+    release_body=$(jq -r '.body // ""' "$release_json_path" 2> /dev/null)
     if [[ $? -ne 0 || -z "$release_body" ]]; then
         loggers::log_message "WARN" "Failed to extract release body from JSON for '$app_name'."
         echo ""
@@ -149,15 +149,15 @@ repositories::extract_checksum_from_release_body() {
     # Algorithm -> expected hex length + header markers
     local valid_length header_markers=()
     case "${checksum_algorithm,,}" in
-    sha512)
-        valid_length=128
-        header_markers=("SHA512SUMS" "SHA-512" "SHA512")
-        ;;
-    sha256 | *)
-        checksum_algorithm="sha256"
-        valid_length=64
-        header_markers=("SHA256SUMS" "SHA-256" "SHA256")
-        ;;
+        sha512)
+            valid_length=128
+            header_markers=("SHA512SUMS" "SHA-512" "SHA512")
+            ;;
+        sha256 | *)
+            checksum_algorithm="sha256"
+            valid_length=64
+            header_markers=("SHA256SUMS" "SHA-256" "SHA256")
+            ;;
     esac
 
     # Build candidate filename patterns to match against:
@@ -165,7 +165,7 @@ repositories::extract_checksum_from_release_body() {
     #  2) its basename (in case body lists only the filename)
     #  3) if the provided pattern has no slash but Fastfetch-style path exists, try known dirname prefix
     # We also support a user-provided alternation using "|" (don’t escape the pipe).
-    IFS='|' read -r -a user_alts <<<"$checksum_pattern"
+    IFS='|' read -r -a user_alts <<< "$checksum_pattern"
     declare -a candidates=()
     for p in "${user_alts[@]}"; do
         candidates+=("$p")
@@ -184,7 +184,7 @@ repositories::extract_checksum_from_release_body() {
         local blob="$1"
         local fname="$2"
         local re=$(_escape_for_egrep "$fname")
-        grep -E "^[0-9a-fA-F]{${valid_length}}[[:space:]]+(\*|)?${re}([[:space:]]|\$)" <<<"$blob" | head -n1
+        grep -E "^[0-9a-fA-F]{${valid_length}}[[:space:]]+(\*|)?${re}([[:space:]]|\$)" <<< "$blob" | head -n1
     }
 
     # Prefer the algorithm’s code block under its header; otherwise search entire body
@@ -209,7 +209,7 @@ repositories::extract_checksum_from_release_body() {
             fi
         fi
         ((in_code_block == 1)) && checksum_block+="$line"$'\n'
-    done <<<"$release_body"
+    done <<< "$release_body"
 
     # 1) Try candidates in the algorithm section block
     local matching_line=""
@@ -252,11 +252,11 @@ repositories::extract_checksum_from_release_body() {
                 continue
             fi
             ((fence == 1)) && block+="$line"$'\n'
-        done <<<"$release_body"
+        done <<< "$release_body"
     fi
 
     if [[ -n "$matching_line" ]]; then
-        expected_checksum=$(awk '{print $1}' <<<"$matching_line" | tr -d '[:space:]')
+        expected_checksum=$(awk '{print $1}' <<< "$matching_line" | tr -d '[:space:]')
         if [[ -n "$expected_checksum" ]] &&
             [[ ${#expected_checksum} -eq $valid_length ]] &&
             [[ "$expected_checksum" =~ ^[0-9a-fA-F]+$ ]]; then

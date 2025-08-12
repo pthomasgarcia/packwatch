@@ -23,8 +23,8 @@ verifiers::compute_checksum() {
     local file_path="$1"
     local algorithm="${2:-sha256}"
     case "${algorithm,,}" in
-    sha512) sha512sum "$file_path" | awk '{print $1}' ;;
-    sha256 | *) sha256sum "$file_path" | awk '{print $1}' ;;
+        sha512) sha512sum "$file_path" | awk '{print $1}' ;;
+        sha256 | *) sha256sum "$file_path" | awk '{print $1}' ;;
     esac
 }
 
@@ -224,25 +224,8 @@ verifiers::verify_signature() {
         fi
     }
 
-    # Ensure GPG helpers are loaded (idempotent lazy-load; fixes early-call ordering)
-    if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
-        if [[ -z "${CORE_DIR:-}" ]]; then
-            local _v_this_dir
-            _v_this_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-            # verifiers.sh lives in src/lib → CORE_DIR is src/core
-            CORE_DIR="$(cd -- "${_v_this_dir}/../core" && pwd)"
-            unset _v_this_dir
-        fi
-        local _gpg_path="${CORE_DIR}/../lib/gpg.sh"
-        if [[ -f "$_gpg_path" ]]; then
-            # shellcheck source=/dev/null
-            source "$_gpg_path"
-        fi
-        unset _gpg_path
-    fi
-
     # Hard fail if the function is still missing
-    if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
+    if ! declare -F gpg::verify_detached > /dev/null 2>&1; then
         systems::unregister_temp_file "$sigf"
         interfaces::print_ui_line "  " "✗ " "Missing GPG helpers." "${COLOR_RED}"
         verifiers::_emit_verify_hook "signature" 0 "$gpg_fingerprint" "<no-helper>" "pgp" \

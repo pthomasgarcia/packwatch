@@ -44,10 +44,10 @@ versions::compare_strings() {
     if [[ -z "$v1" ]]; then v1="0"; fi
     if [[ -z "$v2" ]]; then v2="0"; fi
 
-    if command -v dpkg &>/dev/null; then
-        if dpkg --compare-versions "$v1" gt "$v2" 2>/dev/null; then
+    if command -v dpkg &> /dev/null; then
+        if dpkg --compare-versions "$v1" gt "$v2" 2> /dev/null; then
             return 0
-        elif dpkg --compare-versions "$v1" lt "$v2" 2>/dev/null; then
+        elif dpkg --compare-versions "$v1" lt "$v2" 2> /dev/null; then
             return 2
         else
             return 1

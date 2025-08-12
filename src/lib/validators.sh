@@ -121,7 +121,7 @@ validators::extract_checksum_from_file() {
         line=$(grep -Ei "^[0-9a-f]{64}\s+(\*|)${target_name//\./\\.}\s*$" "$checksum_file" | head -n1)
     fi
     line=${line:-$(head -n1 "$checksum_file")}
-    awk '{print $1}' <<<"$line"
+    awk '{print $1}' <<< "$line"
 }
 
 # ==============================================================================
