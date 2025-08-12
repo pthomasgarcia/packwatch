@@ -28,7 +28,13 @@ To run Packwatch, you need the following dependencies installed on your system:
 
 You can typically install these on a Debian-based system with:
 ```bash
-sudo apt install -y wget curl gpg jq dpkg coreutils lsb-release getent libnotify-bin
+- `libc-bin` (provides `getent`)
+- `coreutils`
+- `libnotify-bin` (for desktop notifications)
+
+You can typically install these on a Debian-based system with:
+```bash
+sudo apt install -y wget curl gpg jq dpkg coreutils lsb-release libc-bin libnotify-bin
 ```
 
 For Flatpak support, ensure you have Flatpak installed. You can find instructions at [flatpak.org/setup/](https://flatpak.org/setup/).
