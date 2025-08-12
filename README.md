@@ -37,7 +37,7 @@ For Flatpak support, ensure you have Flatpak installed. You can find instruction
 
 1.  Clone this repository to your local machine:
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/yourusername/packwatch.git
     cd <repository-directory>
     ```
 2.  (Optional) Create the default configuration files. This is a good way to get started.
