@@ -67,7 +67,7 @@ DOC
     # Harden environment variables
     export PATH="/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
     export LC_ALL=C
-    
+
     # Setup signal handlers
     trap 'systems::perform_housekeeping; exit $?' EXIT
 }
@@ -279,26 +279,26 @@ DOC
         return 0
     fi
 
-	# ------------------------------------------------------------------------------
-	# Phase 2: Scaffolding (Config management, counters, notifiers, checker_utils)
-	# Modules: configs.sh, counters.sh, notifiers.sh, util/checker_utils.sh
-	# ------------------------------------------------------------------------------
-	source "$INIT_DIR/scaffolding.sh"
+    # ------------------------------------------------------------------------------
+    # Phase 2: Scaffolding (Config management, counters, notifiers, checker_utils)
+    # Modules: configs.sh, counters.sh, notifiers.sh, util/checker_utils.sh
+    # ------------------------------------------------------------------------------
+    source "$INIT_DIR/scaffolding.sh"
 
-	# ------------------------------------------------------------------------------
-	# Phase 3a: Runtime (Core application mechanisms: versions, networks, repos, packages)
-	# ------------------------------------------------------------------------------
-	source "$INIT_DIR/runtime.sh"
+    # ------------------------------------------------------------------------------
+    # Phase 3a: Runtime (Core application mechanisms: versions, networks, repos, packages)
+    # ------------------------------------------------------------------------------
+    source "$INIT_DIR/runtime.sh"
 
-	# ------------------------------------------------------------------------------
-	# Phase 3b: Business (The core update logic: updates.sh)
-	# ------------------------------------------------------------------------------
-	source "$INIT_DIR/business.sh"
+    # ------------------------------------------------------------------------------
+    # Phase 3b: Business (The core update logic: updates.sh)
+    # ------------------------------------------------------------------------------
+    source "$INIT_DIR/business.sh"
 
-	# ------------------------------------------------------------------------------
-	# Phase 4: Extensions (Conditional loading of gpg.sh and custom_checkers)
-	# ------------------------------------------------------------------------------
-	source "$INIT_DIR/extensions.sh"
+    # ------------------------------------------------------------------------------
+    # Phase 4: Extensions (Conditional loading of gpg.sh and custom_checkers)
+    # ------------------------------------------------------------------------------
+    source "$INIT_DIR/extensions.sh"
 
     # Initialize all core application components and environment
     main::init
@@ -323,7 +323,7 @@ DOC
     main::run "${apps_to_check[@]}"
 
     # Return an exit code indicating overall success or failure
-    if (( $(counters::get_failed) > 0 )); then
+    if (($(counters::get_failed) > 0)); then
         return 1
     else
         return 0

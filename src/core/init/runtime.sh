@@ -28,6 +28,7 @@ PACKWATCH_RUNTIME_LOADED=1
 source "$CORE_DIR/../lib/versions.sh"
 source "$CORE_DIR/networks.sh"
 source "$CORE_DIR/repositories.sh"
+source "$CORE_DIR/../lib/verifiers.sh"
 source "$CORE_DIR/packages.sh"
 
 # Any module sourced by this phase should implement an idempotent guard

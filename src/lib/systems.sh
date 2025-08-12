@@ -42,19 +42,19 @@ declare -gA _jq_cache=() # Global cache for parsed JSON
 systems::cache_json_fields() {
     local json_data="$1"
     local cache_key="$2" # Unique identifier for this JSON
-    
+
     # Clear previous cache entries for this key
     for key in "${!_jq_cache[@]}"; do
         if [[ "$key" == "$cache_key"* ]]; then
             unset "_jq_cache[$key]"
         fi
     done
-    
+
     # Parse all fields at once and store in cache
     while IFS=$'\t' read -r key value; do
         _jq_cache["${cache_key}_${key}"]="$value"
     done < <(echo "$json_data" | jq -r 'to_entries[] | "\(.key)\t\(.value)"' 2>/dev/null)
-    
+
     # Store original JSON for fallback
     _jq_cache["$cache_key"]="$json_data"
 }
@@ -216,34 +216,34 @@ systems::get_json_value() {
     local json_source="$1"
     local jq_expression="$2"
     local app_name="${3:-unknown}"
-    
+
     # Handle file paths as before
     if [[ -f "$json_source" ]]; then
         jq -r "$jq_expression // empty" "$json_source" 2>/dev/null
         return $?
     fi
-    
+
     # For JSON strings, check if it's a simple field access
     if [[ "$jq_expression" =~ ^\.[a-zA-Z0-9_]+$ ]]; then
         local field_name="${jq_expression#.}"
         local cache_key="json_$(echo "$json_source" | md5sum | cut -d' ' -f1)"
-        
+
         # Check cache first
         if [[ -n "${_jq_cache["${cache_key}_${field_name}"]+isset}" ]]; then
             echo "${_jq_cache["${cache_key}_${field_name}"]}"
             return 0
         fi
-        
+
         # Cache all fields if not already done
         if [[ -z "${_jq_cache["$cache_key"]+isset}" ]]; then
             systems::cache_json_fields "$json_source" "$cache_key"
         fi
-        
+
         # Return cached value
         echo "${_jq_cache["${cache_key}_${field_name}"]:-}"
         return 0
     fi
-    
+
     # Fallback to direct jq for complex expressions
     echo "$json_source" | jq -r "$jq_expression // empty" 2>/dev/null
     return $?

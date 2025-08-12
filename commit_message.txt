@@ -1,15 +1,16 @@
-refactor(core): Centralize artifact verification and streamline update handlers
+feat(core): Add post-verification hooks and improve GitHub release parsing
 
-This commit introduces a major architectural improvement by centralizing all post-download security checks into a single function and refactoring the update handlers to be more robust and maintainable.
+This commit introduces a new hook system for verification results and significantly improves the robustness of parsing data from GitHub releases.
 
-- **Centralized Verification Function:**
-  - Created a new `updates::verify_downloaded_artifact` function that handles all checksum and GPG signature validation for any downloaded file.
-  - This function is now called by all update workflows (`deb`, `appimage`, `script`) immediately after download, ensuring consistent and secure verification.
+- **Post-Verification Hooks:**
+  - Added a new `post_verify` hook that is triggered after every checksum and GPG signature check.
+  - This hook provides detailed, structured JSON feedback on the verification outcome, including the algorithm, expected/actual values, and success status.
 
-- **Streamlined Update Handlers:**
-  - Refactored all `process_*` and `check_*` functions in `updates.sh` to accept the application's configuration via a nameref (`local -n`).
-  - This simplifies the function signatures and allows them to directly access all necessary configuration, including new security flags like `allow_insecure_http` and `checksum_url`.
+- **Robust GitHub Release Parsing:**
+  - The `extract_checksum_from_release_body` function in `repositories.sh` is now much more flexible. It can search for multiple filename variations (e.g., with/without path prefixes) and supports user-defined alternations in the `checksum_pattern`.
+  - The `find_asset_url` function was optimized to use a single, more efficient `jq` command to locate release assets.
 
-- **Improved Workflow:**
-  - The verification logic is now cleanly separated from the download and installation steps, improving code clarity and enforcing a secure "download, then verify, then install" workflow.
-  - Custom checkers can now also use the new centralized verification function, promoting code reuse and security.
+- **Code Cleanup & Fixes:**
+  - Removed the now-redundant `verify_checksum` and `verify_gpg_key` functions from `validators.sh`, as this logic is fully centralized.
+  - Moved the GPG success message from `gpg.sh` to `updates.sh` to keep the library clean.
+  - Fixed a `printf` format string bug in `updates.sh`.

@@ -57,14 +57,14 @@ configs::_set_default_network_settings() {
 # ENV → JSON → defaults
 configs::_apply_env_overrides() {
     # Scalars
-    [[ -n "${PACKWATCH_CACHE_DIR:-}"      ]] && CACHE_DIR="$PACKWATCH_CACHE_DIR"
+    [[ -n "${PACKWATCH_CACHE_DIR:-}" ]] && CACHE_DIR="$PACKWATCH_CACHE_DIR"
     [[ -n "${PACKWATCH_CACHE_DURATION:-}" ]] && CACHE_DURATION="$PACKWATCH_CACHE_DURATION"
 
     # Map entries
     [[ -n "${PACKWATCH_MAX_RETRIES:-}" ]] && NETWORK_CONFIG["MAX_RETRIES"]="$PACKWATCH_MAX_RETRIES"
-    [[ -n "${PACKWATCH_TIMEOUT:-}"     ]] && NETWORK_CONFIG["TIMEOUT"]="$PACKWATCH_TIMEOUT"
-    [[ -n "${PACKWATCH_USER_AGENT:-}"  ]] && NETWORK_CONFIG["USER_AGENT"]="$PACKWATCH_USER_AGENT"
-    [[ -n "${PACKWATCH_RATE_LIMIT:-}"  ]] && NETWORK_CONFIG["RATE_LIMIT"]="$PACKWATCH_RATE_LIMIT"
+    [[ -n "${PACKWATCH_TIMEOUT:-}" ]] && NETWORK_CONFIG["TIMEOUT"]="$PACKWATCH_TIMEOUT"
+    [[ -n "${PACKWATCH_USER_AGENT:-}" ]] && NETWORK_CONFIG["USER_AGENT"]="$PACKWATCH_USER_AGENT"
+    [[ -n "${PACKWATCH_RATE_LIMIT:-}" ]] && NETWORK_CONFIG["RATE_LIMIT"]="$PACKWATCH_RATE_LIMIT"
     [[ -n "${PACKWATCH_RETRY_DELAY:-}" ]] && NETWORK_CONFIG["RETRY_DELAY"]="$PACKWATCH_RETRY_DELAY"
 }
 
@@ -105,7 +105,7 @@ configs::load_network_settings() {
                 # Normalize keys to uppercase to match defaults (e.g., max_retries -> MAX_RETRIES)
                 while IFS= read -r entry_json; do
                     local key value key_upper
-                    key=$(echo "$entry_json"   | jq -r '.key')
+                    key=$(echo "$entry_json" | jq -r '.key')
                     value=$(echo "$entry_json" | jq -r '.value')
                     key_upper=$(echo "$key" | tr '[:lower:]' '[:upper:]')
                     [[ -n "$key_upper" && "$key_upper" != "NULL" ]] && NETWORK_CONFIG["$key_upper"]="$value"
@@ -209,16 +209,16 @@ configs::validate_single_config_file() {
     for field in "${fields[@]}"; do
         # List of new optional fields that should not be strictly required
         case "$field" in
-            "checksum_url" | "checksum_algorithm" | "sig_url" | "gpg_key_id" | "gpg_fingerprint" | "allow_insecure_http")
-                # These fields are optional, so we use get_json_value which doesn't error on absence
-                systems::get_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null
-                ;;
-            *)
-                # All other fields are still strictly required
-                if ! systems::require_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null; then
-                    return 1
-                fi
-                ;;
+        "checksum_url" | "checksum_algorithm" | "sig_url" | "gpg_key_id" | "gpg_fingerprint" | "allow_insecure_http")
+            # These fields are optional, so we use get_json_value which doesn't error on absence
+            systems::get_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null
+            ;;
+        *)
+            # All other fields are still strictly required
+            if ! systems::require_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" >/dev/null; then
+                return 1
+            fi
+            ;;
         esac
     done
 
@@ -352,7 +352,7 @@ configs::get_validated_apps_json() {
 # Replace current jq processing with batch processing
 configs::populate_globals_from_json() {
     local merged_json_array="$1"
-    
+
     # Process all at once
     local extracted_data
     extracted_data=$(echo "$merged_json_array" | jq -c '
@@ -366,10 +366,10 @@ configs::populate_globals_from_json() {
         .all_fields += {($item.app_key): ($item.application | to_entries | map({key: .key, value: .value}) | from_entries)}
         )
     ')
-    
+
     # Populate CUSTOM_APP_KEYS
     mapfile -t CUSTOM_APP_KEYS < <(echo "$extracted_data" | jq -r '.apps_to_check[]')
-    
+
     # Populate ALL_APP_CONFIGS in one go
     while IFS=$'\t' read -r app_key prop_key prop_value; do
         [[ -z "$app_key" || -z "$prop_key" || "$prop_key" == "_comment"* ]] && continue

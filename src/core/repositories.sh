@@ -80,8 +80,8 @@ repositories::find_asset_url() {
     # - Escape regex meta characters
     # - Replace %s with .*
     local escaped_pattern
-    escaped_pattern=$(printf '%s' "$filename_pattern" \
-        | sed 's/[.[\*^$+?{|}()\\]/\\&/g; s/%s/.*/g')
+    escaped_pattern=$(printf '%s' "$filename_pattern" |
+        sed 's/[.[\*^$+?{|}()\\]/\\&/g; s/%s/.*/g')
 
     # Single jq pass:
     # 1) exact name match
@@ -120,7 +120,7 @@ repositories::find_asset_url() {
 # Usage: repositories::extract_checksum_from_release_body "$release_json_path" "$checksum_pattern" "$app_name" "$checksum_algorithm"
 repositories::extract_checksum_from_release_body() {
     local release_json_path="$1"
-    local checksum_pattern="$2"           # e.g. "fastfetch-linux-amd64/fastfetch-linux-amd64.deb"
+    local checksum_pattern="$2" # e.g. "fastfetch-linux-amd64/fastfetch-linux-amd64.deb"
     local app_name="${3:-Unknown}"
     local checksum_algorithm="${4:-sha256}"
     local expected_checksum=""
@@ -149,8 +149,15 @@ repositories::extract_checksum_from_release_body() {
     # Algorithm -> expected hex length + header markers
     local valid_length header_markers=()
     case "${checksum_algorithm,,}" in
-        sha512) valid_length=128; header_markers=("SHA512SUMS" "SHA-512" "SHA512");;
-        sha256|*) checksum_algorithm="sha256"; valid_length=64; header_markers=("SHA256SUMS" "SHA-256" "SHA256");;
+    sha512)
+        valid_length=128
+        header_markers=("SHA512SUMS" "SHA-512" "SHA512")
+        ;;
+    sha256 | *)
+        checksum_algorithm="sha256"
+        valid_length=64
+        header_markers=("SHA256SUMS" "SHA-256" "SHA256")
+        ;;
     esac
 
     # Build candidate filename patterns to match against:
@@ -158,7 +165,7 @@ repositories::extract_checksum_from_release_body() {
     #  2) its basename (in case body lists only the filename)
     #  3) if the provided pattern has no slash but Fastfetch-style path exists, try known dirname prefix
     # We also support a user-provided alternation using "|" (don’t escape the pipe).
-    IFS='|' read -r -a user_alts <<< "$checksum_pattern"
+    IFS='|' read -r -a user_alts <<<"$checksum_pattern"
     declare -a candidates=()
     for p in "${user_alts[@]}"; do
         candidates+=("$p")
@@ -184,19 +191,25 @@ repositories::extract_checksum_from_release_body() {
     local checksum_block="" in_correct_section=0 in_code_block=0
     while IFS= read -r line; do
         local UL=${line^^}
-        if (( in_correct_section == 0 )); then
+        if ((in_correct_section == 0)); then
             for mk in "${header_markers[@]}"; do
-                if [[ "$UL" == *"$mk"* ]]; then in_correct_section=1; break; fi
+                if [[ "$UL" == *"$mk"* ]]; then
+                    in_correct_section=1
+                    break
+                fi
             done
-            (( in_correct_section == 1 )) && continue
+            ((in_correct_section == 1)) && continue
         fi
-        if (( in_correct_section == 1 )) && [[ $line == \`\`\`* ]]; then
-            if (( in_code_block == 0 )); then in_code_block=1; continue
-            else break
+        if ((in_correct_section == 1)) && [[ $line == \`\`\`* ]]; then
+            if ((in_code_block == 0)); then
+                in_code_block=1
+                continue
+            else
+                break
             fi
         fi
-        (( in_code_block == 1 )) && checksum_block+="$line"$'\n'
-    done <<< "$release_body"
+        ((in_code_block == 1)) && checksum_block+="$line"$'\n'
+    done <<<"$release_body"
 
     # 1) Try candidates in the algorithm section block
     local matching_line=""
@@ -220,25 +233,33 @@ repositories::extract_checksum_from_release_body() {
         local block="" fence=0
         while IFS= read -r line; do
             if [[ $line == \`\`\`* ]]; then
-                if (( fence == 0 )); then fence=1; block=""; else
+                if ((fence == 0)); then
+                    fence=1
+                    block=""
+                else
                     for cand in "${candidates[@]}"; do
-                        local m; m=$(_pick_matching_line_for "$block" "$cand")
-                        if [[ -n "$m" ]]; then matching_line="$m"; break; fi
+                        local m
+                        m=$(_pick_matching_line_for "$block" "$cand")
+                        if [[ -n "$m" ]]; then
+                            matching_line="$m"
+                            break
+                        fi
                     done
-                    (( ${#matching_line} )) && break
-                    fence=0; block=""
+                    ((${#matching_line})) && break
+                    fence=0
+                    block=""
                 fi
                 continue
             fi
-            (( fence == 1 )) && block+="$line"$'\n'
-        done <<< "$release_body"
+            ((fence == 1)) && block+="$line"$'\n'
+        done <<<"$release_body"
     fi
 
     if [[ -n "$matching_line" ]]; then
         expected_checksum=$(awk '{print $1}' <<<"$matching_line" | tr -d '[:space:]')
-        if [[ -n "$expected_checksum" ]] \
-           && [[ ${#expected_checksum} -eq $valid_length ]] \
-           && [[ "$expected_checksum" =~ ^[0-9a-fA-F]+$ ]]; then
+        if [[ -n "$expected_checksum" ]] &&
+            [[ ${#expected_checksum} -eq $valid_length ]] &&
+            [[ "$expected_checksum" =~ ^[0-9a-fA-F]+$ ]]; then
             echo "$expected_checksum"
             return 0
         fi
@@ -276,9 +297,9 @@ repositories::find_asset_checksum() {
     if networks::download_file "$checksum_file_url" "$temp_checksum_file" ""; then
         local checksum_file_content
         checksum_file_content=$(cat "$temp_checksum_file")
-        extracted_checksum=$(echo "$checksum_file_content" \
-            | grep -Ei "^[0-9a-f]{64}\s+(\*|)${target_filename//\./\\.}\s*$" \
-            | awk '{print $1}' | head -n1)
+        extracted_checksum=$(echo "$checksum_file_content" |
+            grep -Ei "^[0-9a-f]{64}\s+(\*|)${target_filename//\./\\.}\s*$" |
+            awk '{print $1}' | head -n1)
     else
         loggers::log_message "WARN" "Failed to download checksum file from '$checksum_file_url'"
     fi

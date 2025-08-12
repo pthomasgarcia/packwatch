@@ -18,83 +18,83 @@ PACKWATCH_EXTENSIONS_LOADED=1
 # We will iterate through all *enabled* application configurations to check for
 # dependencies on GPG (e.g., if gpg_key_id is set) or custom checker scripts.
 
-_packwatch_need_gpg=0 # Flag to indicate if gpg.sh needs to be loaded
+_packwatch_need_gpg=0                           # Flag to indicate if gpg.sh needs to be loaded
 declare -a _packwatch_needed_custom_checkers=() # List of custom checker paths to source
 
 # Loop through all app keys that were loaded and enabled by configs.sh
 # CUSTOM_APP_KEYS is populated by configs::populate_globals_from_json
 for _packwatch_app_key in "${CUSTOM_APP_KEYS[@]}"; do
-  # Retrieve the full config for this app. configs::get_app_config populates
-  # a temporary associative array (_packwatch_cfg) by nameref.
-  declare -A _packwatch_cfg=()
-  if ! configs::get_app_config "$_packwatch_app_key" "_packwatch_cfg"; then
-    loggers::log_message "WARN" "Failed to retrieve config for app '$_packwatch_app_key' during optional module check."
-    continue # Skip this app, it's already an error.
-  fi
+    # Retrieve the full config for this app. configs::get_app_config populates
+    # a temporary associative array (_packwatch_cfg) by nameref.
+    declare -A _packwatch_cfg=()
+    if ! configs::get_app_config "$_packwatch_app_key" "_packwatch_cfg"; then
+        loggers::log_message "WARN" "Failed to retrieve config for app '$_packwatch_app_key' during optional module check."
+        continue # Skip this app, it's already an error.
+    fi
 
-  # 1. Check for GPG dependency
-  if [[ -n "${_packwatch_cfg[gpg_key_id]:-}" || -n "${_packwatch_cfg[gpg_fingerprint]:-}" ]]; then
-    _packwatch_need_gpg=1
-  fi
+    # 1. Check for GPG dependency
+    if [[ -n "${_packwatch_cfg[gpg_key_id]:-}" || -n "${_packwatch_cfg[gpg_fingerprint]:-}" ]]; then
+        _packwatch_need_gpg=1
+    fi
 
-  # 2. Check for Custom Checker script dependency
-  if [[ "${_packwatch_cfg[type]:-}" == "custom" && -n "${_packwatch_cfg[custom_checker_script]:-}" ]]; then
-    _packwatch_needed_custom_checkers+=("${_packwatch_cfg[custom_checker_script]}")
-  fi
+    # 2. Check for Custom Checker script dependency
+    if [[ "${_packwatch_cfg[type]:-}" == "custom" && -n "${_packwatch_cfg[custom_checker_script]:-}" ]]; then
+        _packwatch_needed_custom_checkers+=("${_packwatch_cfg[custom_checker_script]}")
+    fi
 done
 
 # --- Sourcing the identified optional modules ---
 
 # Load GPG if any configured app requires it
 if [[ $_packwatch_need_gpg -eq 1 ]]; then
-  # Derive CORE_DIR if not already set.
-  # extensions.sh lives at: .../src/core/init/extensions.sh
-  # => one level up from this file is .../src/core
-  if [[ -z "${CORE_DIR:-}" ]]; then
-    _packwatch_this_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-    CORE_DIR="$(cd -- "${_packwatch_this_dir}/.." && pwd)"
-  fi
+    # Derive CORE_DIR if not already set.
+    # extensions.sh lives at: .../src/core/init/extensions.sh
+    # => one level up from this file is .../src/core
+    if [[ -z "${CORE_DIR:-}" ]]; then
+        _packwatch_this_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+        CORE_DIR="$(cd -- "${_packwatch_this_dir}/.." && pwd)"
+    fi
 
-  # Single authoritative location for gpg.sh relative to CORE_DIR
-  _packwatch_gpg_path="${CORE_DIR}/../lib/gpg.sh"
-  if [[ -f "$_packwatch_gpg_path" ]]; then
-    # shellcheck source=/dev/null
-    source "$_packwatch_gpg_path"
-  else
-    loggers::log_message "ERROR" \
-      "gpg.sh not found at expected path: ${_packwatch_gpg_path} (CORE_DIR=${CORE_DIR})" \
-      "extensions"
-  fi
+    # Single authoritative location for gpg.sh relative to CORE_DIR
+    _packwatch_gpg_path="${CORE_DIR}/../lib/gpg.sh"
+    if [[ -f "$_packwatch_gpg_path" ]]; then
+        # shellcheck source=/dev/null
+        source "$_packwatch_gpg_path"
+    else
+        loggers::log_message "ERROR" \
+            "gpg.sh not found at expected path: ${_packwatch_gpg_path} (CORE_DIR=${CORE_DIR})" \
+            "extensions"
+    fi
 
-  unset _packwatch_this_dir _packwatch_gpg_path
+    unset _packwatch_this_dir _packwatch_gpg_path
 fi
 
 # Load only the specific custom checker modules that are needed
 for _packwatch_checker_script in "${_packwatch_needed_custom_checkers[@]}"; do
-  # Basic path sanitization before sourcing a dynamic script
-  # This helps prevent simple path traversal attempts.
-  case "$_packwatch_checker_script" in
+    # Basic path sanitization before sourcing a dynamic script
+    # This helps prevent simple path traversal attempts.
+    case "$_packwatch_checker_script" in
     */* | *..* | "~"*) # Disallow path separators, parent dirs, and home tilde
-      loggers::log_message "ERROR" \
-        "Attempted to source unsafe custom checker path: '$_packwatch_checker_script'. Skipping." \
-        "extensions"
-      continue
-      ;;
-  esac
+        loggers::log_message "ERROR" \
+            "Attempted to source unsafe custom checker path: '$_packwatch_checker_script'. Skipping." \
+            "extensions"
+        continue
+        ;;
+    esac
 
-  _packwatch_checker_path="$CORE_DIR/custom_checkers/$_packwatch_checker_script"
+    _packwatch_checker_path="$CORE_DIR/custom_checkers/$_packwatch_checker_script"
 
-  if [[ -f "$_packwatch_checker_path" ]]; then
-    loggers::log_message "DEBUG" "Sourcing custom checker: '$_packwatch_checker_path'"
-    # shellcheck source=/dev/null # This is a dynamic source, can't be checked statically
-    source "$_packwatch_checker_path"
-  else
-    loggers::log_message "ERROR" \
-      "Custom checker script not found: '$_packwatch_checker_path' for a configured app. Check configuration." \
-      "extensions"
-    # Note: We don't exit here; let the updates::handle_custom_check function fail
-    # when it can't find the associated function, allowing other apps to proceed.
-  fi
+    if [[ -f "$_packwatch_checker_path" ]]; then
+        loggers::log_message "DEBUG" "Sourcing custom checker: '$_packwatch_checker_path'"
+        # shellcheck source=/dev/null # This is a dynamic source, can't be checked statically
+        source "$_packwatch_checker_path"
+    else
+        loggers::log_message "ERROR" \
+            "Custom checker script not found: '$_packwatch_checker_path' for a configured app. Check configuration." \
+            "extensions"
+        # Note: We don't exit here; let the updates::handle_custom_check function fail
+        # when it can't find the associated function, allowing other apps to proceed.
+    fi
 done
 
 # --- Cleanup local variables to avoid leaking into global namespace ---

@@ -154,7 +154,7 @@ updates::_fetch_github_version() {
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"SYSTEM_ERROR\", \"message\": \"Failed to create temp file.\"}"
         return 1
     fi
-    printf '%s' "$latest_release_json" > "$latest_release_json_path"
+    printf '%s' "$latest_release_json" >"$latest_release_json_path"
 
     # Parse version from the temp file (function expects a file path)
     local latest_version
@@ -246,7 +246,7 @@ updates::_extract_release_checksum() {
     else
         local download_filename
         # shellcheck disable=SC2059
-		download_filename=$(printf "$filename_template" "$version")
+        download_filename=$(printf "$filename_template" "$version")
         expected_checksum=$(repositories::find_asset_checksum \
             "$release_json" \
             "$download_filename" \
@@ -400,7 +400,7 @@ _format_bytes() {
 # Placeholder functions for download/install progress.
 updates::on_download_start() {
     local app_name="$1"
-    local file_size="$2"                                                                         # Can be 'unknown' or actual size
+    local file_size="$2"                                                                            # Can be 'unknown' or actual size
     interfaces::print_ui_line "  " "→ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
     loggers::log_message "INFO" "Starting download for $app_name (Size: $file_size)."
 }
@@ -461,19 +461,18 @@ declare -a POST_VERIFY_HOOKS
 declare -a ERROR_HOOKS
 
 updates::register_hook() {
-  local hook_type="$1"
-  local function_name="$2"
-  case "$hook_type" in
-    "pre_check")   PRE_CHECK_HOOKS+=("$function_name") ;;
-    "post_check")  POST_CHECK_HOOKS+=("$function_name") ;;
+    local hook_type="$1"
+    local function_name="$2"
+    case "$hook_type" in
+    "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
+    "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
     "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
     "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
-    "error")       ERROR_HOOKS+=("$function_name") ;;
-    "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;  # ← add this line
+    "error") ERROR_HOOKS+=("$function_name") ;;
+    "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;; # ← add this line
     *) loggers::log_message "WARN" "Unknown hook type: $hook_type" ;;
-  esac
+    esac
 }
-
 
 updates::trigger_hooks() {
     local hooks_array_name="$1" # Name of the array variable
@@ -556,157 +555,14 @@ updates::_rename_deb_file() {
     return 0
 }
 
-# Centralized helper to perform checksum and GPG verification for a downloaded artifact.
-# Usage: updates::verify_downloaded_artifact app_config_nameref downloaded_file_path download_url [direct_checksum]
-# Returns 0 on success (all configured verifications pass or no verifications configured), 1 on failure.
+# Centralized verification wrapper (delegates to verifiers.sh)
 updates::verify_downloaded_artifact() {
     local config_ref_name="$1"
-    local -n app_config_ref=$config_ref_name
     local downloaded_file_path="$2"
     local download_url="$3"        # Original download URL, used for .sig default
     local direct_checksum="${4:-}" # Optional checksum provided directly by caller
 
-    local app_name="${app_config_ref[name]}"
-    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
-    local checksum_algorithm="${app_config_ref[checksum_algorithm]:-sha256}"
-    local skip_checksum="${app_config_ref[skip_checksum]:-0}"
-
-    loggers::log_message "DEBUG" "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
-
-    # Emit a post-verify hook payload
-    # $1=kind ("checksum"|"signature"), $2=success (0/1), $3=expected, $4=actual, $5=algorithm (or "pgp")
-    _emit_verify_hook() {
-        local _kind="$1" _ok="$2" _expected="$3" _actual="$4" _algo="$5"
-        local _success_json
-        _success_json=$( [[ "$_ok" -eq 1 ]] && echo true || echo false )
-        local _details
-        _details=$(jq -n \
-            --arg phase "verify" \
-            --arg kind "$_kind" \
-            --arg algorithm "$_algo" \
-            --arg expected "$_expected" \
-            --arg actual "$_actual" \
-            --arg file "$downloaded_file_path" \
-            --arg url  "$download_url" \
-            --arg key_id "${gpg_key_id:-}" \
-            --arg fingerprint "${gpg_fingerprint:-}" \
-            --arg app "$app_name" \
-            --arg time "$(date -Is)" \
-            --arg source "updates::verify_downloaded_artifact" \
-            --argjson success "$_success_json" \
-            '{phase:$phase, kind:$kind, success:$success, algorithm:$algorithm,
-              expected:$expected, actual:$actual, file:$file, url:$url,
-              key_id:$key_id, fingerprint:$fingerprint, app:$app, time:$time, source:$source}')
-        updates::trigger_hooks POST_VERIFY_HOOKS "$app_name" "$_details"
-    }
-
-    # -----------------------------
-    # 1) CHECKSUM VERIFICATION (optional)
-    # -----------------------------
-    if [[ "$skip_checksum" -ne 1 ]]; then
-        local expected_checksum=""
-        if [[ -n "$direct_checksum" ]]; then
-            expected_checksum="$direct_checksum"
-            loggers::log_message "DEBUG" "Using directly provided checksum for '$app_name'."
-        else
-            local checksum_url="${app_config_ref[checksum_url]:-}"
-            if [[ -n "$checksum_url" ]]; then
-                interfaces::print_ui_line "  " "→ " "Downloading checksum for verification..."
-                local csf
-                csf=$(networks::download_text_to_cache "$checksum_url" "$allow_http") || {
-                    errors::handle_error "NETWORK_ERROR" "Failed to download checksum file from '$checksum_url'" "$app_name"
-                    _emit_verify_hook "checksum" 0 "<download-error>" "<no-hash>" "${checksum_algorithm,,}"
-                    return 1
-                }
-                expected_checksum=$(validators::extract_checksum_from_file "$csf" "$(basename "$downloaded_file_path" | cut -d'?' -f1)")
-                systems::unregister_temp_file "$csf"
-            fi
-        fi
-
-        if [[ -n "$expected_checksum" ]]; then
-            # Compute actual checksum locally; do NOT call validators::verify_checksum to avoid duplicate prints
-            local actual_checksum
-            case "${checksum_algorithm,,}" in
-                sha512) actual_checksum=$(sha512sum "$downloaded_file_path" | awk '{print $1}') ;;
-                sha256|*) actual_checksum=$(sha256sum "$downloaded_file_path" | awk '{print $1}') ;;
-            esac
-
-            interfaces::print_ui_line "  " "→ " "Expected checksum (${checksum_algorithm,,}): $expected_checksum"
-            interfaces::print_ui_line "  " "→ " "Actual checksum:   $actual_checksum"
-
-            if [[ "$expected_checksum" == "$actual_checksum" ]]; then
-                interfaces::print_ui_line "  " "✓ " "Checksum verified." "${COLOR_GREEN}"
-                _emit_verify_hook "checksum" 1 "$expected_checksum" "$actual_checksum" "${checksum_algorithm,,}"
-            else
-                interfaces::print_ui_line "  " "✗ " "Checksum verification FAILED for '$app_name'." "${COLOR_RED}"
-                _emit_verify_hook "checksum" 0 "$expected_checksum" "$actual_checksum" "${checksum_algorithm,,}"
-                errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
-                return 1
-            fi
-        fi
-        # If no checksum found/configured and skip_checksum!=1, remain silent to avoid noise.
-    fi
-
-    # -----------------------------
-    # 2) GPG SIGNATURE VERIFICATION
-    # -----------------------------
-    local gpg_key_id="${app_config_ref[gpg_key_id]:-}"
-    local gpg_fingerprint="${app_config_ref[gpg_fingerprint]:-}"
-    local sig_url_override="${app_config_ref[sig_url]:-}"
-
-    if [[ -n "$gpg_key_id" ]] && [[ -n "$gpg_fingerprint" ]]; then
-        local sig_download_url="${sig_url_override:-${download_url}.sig}"
-        interfaces::print_ui_line "  " "→ " "Downloading signature for verification..."
-        local sigf
-        sigf=$(networks::download_text_to_cache "$sig_download_url" "$allow_http") || {
-            interfaces::print_ui_line "  " "✗ " "Signature download failed." "${COLOR_RED}"
-            _emit_verify_hook "signature" 0 "$gpg_fingerprint" "<download-error>" "pgp"
-            errors::handle_error "NETWORK_ERROR" "Failed to download signature file from '$sig_download_url'" "$app_name"
-            return 1
-        }
-
-        # Ensure GPG helpers are loaded (idempotent)
-        if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
-            if [[ -z "${CORE_DIR:-}" ]]; then
-                local _upd_this_dir
-                _upd_this_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-                CORE_DIR="$_upd_this_dir"
-                unset _upd_this_dir
-            fi
-            local _gpg_path="${CORE_DIR}/../lib/gpg.sh"
-            if [[ -f "$_gpg_path" ]]; then
-                # shellcheck source=/dev/null
-                source "$_gpg_path"
-            fi
-            unset _gpg_path
-        fi
-
-        # Hard fail if the function is still missing
-        if ! declare -F gpg::verify_detached >/dev/null 2>&1; then
-            systems::unregister_temp_file "$sigf"
-            interfaces::print_ui_line "  " "✗ " "Missing GPG helpers." "${COLOR_RED}"
-            _emit_verify_hook "signature" 0 "$gpg_fingerprint" "<no-helper>" "pgp"
-            errors::handle_error "GPG_ERROR" "Missing gpg functions (gpg.sh not sourced)." "$app_name"
-            return 1
-        fi
-
-        # Verify signature
-        loggers::log_message "DEBUG" "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
-        if ! gpg::verify_detached "$downloaded_file_path" "$sigf" "$gpg_key_id" "$gpg_fingerprint" "user_keyring" ""; then
-            systems::unregister_temp_file "$sigf"
-            interfaces::print_ui_line "  " "✗ " "Signature verification FAILED." "${COLOR_RED}"
-            _emit_verify_hook "signature" 0 "$gpg_fingerprint" "<no-hash>" "pgp"
-            errors::handle_error "GPG_ERROR" "GPG signature verification failed for '$app_name'." "$app_name"
-            return 1
-        fi
-        systems::unregister_temp_file "$sigf"
-        interfaces::print_ui_line "  " "✓ " "Signature verified." "${COLOR_GREEN}"
-        _emit_verify_hook "signature" 1 "$gpg_fingerprint" "<no-hash>" "pgp"
-    else
-        loggers::log_message "DEBUG" "No gpg_key_id or gpg_fingerprint configured for '$app_name'. Skipping GPG verification."
-    fi
-
-    return 0
+    verifiers::verify_artifact "$config_ref_name" "$downloaded_file_path" "$download_url" "$direct_checksum"
 }
 
 # Extracted helper for checksum-based update detection for DEB files
@@ -726,27 +582,24 @@ updates::_compare_deb_checksums() {
     local current_deb_path="/var/cache/apt/archives/${package_name}_${installed_version}_amd64.deb"
     if [[ -f "$current_deb_path" ]]; then
         local current_checksum
-        current_checksum=$(sha256sum "$current_deb_path" | cut -d' ' -f1)
+        current_checksum=$(verifiers::compute_checksum "$current_deb_path" "sha256")
         local downloaded_checksum
-        downloaded_checksum=$(sha256sum "$temp_file" | cut -d' ' -f1)
+        downloaded_checksum=$(verifiers::compute_checksum "$temp_file" "sha256")
 
         if [[ "$downloaded_checksum" != "$current_checksum" ]]; then
-            interfaces::print_ui_line "  " "✓ " "New package detected (different checksum)." "${COLOR_GREEN}"
             needs_update=1
-            final_downloaded_version="${downloaded_version}-new-checksum"
+            final_downloaded_version="$downloaded_version"
+            interfaces::print_ui_line "  " "✓ " "DEB content differs (checksum mismatch). Update required." "${COLOR_GREEN}"
         else
-            loggers::log_message "INFO" "✓ Up to date (checksums match)."
+            interfaces::print_ui_line "  " "→ " "DEB content identical (checksum match). No update needed."
         fi
     else
-        loggers::log_message "INFO" "No cached DEB file found for '$package_name' ('$current_deb_path') for checksum comparison. Cannot confirm if new version by checksum if versions are identical."
-        if versions::compare_strings "$installed_version" "0.0.0" -eq 1; then
-            interfaces::print_ui_line "  " "→ " "Assuming installation is needed (app not installed or cached DEB missing)."
-            needs_update=1
-        fi
+        # If the current .deb is not present in APT cache, conservatively assume we need the update
+        needs_update=1
+        interfaces::print_ui_line "  " "→ " "Current DEB not found in APT cache; proceeding with update."
     fi
 
-    echo "$needs_update:$final_downloaded_version"
-    return 0
+    echo "$needs_update|$final_downloaded_version"
 }
 
 # Download or prepare DEB file for installation
@@ -807,7 +660,7 @@ updates::process_deb_package() {
     local app_name="${app_config_ref[name]}"
     local app_key="${app_config_ref[app_key]}"
     local checksum_algorithm="${app_config_ref[checksum_algorithm]:-sha256}" # Get from config
-    local allow_http="${app_config_ref[allow_insecure_http]:-0}" # Get from config
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}"             # Get from config
 
     if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url"; then
         errors::handle_error "VALIDATION_ERROR" "Invalid parameters for DEB update flow" "$app_name"
@@ -1022,10 +875,10 @@ updates::process_appimage_file() {
     local latest_version="$2"
     local download_url="$3"
     local install_target_full_path="$4"
-    local app_key="$5" # Reordered app_key
-    local expected_checksum="${6:-}" # Reordered expected_checksum
+    local app_key="$5"                      # Reordered app_key
+    local expected_checksum="${6:-}"        # Reordered expected_checksum
     local checksum_algorithm="${7:-sha256}" # Reordered checksum_algorithm
-    local allow_http="${8:-0}" # New parameter
+    local allow_http="${8:-0}"              # New parameter
 
     if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$install_target_full_path" ]] || [[ -z "$app_key" ]]; then
         errors::handle_error "VALIDATION_ERROR" "Invalid parameters for AppImage update flow (version, URL, install path, or app_key missing)" "$app_name"
@@ -1366,11 +1219,11 @@ updates::handle_custom_check() {
 
     # Export functions/vars used by custom checkers
     export -f loggers::log_message interfaces::print_ui_line systems::get_json_value systems::require_json_value \
-              systems::create_temp_file systems::unregister_temp_file systems::sanitize_filename systems::reattempt_command \
-              errors::handle_error validators::check_url_format packages::get_installed_version versions::is_newer
+        systems::create_temp_file systems::unregister_temp_file systems::sanitize_filename systems::reattempt_command \
+        errors::handle_error validators::check_url_format packages::get_installed_version versions::is_newer
     export UPDATES_DOWNLOAD_FILE_IMPL UPDATES_GET_JSON_VALUE_IMPL UPDATES_PROMPT_CONFIRM_IMPL \
-           UPDATES_GET_INSTALLED_VERSION_IMPL UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL \
-           UPDATES_GET_LATEST_RELEASE_INFO_IMPL UPDATES_EXTRACT_DEB_VERSION_IMPL UPDATES_FLATPAK_SEARCH_IMPL
+        UPDATES_GET_INSTALLED_VERSION_IMPL UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL \
+        UPDATES_GET_LATEST_RELEASE_INFO_IMPL UPDATES_EXTRACT_DEB_VERSION_IMPL UPDATES_FLATPAK_SEARCH_IMPL
     export ORIGINAL_HOME ORIGINAL_USER VERBOSE DRY_RUN
     declare -p NETWORK_CONFIG >/dev/null 2>&1 && export NETWORK_CONFIG
     while IFS= read -r func; do export -f "$func" 2>/dev/null || true; done \
@@ -1420,50 +1273,50 @@ updates::handle_custom_check() {
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
         case "$install_type" in
-            "deb")
-                local download_url_from_output expected_checksum_from_output
-                download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
-                expected_checksum_from_output=$(echo "$custom_checker_output" | jq -r '.expected_checksum // empty')
+        "deb")
+            local download_url_from_output expected_checksum_from_output
+            download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
+            expected_checksum_from_output=$(echo "$custom_checker_output" | jq -r '.expected_checksum // empty')
 
-                # IMPORTANT: pass the ORIGINAL array name, not the nameref variable,
-                # to avoid a circular nameref in the callee.
-                updates::process_deb_package \
-                    "$config_array_name" \
-                    "${app_config_ref[deb_filename_template]:-}" \
-                    "$latest_version" \
-                    "$download_url_from_output" \
-                    "" \
-                    "$expected_checksum_from_output"
-                ;;
-            "appimage")
-                local download_url_from_output install_target_path_from_output
-                download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
-                install_target_path_from_output=$(echo "$custom_checker_output" | jq -r '.install_target_path')
+            # IMPORTANT: pass the ORIGINAL array name, not the nameref variable,
+            # to avoid a circular nameref in the callee.
+            updates::process_deb_package \
+                "$config_array_name" \
+                "${app_config_ref[deb_filename_template]:-}" \
+                "$latest_version" \
+                "$download_url_from_output" \
+                "" \
+                "$expected_checksum_from_output"
+            ;;
+        "appimage")
+            local download_url_from_output install_target_path_from_output
+            download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
+            install_target_path_from_output=$(echo "$custom_checker_output" | jq -r '.install_target_path')
 
-                updates::process_appimage_file \
-                    "${app_config_ref[name]}" \
-                    "${latest_version}" \
-                    "${download_url_from_output}" \
-                    "${install_target_path_from_output}" \
-                    "${app_config_ref[app_key]}" \
-                    "${app_config_ref[checksum_url]:-}" \
-                    "${app_config_ref[checksum_algorithm]:-sha256}" \
-                    "${app_config_ref[allow_insecure_http]:-0}"
-                ;;
-            "flatpak")
-                local flatpak_app_id_from_output
-                flatpak_app_id_from_output=$(echo "$custom_checker_output" | jq -r '.flatpak_app_id')
+            updates::process_appimage_file \
+                "${app_config_ref[name]}" \
+                "${latest_version}" \
+                "${download_url_from_output}" \
+                "${install_target_path_from_output}" \
+                "${app_config_ref[app_key]}" \
+                "${app_config_ref[checksum_url]:-}" \
+                "${app_config_ref[checksum_algorithm]:-sha256}" \
+                "${app_config_ref[allow_insecure_http]:-0}"
+            ;;
+        "flatpak")
+            local flatpak_app_id_from_output
+            flatpak_app_id_from_output=$(echo "$custom_checker_output" | jq -r '.flatpak_app_id')
 
-                updates::process_flatpak_app \
-                    "${app_config_ref[name]}" \
-                    "${app_config_ref[app_key]}" \
-                    "$latest_version" \
-                    "$flatpak_app_id_from_output"
-                ;;
-            *)
-                interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
-                return 1
-                ;;
+            updates::process_flatpak_app \
+                "${app_config_ref[name]}" \
+                "${app_config_ref[app_key]}" \
+                "$latest_version" \
+                "$flatpak_app_id_from_output"
+            ;;
+        *)
+            interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
+            return 1
+            ;;
         esac
 
     elif [[ "$status" == "no_update" || "$status" == "success" ]]; then
