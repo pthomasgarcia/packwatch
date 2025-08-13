@@ -122,7 +122,7 @@ networks::fetch_cached_data() {
         networks::apply_rate_limit
 
         temp_download_file=$(systems::create_temp_file "fetch_response")
-        if [[ $? -ne 0 ]]; then return 1; fi
+        if ! temp_download_file=$(systems::create_temp_file "fetch_response"); then return 1; fi
 
         local -a curl_args
         mapfile -t curl_args < <(networks::build_curl_args "$temp_download_file" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-4}") # Use configurable timeout multiplier
@@ -231,8 +231,9 @@ networks::url_exists() {
 networks::download_file() {
     local url="$1"
     local dest_path="$2"
-    local expected_checksum="$3"
-    local checksum_algorithm="${4:-sha256}"
+    # Checksum parameters are no longer used here; verification is centralized.
+    # local expected_checksum="$3"
+    # local checksum_algorithm="${4:-sha256}"
     local allow_http="${5:-0}" # New parameter for allowing HTTP
 
     networks::require_https_or_fail "$url" "$allow_http" || return 1

@@ -30,6 +30,7 @@
 #   - systems.sh
 #   - validators.sh
 #   - versions.sh
+#   - util/updater_utils.sh
 # ==============================================================================
 
 # --- GLOBAL DECLARATIONS FOR EXTENSIBILITY ---
@@ -154,7 +155,7 @@ updates::_fetch_github_version() {
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"SYSTEM_ERROR\", \"message\": \"Failed to create temp file.\"}"
         return 1
     fi
-    printf '%s' "$latest_release_json" >"$latest_release_json_path"
+    printf '%s' "$latest_release_json" > "$latest_release_json_path"
 
     # Parse version from the temp file (function expects a file path)
     local latest_version
@@ -465,13 +466,13 @@ updates::register_hook() {
     local hook_type="$1"
     local function_name="$2"
     case "$hook_type" in
-    "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
-    "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
-    "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
-    "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
-    "error") ERROR_HOOKS+=("$function_name") ;;
-    "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;
-    *) loggers::log_message "WARN" "Unknown hook type: $hook_type" ;;
+        "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
+        "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
+        "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
+        "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
+        "error") ERROR_HOOKS+=("$function_name") ;;
+        "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;
+        *) loggers::log_message "WARN" "Unknown hook type: $hook_type" ;;
     esac
 }
 
@@ -487,7 +488,7 @@ updates::trigger_hooks() {
     fi
 
     # Check if the variable exists
-    if ! declare -p "$hooks_array_name" >/dev/null 2>&1; then
+    if ! declare -p "$hooks_array_name" > /dev/null 2>&1; then
         loggers::log_message "WARN" "Hooks array '$hooks_array_name' does not exist"
         return 1
     fi
@@ -784,48 +785,17 @@ updates::check_direct_deb() {
     local installed_version
     installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
-    # Always show "Checking ..." at the start
     interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
 
-    # Verbose log lines: Installed and Source first
-    if [[ $VERBOSE -eq 1 ]]; then
-        loggers::log_message "INFO" "Installed: $installed_version"
-        loggers::log_message "INFO" "Source:    $source"
-    fi
-
-    local temp_download_file
-    local base_filename_from_url
-    base_filename_from_url="$(basename "$download_url" | cut -d'?' -f1 | sed 's/\.deb$//')"
-    base_filename_from_url=$(systems::sanitize_filename "$base_filename_from_url")
-    if ! temp_download_file=$(systems::create_temp_file "${base_filename_from_url}"); then return 1; fi
-
-    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
-
-    updates::on_download_start "$name" "unknown"
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_download_file" "" "" "$allow_http"; then # DI applied, added allow_http
-        errors::handle_error "NETWORK_ERROR" "Failed to download package for '$name'." "$name"
-        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download package.\"}"
-        return 1
-    fi
-    updates::on_download_complete "$name" "$temp_download_file" # Hook
-
-    # Perform verification after download
-    if ! verifiers::verify_artifact app_config_ref "$temp_download_file" "$download_url"; then
-        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded package: '$name'." "$name"
-        return 1
-    fi
-
+    # Use the new generic helper to download, verify, and extract the version
     local downloaded_version
-    downloaded_version=$(versions::normalize "$("$UPDATES_EXTRACT_DEB_VERSION_IMPL" "$temp_download_file")") # DI applied
-
-    if [[ "$downloaded_version" == "0.0.0" ]]; then
-        interfaces::print_ui_line "  " "! " "Failed to extract version from downloaded package for '$name'. Will try checksum." "${COLOR_YELLOW}"
-    fi
-
-    # Verbose log line: Latest after fetch
-    if [[ $VERBOSE -eq 1 ]]; then
-        loggers::log_message "INFO" "Latest:    $downloaded_version"
-        loggers::print_message ""
+    local temp_download_file
+    if ! updater_utils::check_and_get_version_from_download \
+        app_config_ref \
+        "$UPDATES_EXTRACT_DEB_VERSION_IMPL" \
+        downloaded_version \
+        temp_download_file; then
+        return 1
     fi
 
     # Standardized summary output
@@ -837,6 +807,7 @@ updates::check_direct_deb() {
     if updates::is_needed "$installed_version" "$downloaded_version"; then
         needs_update=1
     elif versions::compare_strings "$downloaded_version" "$installed_version" -eq 1; then
+        # If versions are the same, fall back to checksum comparison
         local checksum_result
         if ! checksum_result=$(updates::_compare_deb_checksums \
             "$temp_download_file" \
@@ -844,10 +815,13 @@ updates::check_direct_deb() {
             "$installed_version" \
             "$downloaded_version" \
             "$name" \
-            "$app_key"); then return 1; fi
+            "$app_key"); then
+            systems::unregister_temp_file "$temp_download_file" # Clean up on error
+            return 1
+        fi
 
-        needs_update=$(echo "$checksum_result" | cut -d':' -f1)
-        downloaded_version=$(echo "$checksum_result" | cut -d':' -f2)
+        needs_update=$(echo "$checksum_result" | cut -d'|' -f1)
+        downloaded_version=$(echo "$checksum_result" | cut -d'|' -f2)
     fi
 
     if [[ "$needs_update" -eq 1 ]]; then
@@ -861,7 +835,7 @@ updates::check_direct_deb() {
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
-        rm -f "$temp_download_file"
+        # The temp file is already registered; unregister it upon successful no-op
         systems::unregister_temp_file "$temp_download_file"
     fi
 
@@ -959,8 +933,8 @@ updates::_install_appimage_file_command() {
     if mv "$temp_appimage_path" "$install_target_full_path"; then
         systems::unregister_temp_file "$temp_appimage_path"
         chmod +x "$install_target_full_path" || loggers::log_message "WARN" "Failed to make final AppImage executable: '$install_target_full_path'."
-        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
-            sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null ||
+        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
+            sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null ||
                 loggers::log_message "WARN" "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER'."
         fi
         return 0
@@ -1102,7 +1076,7 @@ updates::process_flatpak_app() {
         return 1
     fi
 
-    if ! command -v flatpak &>/dev/null; then
+    if ! command -v flatpak &> /dev/null; then
         errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot update $app_name." "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
         interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot update ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_RED}"
@@ -1149,7 +1123,7 @@ updates::check_flatpak() {
     local flatpak_app_id="${app_config_ref[flatpak_app_id]}"
     local source="Flathub"
 
-    if ! command -v flatpak &>/dev/null; then
+    if ! command -v flatpak &> /dev/null; then
         errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot check $name." "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
         interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot check ${FORMAT_BOLD}$name${FORMAT_RESET}." "${COLOR_RED}"
@@ -1160,7 +1134,7 @@ updates::check_flatpak() {
 
     local latest_version="0.0.0"
     local flatpak_search_output
-    if flatpak_search_output=$("$UPDATES_FLATPAK_SEARCH_IMPL" --columns=application,version,summary "$flatpak_app_id" 2>/dev/null); then # DI applied
+    if flatpak_search_output=$("$UPDATES_FLATPAK_SEARCH_IMPL" --columns=application,version,summary "$flatpak_app_id" 2> /dev/null); then # DI applied
         if [[ "$flatpak_search_output" =~ "$flatpak_app_id"[[:space:]]+([0-9.]+[^[:space:]]*)[[:space:]]+.* ]]; then
             latest_version=$(versions::normalize "${BASH_REMATCH[1]}")
         else
@@ -1228,9 +1202,9 @@ updates::handle_custom_check() {
         UPDATES_GET_INSTALLED_VERSION_IMPL UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL \
         UPDATES_GET_LATEST_RELEASE_INFO_IMPL UPDATES_EXTRACT_DEB_VERSION_IMPL UPDATES_FLATPAK_SEARCH_IMPL
     export ORIGINAL_HOME ORIGINAL_USER VERBOSE DRY_RUN
-    declare -p NETWORK_CONFIG >/dev/null 2>&1 && export NETWORK_CONFIG
+    declare -p NETWORK_CONFIG > /dev/null 2>&1 && export NETWORK_CONFIG
     # shellcheck disable=SC2034 # `func` is used by `export -f`.
-    while IFS= read -r func; do export -f func 2>/dev/null || true; done \
+    while IFS= read -r func; do export -f func 2> /dev/null || true; done \
         < <(declare -F | awk '{print $3}' | grep -E '^(networks|packages|versions|validators|systems|updates)::')
     export -f verifiers::verify_artifact
 
@@ -1278,50 +1252,50 @@ updates::handle_custom_check() {
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
         case "$install_type" in
-        "deb")
-            local download_url_from_output expected_checksum_from_output
-            download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
-            expected_checksum_from_output=$(echo "$custom_checker_output" | jq -r '.expected_checksum // empty')
+            "deb")
+                local download_url_from_output expected_checksum_from_output
+                download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
+                expected_checksum_from_output=$(echo "$custom_checker_output" | jq -r '.expected_checksum // empty')
 
-            # IMPORTANT: pass the ORIGINAL array name, not the nameref variable,
-            # to avoid a circular nameref in the callee.
-            updates::process_deb_package \
-                "$config_array_name" \
-                "${app_config_ref[deb_filename_template]:-}" \
-                "$latest_version" \
-                "$download_url_from_output" \
-                "" \
-                "$expected_checksum_from_output"
-            ;;
-        "appimage")
-            local download_url_from_output install_target_path_from_output
-            download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
-            install_target_path_from_output=$(echo "$custom_checker_output" | jq -r '.install_target_path')
+                # IMPORTANT: pass the ORIGINAL array name, not the nameref variable,
+                # to avoid a circular nameref in the callee.
+                updates::process_deb_package \
+                    "$config_array_name" \
+                    "${app_config_ref[deb_filename_template]:-}" \
+                    "$latest_version" \
+                    "$download_url_from_output" \
+                    "" \
+                    "$expected_checksum_from_output"
+                ;;
+            "appimage")
+                local download_url_from_output install_target_path_from_output
+                download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
+                install_target_path_from_output=$(echo "$custom_checker_output" | jq -r '.install_target_path')
 
-            updates::process_appimage_file \
-                "${app_config_ref[name]}" \
-                "${latest_version}" \
-                "${download_url_from_output}" \
-                "${install_target_path_from_output}" \
-                "${app_config_ref[app_key]}" \
-                "${app_config_ref[checksum_url]:-}" \
-                "${app_config_ref[checksum_algorithm]:-sha256}" \
-                "${app_config_ref[allow_insecure_http]:-0}"
-            ;;
-        "flatpak")
-            local flatpak_app_id_from_output
-            flatpak_app_id_from_output=$(echo "$custom_checker_output" | jq -r '.flatpak_app_id')
+                updates::process_appimage_file \
+                    "${app_config_ref[name]}" \
+                    "${latest_version}" \
+                    "${download_url_from_output}" \
+                    "${install_target_path_from_output}" \
+                    "${app_config_ref[app_key]}" \
+                    "${app_config_ref[checksum_url]:-}" \
+                    "${app_config_ref[checksum_algorithm]:-sha256}" \
+                    "${app_config_ref[allow_insecure_http]:-0}"
+                ;;
+            "flatpak")
+                local flatpak_app_id_from_output
+                flatpak_app_id_from_output=$(echo "$custom_checker_output" | jq -r '.flatpak_app_id')
 
-            updates::process_flatpak_app \
-                "${app_config_ref[name]}" \
-                "${app_config_ref[app_key]}" \
-                "$latest_version" \
-                "$flatpak_app_id_from_output"
-            ;;
-        *)
-            interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
-            return 1
-            ;;
+                updates::process_flatpak_app \
+                    "${app_config_ref[name]}" \
+                    "${app_config_ref[app_key]}" \
+                    "$latest_version" \
+                    "$flatpak_app_id_from_output"
+                ;;
+            *)
+                interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
+                return 1
+                ;;
         esac
 
     elif [[ "$status" == "no_update" || "$status" == "success" ]]; then
@@ -1362,7 +1336,7 @@ updates::_validate_app_config() {
     fi
 
     local field
-    IFS=',' read -ra fields <<<"$required_fields_str"
+    IFS=',' read -ra fields <<< "$required_fields_str"
     for field in "${fields[@]}"; do
         # Check if the field is empty in the config
         if [[ -z "${config_ref[$field]:-}" ]]; then

@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
+
+# --- Include Guard ---
+if [[ -n "${GLOBALS_SOURCED:-}" ]]; then
+    return 0
+fi
+declare -g GLOBALS_SOURCED=1
+
 # ==============================================================================
 # Packwatch: Global Variables
 # ==============================================================================
@@ -17,7 +24,8 @@ readonly APP_NAME="Packwatch"
 readonly APP_DESCRIPTION="Application Update Checker"
 readonly SCRIPT_VERSION="2.0.0"
 
-readonly SCRIPT_NAME="$(basename "$0")"
+SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME
 export SCRIPT_NAME
 
 # --- ANSI Formatting Constants ---
@@ -30,7 +38,8 @@ readonly FORMAT_BOLD=$'\033[1m'
 readonly FORMAT_RESET=$'\033[0m'
 
 # --- Path Configuration ---
-readonly CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
+CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
+readonly CONFIG_ROOT
 readonly CONFIG_DIR="$CONFIG_ROOT/conf.d"
 
 # Cache directory - exported for subprocesses that may need it

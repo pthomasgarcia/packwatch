@@ -54,7 +54,7 @@ packages::get_installed_version_from_json() {
     local version
     version=$(systems::get_json_value "$(cat "$versions_file")" ".\"$app_key\"" "$app_key")
 
-    if [[ $? -ne 0 ]]; then
+    if [[ -z "$version" ]]; then
         loggers::log_message "DEBUG" "Failed to parse installed versions JSON file for app: '$app_key'"
         echo "0.0.0"
         return 0
@@ -98,7 +98,7 @@ packages::update_installed_version_json() {
 
     local temp_versions_file
     temp_versions_file=$(systems::create_temp_file "versions_update")
-    if [[ $? -ne 0 ]]; then return 1; fi
+    if ! temp_versions_file=$(systems::create_temp_file "versions_update"); then return 1; fi
 
     if jq --arg key "$app_key" --arg version "$new_version" '.[$key] = $version' "$versions_file" > "$temp_versions_file"; then
         if mv "$temp_versions_file" "$versions_file"; then

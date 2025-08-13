@@ -176,9 +176,9 @@ configs::validate_single_config_file() {
         return 1
     fi
 
-    local app_key enabled_status_str app_data_str
+    local app_key app_data_str
     app_key=$(systems::require_json_value "$file_content" '.app_key' 'app_key' "$filename") || return 1
-    enabled_status_str=$(systems::require_json_value "$file_content" '.enabled' 'enabled status' "$filename") || return 1
+    systems::require_json_value "$file_content" '.enabled' 'enabled status' "$filename" > /dev/null || return 1
     app_data_str=$(systems::require_json_value "$file_content" '.application' 'application block' "$filename") || return 1
 
     if ! echo "$file_content" | jq -e '(.enabled|type) == "boolean"' > /dev/null 2>&1; then

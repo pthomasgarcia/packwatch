@@ -167,7 +167,7 @@ systems::_clean_cache_files() {
 # In systems.sh
 systems::perform_housekeeping() {
     loggers::log_message "DEBUG" "Performing application housekeeping..."
-    local cache_dir="${CACHE_DIR:-}" # Ensure CACHE_DIR is set or default safely
+    # local cache_dir="${CACHE_DIR:-}" # This variable is unused.
     local lock_file="${LOCK_FILE:-}"
 
     # Clean up temporary files
@@ -240,7 +240,8 @@ systems::get_json_value() {
     # For JSON strings, check if it's a simple field access
     if [[ "$jq_expression" =~ ^\.[a-zA-Z0-9_]+$ ]]; then
         local field_name="${jq_expression#.}"
-        local cache_key="json_$(echo "$json_source" | md5sum | cut -d' ' -f1)"
+        local cache_key
+        cache_key="json_$(echo "$json_source" | md5sum | cut -d' ' -f1)"
 
         # Check cache first
         if [[ -n "${_jq_cache["${cache_key}_${field_name}"]+isset}" ]]; then

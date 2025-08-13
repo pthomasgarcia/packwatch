@@ -120,8 +120,6 @@ EOF
 # Parse command-line arguments and populate global INPUT_APP_KEYS_FROM_CLI.
 # Usage: cli::parse_arguments "$@"
 cli::parse_arguments() {
-    local apps_specified_on_cmdline=0
-
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h | --help)
@@ -129,11 +127,11 @@ cli::parse_arguments() {
                 exit 0
                 ;;
             -v | --verbose)
-                VERBOSE=1
+                export VERBOSE=1
                 shift
                 ;;
             -n | --dry-run)
-                DRY_RUN=1
+                export DRY_RUN=1
                 shift
                 ;;
             --cache-duration)
@@ -141,7 +139,7 @@ cli::parse_arguments() {
                     errors::handle_error "CLI_ERROR" "Option --cache-duration requires a positive integer." "cli"
                     return 1
                 fi
-                CACHE_DURATION="$2"
+                export CACHE_DURATION="$2"
                 shift 2
                 ;;
             --create-config)

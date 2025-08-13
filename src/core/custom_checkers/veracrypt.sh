@@ -19,14 +19,19 @@ check_veracrypt() {
     local app_config_json="$1" # Now receives JSON string
 
     # Cache all fields at once to reduce jq process spawning
-    local cache_key="veracrypt_$(echo "$app_config_json" | md5sum | cut -d' ' -f1)"
+    local cache_key
+    cache_key="veracrypt_$(echo "$app_config_json" | md5sum | cut -d' ' -f1)"
     systems::cache_json_fields "$app_config_json" "$cache_key"
 
     # Get all values from cache instead of multiple jq calls
-    local name=$(systems::get_cached_json_value "$cache_key" "name")
-    local app_key=$(systems::get_cached_json_value "$cache_key" "app_key")
-    local gpg_key_id=$(systems::get_cached_json_value "$cache_key" "gpg_key_id")
-    local gpg_fingerprint=$(systems::get_cached_json_value "$cache_key" "gpg_fingerprint")
+    local name
+    name=$(systems::get_cached_json_value "$cache_key" "name")
+    local app_key
+    app_key=$(systems::get_cached_json_value "$cache_key" "app_key")
+    local gpg_key_id
+    gpg_key_id=$(systems::get_cached_json_value "$cache_key" "gpg_key_id")
+    local gpg_fingerprint
+    gpg_fingerprint=$(systems::get_cached_json_value "$cache_key" "gpg_fingerprint")
 
     local installed_version
     installed_version=$(packages::get_installed_version "$app_key")
@@ -67,7 +72,7 @@ check_veracrypt() {
         for ubuntu_ver_fallback in "${common_ubuntu_releases[@]}"; do
             local deb_file="veracrypt-${latest_version}-Ubuntu-${ubuntu_ver_fallback}-amd64.deb"
             local current_base_url
-            printf -v current_base_url "$base_lp_url_template" "$latest_version"
+            printf -v current_base_url '%s' "$base_lp_url_template" "$latest_version"
             local test_url="${current_base_url}${deb_file}"
             test_url=$(networks::decode_url "$test_url")
             if validators::check_url_format "$test_url" &&

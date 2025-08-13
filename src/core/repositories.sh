@@ -36,8 +36,9 @@ repositories::get_latest_release_info() {
     local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/releases"
     local response_file
     response_file=$(networks::fetch_cached_data "$api_url" "json")
+    local ret=$?
     echo "$response_file" # Explicitly echo the file path
-    return $?
+    return $ret
 }
 
 # Parse the version from a release JSON object.
@@ -48,7 +49,7 @@ repositories::parse_version_from_release() {
 
     local raw_tag_name
     raw_tag_name=$(systems::get_json_value "$release_json_path" '.tag_name' "$app_name")
-    if [[ $? -ne 0 ]]; then
+    if [[ -z "$raw_tag_name" ]]; then
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get raw tag name.\"}"
         return 1
     fi
@@ -183,7 +184,8 @@ repositories::extract_checksum_from_release_body() {
     _pick_matching_line_for() {
         local blob="$1"
         local fname="$2"
-        local re=$(_escape_for_egrep "$fname")
+        local re
+        re=$(_escape_for_egrep "$fname")
         grep -E "^[0-9a-fA-F]{${valid_length}}[[:space:]]+(\*|)?${re}([[:space:]]|\$)" <<< "$blob" | head -n1
     }
 
@@ -288,7 +290,7 @@ repositories::find_asset_checksum() {
 
     local temp_checksum_file
     temp_checksum_file=$(systems::create_temp_file "checksum_file")
-    if [[ $? -ne 0 ]]; then
+    if ! temp_checksum_file=$(systems::create_temp_file "checksum_file"); then
         updates::trigger_hooks ERROR_HOOKS "$app_name" '{"phase": "checksum_download", "error_type": "SYSTEM_ERROR", "message": "Failed to create temporary file for checksum."}'
         return 1
     fi

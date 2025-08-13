@@ -14,5 +14,6 @@ Thumbs.db
 # Log files
 *.log
 
+CHANGELOG.md
 CODE_REVIEW.md
 commit_message.txt

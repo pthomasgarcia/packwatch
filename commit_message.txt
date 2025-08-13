@@ -1,13 +1,16 @@
-refactor(core): Harden module loading and simplify verification calls
+refactor(core): Improve sudo handling and user-context file management
 
-This commit hardens the script's module loading, simplifies the verification workflow by removing a redundant abstraction layer, and expands the test suite.
+This commit introduces a major refactoring to improve how the script handles file storage and executes commands requiring elevated privileges.
 
-- **Hardened Module Loading:**
-  - The `gpg.sh` library is now loaded unconditionally during the scaffolding phase. This ensures GPG functions are always available and removes complex, brittle lazy-loading logic from the `verifiers` and `extensions` modules.
+- **User-Specific Cache & Temp Directories:**
+  - All temporary files and cached data are now stored in a user-specific directory (`~/.cache/packwatch/`) instead of the global `/tmp`.
+  - This change prevents permission errors when running with `sudo` and ensures that user data is stored in the correct user's home directory.
+  - A cleanup routine has been added to remove the legacy `/tmp/packwatch_cache` directory.
 
-- **Simplified Verification API:**
-  - The `updates::verify_downloaded_artifact` wrapper function has been removed. All modules now call `verifiers::verify_artifact` directly, simplifying the code and removing an unnecessary layer of abstraction.
+- **Explicit `sudo` Usage:**
+  - Commands requiring root privileges (e.g., `apt install`, `flatpak`, `chown`) now explicitly use `sudo`. This removes the need to run the entire script as root.
+  - The notification logic has been hardened to correctly send desktop notifications as the original user, even when the script is executed via `sudo`.
 
-- **Expanded Testing:**
-  - The test suite for `verifiers.sh` has been expanded to cover network failure scenarios for checksum and signature downloads, improving test coverage for the core security logic.
-  - A new `CHANGELOG.md` has been added to the project.
+- **Non-Interactive File Operations:**
+  - The `mv` and `cp` commands now use the `-f` flag to force overwrites, preventing the script from hanging on interactive prompts.
+  - Added `commit_message.txt` and `CODE_REVIEW.md` to `.gitignore`.

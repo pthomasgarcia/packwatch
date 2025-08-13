@@ -52,9 +52,9 @@ notifiers::send_notification() {
         )
 
         if [[ $(id -u) -eq 0 ]] && [[ -n "${SUDO_USER:-}" ]]; then
-            sudo -u "$target_user" "${notify_cmd[@]}" 2>/dev/null || true
+            sudo -u "$target_user" "${notify_cmd[@]}" 2> /dev/null || true
         else
-            "${notify_cmd[@]}" 2>/dev/null || true
+            "${notify_cmd[@]}" 2> /dev/null || true
         fi
     fi
 }

@@ -85,7 +85,12 @@ interfaces::confirm_prompt() {
     fi
 
     # Use /dev/tty to ensure prompt works under sudo or piped input
-    read -r -e -p "$message$prompt_suffix" response < /dev/tty || true
+    if [[ -t 0 ]]; then
+        read -r -e -p "$message$prompt_suffix" response < /dev/tty || true
+    else
+        loggers::log_message "INFO" "Non-interactive shell detected. Defaulting to 'yes' for prompt: $message"
+        response="y"
+    fi
 
     local lower_response
     lower_response="${response,,}"
@@ -105,6 +110,7 @@ interfaces::confirm_prompt() {
 # Display the main application header
 interfaces::print_application_header() {
     loggers::print_message ""
+    # shellcheck disable=SC2153
     loggers::print_message "${FORMAT_BOLD}🔄 $APP_NAME: $APP_DESCRIPTION${FORMAT_RESET}"
     interfaces::_print_separator
 }
