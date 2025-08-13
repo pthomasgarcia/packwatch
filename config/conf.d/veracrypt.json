@@ -10,6 +10,6 @@
     "gpg_key_id": "680D16DE",
     "gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
     "skip_checksum": 1,
-    "allow_insecure_http": 0
+    "allow_insecure_http": false
   }
 }

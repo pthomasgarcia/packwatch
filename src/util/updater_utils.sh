@@ -89,7 +89,9 @@ updater_utils::check_and_get_version_from_download() {
     fi
 
     # 5. Output
+    # shellcheck disable=SC2034
     out_version_var="$normalized_version"
+    # shellcheck disable=SC2034
     out_temp_file_var="$temp_download_file"
 
     return 0

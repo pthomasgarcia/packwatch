@@ -48,9 +48,12 @@ export CACHE_DIR
 
 # --- Required System Dependencies ---
 readonly REQUIRED_COMMANDS=(
-    "wget" "curl" "gpg" "jq" "dpkg"
+    "wget" "curl" "gpg" "jq" "dpkg" "ajv"
     "sha256sum" "lsb_release" "getent"
 )
+
+# --- Installation Command ---
+readonly INSTALL_CMD="sudo apt install -y"
 
 # --- User Context ---
 readonly ORIGINAL_USER="${SUDO_USER:-$USER}"

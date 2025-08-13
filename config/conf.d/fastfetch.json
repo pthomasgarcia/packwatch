@@ -11,6 +11,6 @@
         "checksum_algorithm": "sha256",
         "checksum_pattern": "fastfetch-linux-amd64/fastfetch-linux-amd64.deb",
         "skip_checksum": 0,
-        "allow_insecure_http": 0
+        "allow_insecure_http": false
     }
 }

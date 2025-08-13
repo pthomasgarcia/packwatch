@@ -33,7 +33,8 @@
 #   declare -A ALL_APP_CONFIGS
 #   declare -a CUSTOM_APP_KEYS
 
-declare -A CONFIG_SCHEMA
+# This is no longer used with the new JSON Schema validation
+# declare -A CONFIG_SCHEMA
 declare -A ALL_APP_CONFIGS
 declare -a CUSTOM_APP_KEYS
 
@@ -131,32 +132,7 @@ configs::load_network_settings() {
 
 # Load the configuration schema from schema.json.
 # Usage: configs::load_schema "$CONFIG_ROOT/schema.json"
-configs::load_schema() {
-    local schema_file="$1"
-
-    if [[ ! -f "$schema_file" ]]; then
-        errors::handle_error "CONFIG_ERROR" "Configuration schema file not found: '$schema_file'."
-        return 1
-    fi
-
-    local schema_content
-    schema_content=$(< "$schema_file")
-    if ! jq -e . "$schema_file" > /dev/null 2>&1; then
-        errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in schema file: '$schema_file'"
-        return 1
-    fi
-
-    local app_type_key field_list
-    while IFS= read -r app_type_key; do
-        field_list=$(systems::get_json_value "$schema_content" ".\"$app_type_key\"" "Schema for '$app_type_key'")
-        if [[ $? -eq 0 && -n "$field_list" ]]; then
-            CONFIG_SCHEMA["$app_type_key"]="$field_list"
-        fi
-    done < <(echo "$schema_content" | jq -r 'keys[]')
-
-    loggers::log_message "DEBUG" "Loaded CONFIG_SCHEMA from '$schema_file'"
-    return 0
-}
+# configs::load_schema is no longer needed with ajv-cli validation.
 
 # ------------------------------------------------------------------------------
 # SECTION: Config File Validation
@@ -168,125 +144,23 @@ configs::validate_single_config_file() {
     local config_file_path="$1"
     local filename
     filename="$(basename "$config_file_path")"
-    local file_content
-    file_content=$(< "$config_file_path")
+    local schema_file="$CONFIG_ROOT/schema.json"
 
-    if ! jq -e . "$config_file_path" > /dev/null 2>&1; then
-        errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in: '$filename'"
+    if ! command -v ajv &> /dev/null; then
+        errors::handle_error "DEPENDENCY_ERROR" "ajv-cli is not installed. Please run 'npm install -g ajv-cli'." "$filename"
         return 1
     fi
 
-    local app_key app_data_str
-    app_key=$(systems::require_json_value "$file_content" '.app_key' 'app_key' "$filename") || return 1
-    systems::require_json_value "$file_content" '.enabled' 'enabled status' "$filename" > /dev/null || return 1
-    app_data_str=$(systems::require_json_value "$file_content" '.application' 'application block' "$filename") || return 1
-
-    if ! echo "$file_content" | jq -e '(.enabled|type) == "boolean"' > /dev/null 2>&1; then
-        errors::handle_error "CONFIG_ERROR" "Field 'enabled' in '$filename' must be a boolean (true/false)."
+    if [[ ! -f "$schema_file" ]]; then
+        errors::handle_error "CONFIG_ERROR" "JSON Schema file not found: '$schema_file'" "$filename"
         return 1
     fi
 
-    local expected_filename
-    expected_filename="$(echo "$app_key" | tr '[:upper:]' '[:lower:]').json"
-    if [[ "$filename" != "$expected_filename" ]]; then
-        errors::handle_error "CONFIG_ERROR" "Config filename '$filename' does not match expected '$expected_filename' for app_key '$app_key'"
+    local validation_output
+    if ! validation_output=$(ajv validate -s "$schema_file" "$config_file_path" 2>&1); then
+        errors::handle_error "CONFIG_ERROR" "Configuration file '$filename' failed validation: $validation_output" "$filename"
         return 1
     fi
-
-    local app_name_in_config
-    app_name_in_config=$(systems::require_json_value "$app_data_str" '.name' 'name' "$app_key") || return 1
-
-    local app_type
-    app_type=$(systems::require_json_value "$app_data_str" '.type' 'type' "$app_name_in_config") || return 1
-
-    local required_fields="${CONFIG_SCHEMA[$app_type]:-}"
-    if [[ -z "$required_fields" ]]; then
-        errors::handle_error "CONFIG_ERROR" "Unknown app type '$app_type' defined in: '$filename'" "$app_name_in_config"
-        return 1
-    fi
-
-    IFS=',' read -ra fields <<< "$required_fields"
-    for field in "${fields[@]}"; do
-        # List of new optional fields that should not be strictly required
-        case "$field" in
-            "checksum_url" | "checksum_algorithm" | "sig_url" | "gpg_key_id" | "gpg_fingerprint" | "allow_insecure_http")
-                # These fields are optional, so we use get_json_value which doesn't error on absence
-                systems::get_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" > /dev/null
-                ;;
-            *)
-                # All other fields are still strictly required
-                if ! systems::require_json_value "$app_data_str" ".\"$field\"" "$field" "$app_name_in_config" > /dev/null; then
-                    return 1
-                fi
-                ;;
-        esac
-    done
-
-    case "$app_type" in
-        "github_deb" | "direct_deb")
-            local download_url_val
-            download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
-            if [[ -n "$download_url_val" ]] && ! validators::check_url_format "$download_url_val"; then
-                errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            ;;
-        "appimage")
-            local download_url_val install_path_val
-            download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
-            install_path_val=$(systems::get_json_value "$app_data_str" '.install_path' "$app_name_in_config") || return 1
-
-            if ! validators::check_url_format "$download_url_val"; then
-                errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            if ! validators::check_file_path "$install_path_val"; then
-                errors::handle_error "CONFIG_ERROR" "Invalid install path format in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            ;;
-        "script")
-            local download_url_val version_url_val version_regex_val
-            download_url_val=$(systems::get_json_value "$app_data_str" '.download_url' "$app_name_in_config") || return 1
-            version_url_val=$(systems::get_json_value "$app_data_str" '.version_url' "$app_name_in_config") || return 1
-            version_regex_val=$(systems::get_json_value "$app_data_str" '.version_regex' "$app_name_in_config") || return 1
-
-            if ! validators::check_url_format "$download_url_val"; then
-                errors::handle_error "CONFIG_ERROR" "Invalid download URL format in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            if ! validators::check_url_format "$version_url_val"; then
-                errors::handle_error "CONFIG_ERROR" "Invalid version URL format in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            if [[ -z "$version_regex_val" ]]; then
-                errors::handle_error "CONFIG_ERROR" "Empty version regex in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            ;;
-        "flatpak")
-            local flatpak_app_id_val
-            flatpak_app_id_val=$(systems::get_json_value "$app_data_str" '.flatpak_app_id' "$app_name_in_config") || return 1
-            if [[ -z "$flatpak_app_id_val" ]]; then
-                errors::handle_error "CONFIG_ERROR" "Empty flatpak_app_id in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            ;;
-        "custom")
-            local custom_checker_script_val custom_checker_func_val
-            custom_checker_script_val=$(systems::get_json_value "$app_data_str" '.custom_checker_script' "$app_name_in_config") || return 1
-            custom_checker_func_val=$(systems::get_json_value "$app_data_str" '.custom_checker_func' "$app_name_in_config") || return 1
-
-            if [[ -z "$custom_checker_script_val" ]]; then
-                errors::handle_error "CONFIG_ERROR" "Empty custom_checker_script in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            if [[ -z "$custom_checker_func_val" ]]; then
-                errors::handle_error "CONFIG_ERROR" "Empty custom_checker_func in: '$filename'" "$app_name_in_config"
-                return 1
-            fi
-            ;;
-    esac
 
     return 0
 }
@@ -414,9 +288,7 @@ configs::load_modular_directory() {
         return 1
     fi
 
-    if ! configs::load_schema "$CONFIG_ROOT/schema.json"; then
-        return 1
-    fi
+    # The load_schema step is no longer needed.
 
     local merged_json
     if ! merged_json=$(configs::get_validated_apps_json "$CONFIG_DIR"); then
