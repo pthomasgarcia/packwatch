@@ -44,7 +44,7 @@ declare -A -g NETWORK_CONFIG # -g makes it global, -A makes it associative
 
 # Helper to set default network settings
 configs::_set_default_network_settings() {
-    CACHE_DIR="/tmp/packwatch_cache"
+    CACHE_DIR="${HOME}/.cache/packwatch/cache"
     CACHE_DURATION=300
     NETWORK_CONFIG["MAX_RETRIES"]=3
     NETWORK_CONFIG["TIMEOUT"]=30

@@ -281,8 +281,8 @@ updates::process_script_installation() {
     local base_filename_for_tmp
     base_filename_for_tmp="$(basename "$download_url" | cut -d'?' -f1 | sed 's/\.sh$//')"
     base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
-    if ! temp_script_path=$(mktemp "/tmp/${base_filename_for_tmp}.XXXXXX.sh"); then
-        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file for script: '${base_filename_for_tmp}.XXXXXX.sh'" "$app_name"
+    if ! temp_script_path=$(systems::create_temp_file "${base_filename_for_tmp}"); then
+        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file for script: '${base_filename_for_tmp}'" "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"script_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to create temporary file.\"}"
         return 1
     fi
@@ -509,8 +509,6 @@ updates::trigger_hooks() {
 
 # --- CACHING SETUP (Global scope for persistence across calls) ---
 # This is a utility for faster re-checks, not the full caching recommendation.
-PACKWATCH_CACHE_DIR="/tmp/packwatch_cache"
-mkdir -p "$PACKWATCH_CACHE_DIR" 2>/dev/null || true # Ensure cache directory exists
 
 # ------------------------------------------------------------------------------
 # SECTION: Update Decision Helper (No change)
@@ -539,10 +537,18 @@ updates::_rename_deb_file() {
     # shellcheck disable=SC2059 # The template is a trusted config value.
     target_filename=$(printf "$template" "$version")
     target_filename=$(systems::sanitize_filename "$target_filename")
-    local new_path="/tmp/$target_filename"
+    # Use the same user-specific temp directory to avoid permission issues.
+    local temp_dir="${HOME}/.cache/packwatch/tmp"
+    mkdir -p "$temp_dir" || {
+        loggers::log_message "WARN" "Failed to create temp dir for rename: $temp_dir. Using original path."
+        echo "$current_path"
+        return 1
+    }
+    local new_path="${temp_dir}/${target_filename}"
 
     if [[ "$current_path" != "$new_path" ]]; then
-        if mv "$current_path" "$new_path"; then
+        # Force overwrite of the destination file to avoid interactive prompts.
+        if mv -f "$current_path" "$new_path"; then
             systems::unregister_temp_file "$current_path"
             TEMP_FILES+=("$new_path")
             echo "$new_path"
@@ -886,8 +892,8 @@ updates::process_appimage_file() {
     local base_filename_for_tmp
     base_filename_for_tmp="$(basename "$install_target_full_path" | sed 's/\.AppImage$//')"
     base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
-    if ! temp_appimage_path=$(mktemp "/tmp/${base_filename_for_tmp}.XXXXXX.AppImage"); then
-        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: '${base_filename_for_tmp}.XXXXXX.AppImage'" "$app_name"
+    if ! temp_appimage_path=$(systems::create_temp_file "${base_filename_for_tmp}"); then
+        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: '${base_filename_for_tmp}'" "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"appimage_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to create temporary file.\"}"
         return 1
     fi
@@ -954,7 +960,7 @@ updates::_install_appimage_file_command() {
         systems::unregister_temp_file "$temp_appimage_path"
         chmod +x "$install_target_full_path" || loggers::log_message "WARN" "Failed to make final AppImage executable: '$install_target_full_path'."
         if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
-            chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null ||
+            sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null ||
                 loggers::log_message "WARN" "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER'."
         fi
         return 0
@@ -1104,7 +1110,7 @@ updates::process_flatpak_app() {
     fi
     if ! flatpak remotes | grep -q flathub; then
         interfaces::print_ui_line "  " "→ " "Adding Flathub remote..."
-        flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || {
+        sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || {
             errors::handle_error "INSTALLATION_ERROR" "Failed to add Flathub remote. Cannot update $app_name." "$app_name"
             updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to add Flathub remote.\"}"
             interfaces::print_ui_line "  " "✗ " "Failed to add Flathub remote." "${COLOR_RED}"
@@ -1112,7 +1118,7 @@ updates::process_flatpak_app() {
         }
     fi
     interfaces::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
-    flatpak update --appstream -y || {
+    sudo flatpak update --appstream -y || {
         loggers::log_message "WARN" "Failed to update Flatpak appstream data for $app_name. Installation might proceed but information could be stale."
         interfaces::print_ui_line "  " "! " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
     }
@@ -1122,6 +1128,7 @@ updates::process_flatpak_app() {
         "$app_name" \
         "$app_key" \
         "$latest_version" \
+        "sudo" \
         "flatpak" \
         "install" \
         "--or-update" \

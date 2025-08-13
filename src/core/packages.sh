@@ -104,7 +104,7 @@ packages::update_installed_version_json() {
         if mv "$temp_versions_file" "$versions_file"; then
             systems::unregister_temp_file "$temp_versions_file"
             if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
-                chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2> /dev/null ||
+                sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2> /dev/null ||
                     loggers::log_message "WARN" "Failed to change ownership of '$versions_file' to '$ORIGINAL_USER'."
             fi
             return 0
@@ -195,13 +195,13 @@ packages::install_deb_package() {
         return 0
     fi
 
-    if [[ $(id -u) -ne 0 ]]; then
-        errors::handle_error "PERMISSION_ERROR" "Installation requires root privileges. Please run the script with 'sudo'" "$app_name"
+    if ! command -v sudo &> /dev/null; then
+        errors::handle_error "DEPENDENCY_ERROR" "sudo command not found. Installation requires sudo privileges." "$app_name"
         return 1
     fi
 
     local install_output
-    if ! install_output=$(apt install -y "$deb_file" 2>&1); then
+    if ! install_output=$(sudo apt install -y "$deb_file" 2>&1); then
         errors::handle_error "INSTALLATION_ERROR" "Package installation failed for '$app_name'."
 
         if [[ "$app_name" == "VeraCrypt" ]] && echo "$install_output" | grep -q "VeraCrypt volumes must be dismounted"; then

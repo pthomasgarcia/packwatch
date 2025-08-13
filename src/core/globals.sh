@@ -34,7 +34,7 @@ readonly CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
 readonly CONFIG_DIR="$CONFIG_ROOT/conf.d"
 
 # Cache directory - exported for subprocesses that may need it
-CACHE_DIR="/tmp/app-updater-cache"
+CACHE_DIR="${HOME}/.cache/packwatch/cache"
 export CACHE_DIR
 
 # --- Required System Dependencies ---

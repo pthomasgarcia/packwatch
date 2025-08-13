@@ -92,9 +92,17 @@ systems::sanitize_filename() {
 systems::create_temp_file() {
     local template="$1"
     template=$(systems::sanitize_filename "$template")
+
+    # Use a user-specific cache directory to avoid sudo requirements for temp files.
+    local temp_dir="${HOME}/.cache/packwatch/tmp"
+    mkdir -p "$temp_dir" || {
+        errors::handle_error "PERMISSION_ERROR" "Failed to create temporary directory: $temp_dir"
+        return 1
+    }
+
     local temp_file
-    temp_file=$(mktemp "/tmp/${template}.XXXXXX") || {
-        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: $template"
+    temp_file=$(mktemp "${temp_dir}/${template}.XXXXXX") || {
+        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: $template in $temp_dir"
         return 1
     }
     TEMP_FILES+=("$temp_file")
@@ -114,7 +122,7 @@ systems::delete_temp_files() {
 }
 
 # Unregister a specific temporary file from cleanup tracking.
-# Usage: systems::unregister_temp_file "/tmp/somefile"
+# Usage: systems::unregister_temp_file "/path/to/somefile"
 systems::unregister_temp_file() {
     local file_to_remove="$1"
     local i
@@ -170,6 +178,12 @@ systems::perform_housekeeping() {
 
     # Clean up old cache files (if desired on exit, though often a scheduled task)
     # systems::_clean_cache_files # Decide if this should run on every exit
+
+    # Remove legacy cache directory if it exists
+    if [[ -d "/tmp/packwatch_cache" ]]; then
+        loggers::log_message "DEBUG" "Removing legacy cache directory: /tmp/packwatch_cache"
+        rm -rf "/tmp/packwatch_cache" || true
+    fi
 
     # Clean up lock file
     if [[ -n "$lock_file" && -e "$lock_file" ]]; then

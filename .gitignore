@@ -13,3 +13,6 @@ Thumbs.db
 
 # Log files
 *.log
+
+CODE_REVIEW.md
+commit_message.txt

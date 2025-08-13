@@ -33,19 +33,28 @@ notifiers::send_notification() {
     # Only send notification if notify-send is available
     if command -v notify-send &> /dev/null; then
         # If running under sudo, send as the original user
-        if [[ -n "$SUDO_USER" ]]; then
-            local original_user_id
-            original_user_id=$(getent passwd "$SUDO_USER" | cut -d: -f3 2> /dev/null)
-            if [[ -n "$original_user_id" ]]; then
-                sudo -u "$SUDO_USER" env \
-                    DISPLAY=:0 \
-                    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${original_user_id}/bus" \
-                    notify-send --urgency="$urgency" "$title" "$message" 2> /dev/null || true
-            else
-                loggers::log_message "WARN" "Could not determine user ID for '$SUDO_USER'. Cannot send desktop notification."
-            fi
+        # If running under sudo, send as the original user. Otherwise, send as the current user.
+        local target_user="${SUDO_USER:-$USER}"
+        local user_id
+        user_id=$(getent passwd "$target_user" | cut -d: -f3 2> /dev/null)
+
+        if [[ -z "$user_id" ]]; then
+            loggers::log_message "WARN" "Could not determine user ID for '$target_user'. Cannot send desktop notification."
+            return
+        fi
+
+        # Construct the command to run as the target user
+        local notify_cmd=(
+            "env"
+            "DISPLAY=:0"
+            "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${user_id}/bus"
+            "notify-send" "--urgency=$urgency" "$title" "$message"
+        )
+
+        if [[ $(id -u) -eq 0 ]] && [[ -n "${SUDO_USER:-}" ]]; then
+            sudo -u "$target_user" "${notify_cmd[@]}" 2>/dev/null || true
         else
-            notify-send --urgency="$urgency" "$title" "$message" 2> /dev/null || true
+            "${notify_cmd[@]}" 2>/dev/null || true
         fi
     fi
 }

@@ -104,11 +104,11 @@ networks::fetch_cached_data() {
     local expected_type="$2" # "json", "html", "raw"
     local cache_key
     cache_key=$(echo -n "$url" | sha256sum | cut -d' ' -f1)
-    local cache_file="${CACHE_DIR:-/tmp/packwatch_cache}/$cache_key" # Use global CACHE_DIR
+    local cache_file="${HOME}/.cache/packwatch/cache/$cache_key"
     local temp_download_file
 
-    mkdir -p "${CACHE_DIR:-/tmp/packwatch_cache}" || { # Use global CACHE_DIR
-        errors::handle_error "PERMISSION_ERROR" "Failed to create cache directory: '${CACHE_DIR:-/tmp/packwatch_cache}'"
+    mkdir -p "${HOME}/.cache/packwatch/cache" || {
+        errors::handle_error "PERMISSION_ERROR" "Failed to create cache directory: '${HOME}/.cache/packwatch/cache'"
         return 1
     }
 
@@ -150,7 +150,7 @@ networks::fetch_cached_data() {
                 ;;
         esac
 
-        mv "$temp_download_file" "$cache_file" || {
+        mv -f "$temp_download_file" "$cache_file" || {
             errors::handle_error "PERMISSION_ERROR" "Failed to move temporary file '$temp_download_file' to cache '$cache_file' for '$url'"
             systems::unregister_temp_file "$temp_download_file" # Clean up if move fails
             return 1
