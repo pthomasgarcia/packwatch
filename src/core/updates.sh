@@ -154,7 +154,7 @@ updates::_fetch_github_version() {
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"SYSTEM_ERROR\", \"message\": \"Failed to create temp file.\"}"
         return 1
     fi
-    printf '%s' "$latest_release_json" > "$latest_release_json_path"
+    printf '%s' "$latest_release_json" >"$latest_release_json_path"
 
     # Parse version from the temp file (function expects a file path)
     local latest_version
@@ -210,6 +210,7 @@ updates::_build_download_url() {
     local app_name="$4"
 
     local download_filename
+    # shellcheck disable=SC2059 # The template is a trusted config value.
     download_filename=$(printf "$filename_template" "$version")
 
     local download_url
@@ -296,7 +297,7 @@ updates::process_script_installation() {
     updates::on_download_complete "$app_name" "$temp_script_path" # Hook
 
     # Perform verification after download
-    if ! updates::verify_downloaded_artifact app_config_ref "$temp_script_path" "$download_url"; then
+    if ! verifiers::verify_artifact app_config_ref "$temp_script_path" "$download_url"; then
         errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded script: '$app_name'." "$app_name"
         return 1
     fi
@@ -464,13 +465,13 @@ updates::register_hook() {
     local hook_type="$1"
     local function_name="$2"
     case "$hook_type" in
-        "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
-        "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
-        "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
-        "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
-        "error") ERROR_HOOKS+=("$function_name") ;;
-        "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;
-        *) loggers::log_message "WARN" "Unknown hook type: $hook_type" ;;
+    "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
+    "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
+    "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
+    "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
+    "error") ERROR_HOOKS+=("$function_name") ;;
+    "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;
+    *) loggers::log_message "WARN" "Unknown hook type: $hook_type" ;;
     esac
 }
 
@@ -486,7 +487,7 @@ updates::trigger_hooks() {
     fi
 
     # Check if the variable exists
-    if ! declare -p "$hooks_array_name" > /dev/null 2>&1; then
+    if ! declare -p "$hooks_array_name" >/dev/null 2>&1; then
         loggers::log_message "WARN" "Hooks array '$hooks_array_name' does not exist"
         return 1
     fi
@@ -509,7 +510,7 @@ updates::trigger_hooks() {
 # --- CACHING SETUP (Global scope for persistence across calls) ---
 # This is a utility for faster re-checks, not the full caching recommendation.
 PACKWATCH_CACHE_DIR="/tmp/packwatch_cache"
-mkdir -p "$PACKWATCH_CACHE_DIR" 2> /dev/null || true # Ensure cache directory exists
+mkdir -p "$PACKWATCH_CACHE_DIR" 2>/dev/null || true # Ensure cache directory exists
 
 # ------------------------------------------------------------------------------
 # SECTION: Update Decision Helper (No change)
@@ -535,6 +536,7 @@ updates::_rename_deb_file() {
     local app_name="$4"
 
     local target_filename
+    # shellcheck disable=SC2059 # The template is a trusted config value.
     target_filename=$(printf "$template" "$version")
     target_filename=$(systems::sanitize_filename "$target_filename")
     local new_path="/tmp/$target_filename"
@@ -556,14 +558,8 @@ updates::_rename_deb_file() {
 }
 
 # Centralized verification wrapper (delegates to verifiers.sh)
-updates::verify_downloaded_artifact() {
-    local config_ref_name="$1"
-    local downloaded_file_path="$2"
-    local download_url="$3"        # Original download URL, used for .sig default
-    local direct_checksum="${4:-}" # Optional checksum provided directly by caller
-
-    verifiers::verify_artifact "$config_ref_name" "$downloaded_file_path" "$download_url" "$direct_checksum"
-}
+# The updates::verify_downloaded_artifact function has been removed.
+# All calls have been replaced with direct calls to verifiers::verify_artifact.
 
 # Extracted helper for checksum-based update detection for DEB files
 updates::_compare_deb_checksums() {
@@ -673,7 +669,7 @@ updates::process_deb_package() {
     if ! final_deb_path=$(updates::_prepare_deb_file "$app_name" "$download_url" "$deb_file_to_install" "$expected_checksum" "$checksum_algorithm" "$allow_http"); then return 1; fi # Pass allow_http
 
     # Perform centralized verification
-    if ! updates::verify_downloaded_artifact "$config_ref_name" "$final_deb_path" "$download_url" "$expected_checksum"; then
+    if ! verifiers::verify_artifact "$config_ref_name" "$final_deb_path" "$download_url" "$expected_checksum"; then
         errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded DEB package: '$app_name'." "$app_name"
         return 1
     fi
@@ -808,7 +804,7 @@ updates::check_direct_deb() {
     updates::on_download_complete "$name" "$temp_download_file" # Hook
 
     # Perform verification after download
-    if ! updates::verify_downloaded_artifact app_config_ref "$temp_download_file" "$download_url"; then
+    if ! verifiers::verify_artifact app_config_ref "$temp_download_file" "$download_url"; then
         errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded package: '$name'." "$name"
         return 1
     fi
@@ -908,7 +904,7 @@ updates::process_appimage_file() {
     updates::on_download_complete "$app_name" "$temp_appimage_path" # Hook
 
     # Perform verification after download
-    if ! updates::verify_downloaded_artifact app_config_ref "$temp_appimage_path" "$download_url"; then
+    if ! verifiers::verify_artifact app_config_ref "$temp_appimage_path" "$download_url"; then
         errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded AppImage: '$app_name'." "$app_name"
         return 1
     fi
@@ -957,8 +953,8 @@ updates::_install_appimage_file_command() {
     if mv "$temp_appimage_path" "$install_target_full_path"; then
         systems::unregister_temp_file "$temp_appimage_path"
         chmod +x "$install_target_full_path" || loggers::log_message "WARN" "Failed to make final AppImage executable: '$install_target_full_path'."
-        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
-            chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null ||
+        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
+            chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null ||
                 loggers::log_message "WARN" "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER'."
         fi
         return 0
@@ -1100,7 +1096,7 @@ updates::process_flatpak_app() {
         return 1
     fi
 
-    if ! command -v flatpak &> /dev/null; then
+    if ! command -v flatpak &>/dev/null; then
         errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot update $app_name." "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
         interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot update ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_RED}"
@@ -1146,7 +1142,7 @@ updates::check_flatpak() {
     local flatpak_app_id="${app_config_ref[flatpak_app_id]}"
     local source="Flathub"
 
-    if ! command -v flatpak &> /dev/null; then
+    if ! command -v flatpak &>/dev/null; then
         errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot check $name." "$name"
         updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
         interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot check ${FORMAT_BOLD}$name${FORMAT_RESET}." "${COLOR_RED}"
@@ -1157,7 +1153,7 @@ updates::check_flatpak() {
 
     local latest_version="0.0.0"
     local flatpak_search_output
-    if flatpak_search_output=$("$UPDATES_FLATPAK_SEARCH_IMPL" --columns=application,version,summary "$flatpak_app_id" 2> /dev/null); then # DI applied
+    if flatpak_search_output=$("$UPDATES_FLATPAK_SEARCH_IMPL" --columns=application,version,summary "$flatpak_app_id" 2>/dev/null); then # DI applied
         if [[ "$flatpak_search_output" =~ "$flatpak_app_id"[[:space:]]+([0-9.]+[^[:space:]]*)[[:space:]]+.* ]]; then
             latest_version=$(versions::normalize "${BASH_REMATCH[1]}")
         else
@@ -1225,16 +1221,18 @@ updates::handle_custom_check() {
         UPDATES_GET_INSTALLED_VERSION_IMPL UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL \
         UPDATES_GET_LATEST_RELEASE_INFO_IMPL UPDATES_EXTRACT_DEB_VERSION_IMPL UPDATES_FLATPAK_SEARCH_IMPL
     export ORIGINAL_HOME ORIGINAL_USER VERBOSE DRY_RUN
-    declare -p NETWORK_CONFIG > /dev/null 2>&1 && export NETWORK_CONFIG
-    while IFS= read -r func; do export -f "$func" 2> /dev/null || true; done \
+    declare -p NETWORK_CONFIG >/dev/null 2>&1 && export NETWORK_CONFIG
+    # shellcheck disable=SC2034 # `func` is used by `export -f`.
+    while IFS= read -r func; do export -f func 2>/dev/null || true; done \
         < <(declare -F | awk '{print $3}' | grep -E '^(networks|packages|versions|validators|systems|updates)::')
-    export -f updates::verify_downloaded_artifact
+    export -f verifiers::verify_artifact
 
     interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$app_display_name${FORMAT_RESET} for latest version..."
 
     local custom_checker_output=""
     local custom_checker_func="${app_config_ref[custom_checker_func]}"
 
+    # shellcheck disable=SC1090 # The script path is dynamic by design.
     source "$script_path" || {
         errors::handle_error "CONFIG_ERROR" "Failed to source custom checker script: '$script_path'" "$app_display_name"
         updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Failed to source custom checker script.\"}"
@@ -1273,50 +1271,50 @@ updates::handle_custom_check() {
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
         case "$install_type" in
-            "deb")
-                local download_url_from_output expected_checksum_from_output
-                download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
-                expected_checksum_from_output=$(echo "$custom_checker_output" | jq -r '.expected_checksum // empty')
+        "deb")
+            local download_url_from_output expected_checksum_from_output
+            download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
+            expected_checksum_from_output=$(echo "$custom_checker_output" | jq -r '.expected_checksum // empty')
 
-                # IMPORTANT: pass the ORIGINAL array name, not the nameref variable,
-                # to avoid a circular nameref in the callee.
-                updates::process_deb_package \
-                    "$config_array_name" \
-                    "${app_config_ref[deb_filename_template]:-}" \
-                    "$latest_version" \
-                    "$download_url_from_output" \
-                    "" \
-                    "$expected_checksum_from_output"
-                ;;
-            "appimage")
-                local download_url_from_output install_target_path_from_output
-                download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
-                install_target_path_from_output=$(echo "$custom_checker_output" | jq -r '.install_target_path')
+            # IMPORTANT: pass the ORIGINAL array name, not the nameref variable,
+            # to avoid a circular nameref in the callee.
+            updates::process_deb_package \
+                "$config_array_name" \
+                "${app_config_ref[deb_filename_template]:-}" \
+                "$latest_version" \
+                "$download_url_from_output" \
+                "" \
+                "$expected_checksum_from_output"
+            ;;
+        "appimage")
+            local download_url_from_output install_target_path_from_output
+            download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
+            install_target_path_from_output=$(echo "$custom_checker_output" | jq -r '.install_target_path')
 
-                updates::process_appimage_file \
-                    "${app_config_ref[name]}" \
-                    "${latest_version}" \
-                    "${download_url_from_output}" \
-                    "${install_target_path_from_output}" \
-                    "${app_config_ref[app_key]}" \
-                    "${app_config_ref[checksum_url]:-}" \
-                    "${app_config_ref[checksum_algorithm]:-sha256}" \
-                    "${app_config_ref[allow_insecure_http]:-0}"
-                ;;
-            "flatpak")
-                local flatpak_app_id_from_output
-                flatpak_app_id_from_output=$(echo "$custom_checker_output" | jq -r '.flatpak_app_id')
+            updates::process_appimage_file \
+                "${app_config_ref[name]}" \
+                "${latest_version}" \
+                "${download_url_from_output}" \
+                "${install_target_path_from_output}" \
+                "${app_config_ref[app_key]}" \
+                "${app_config_ref[checksum_url]:-}" \
+                "${app_config_ref[checksum_algorithm]:-sha256}" \
+                "${app_config_ref[allow_insecure_http]:-0}"
+            ;;
+        "flatpak")
+            local flatpak_app_id_from_output
+            flatpak_app_id_from_output=$(echo "$custom_checker_output" | jq -r '.flatpak_app_id')
 
-                updates::process_flatpak_app \
-                    "${app_config_ref[name]}" \
-                    "${app_config_ref[app_key]}" \
-                    "$latest_version" \
-                    "$flatpak_app_id_from_output"
-                ;;
-            *)
-                interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
-                return 1
-                ;;
+            updates::process_flatpak_app \
+                "${app_config_ref[name]}" \
+                "${app_config_ref[app_key]}" \
+                "$latest_version" \
+                "$flatpak_app_id_from_output"
+            ;;
+        *)
+            interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
+            return 1
+            ;;
         esac
 
     elif [[ "$status" == "no_update" || "$status" == "success" ]]; then
@@ -1357,7 +1355,7 @@ updates::_validate_app_config() {
     fi
 
     local field
-    IFS=',' read -ra fields <<< "$required_fields_str"
+    IFS=',' read -ra fields <<<"$required_fields_str"
     for field in "${fields[@]}"; do
         # Check if the field is empty in the config
         if [[ -z "${config_ref[$field]:-}" ]]; then

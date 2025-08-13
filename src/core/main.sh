@@ -28,14 +28,12 @@ CORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Define the base path for the init phase modules
 INIT_DIR="$CORE_DIR/init"
 readonly CORE_DIR INIT_DIR
-# main.sh (or your loader)
 
 # ------------------------------------------------------------------------------
 # Phase 0: Bootloader (Essential foundation for logging and error handling)
 # Modules: globals.sh, systems.sh, loggers.sh, errors.sh
 # ------------------------------------------------------------------------------
 source "$INIT_DIR/bootloader.sh"
-source "$CORE_DIR/../lib/gpg.sh"
 
 # ------------------------------------------------------------------------------
 # Phase 1: Interface (CLI parsing, early user output)

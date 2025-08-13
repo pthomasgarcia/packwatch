@@ -6,6 +6,28 @@ if [ -n "${PACKWATCH_VERIFIERS_LOADED:-}" ]; then
 fi
 PACKWATCH_VERIFIERS_LOADED=1
 
+# ==============================================================================
+# NOTES ON HARDENING AND TESTING
+# ==============================================================================
+#
+# This module has been hardened to ensure reliable and predictable behavior.
+# Key improvements include:
+#   - Idempotent guards to prevent issues from multiple sourcing.
+#   - Strict dependency loading: `gpg.sh` is now loaded unconditionally
+#     in `main.sh` to ensure its availability.
+#   - The GPG verification logic has been refactored to use temporary,
+#     isolated keyrings, removing dependencies on the user's local GPG
+#     environment and the `sudo` command.
+#
+# An automated test suite for this module is located at `tests/test_verifiers.sh`.
+# It covers the following scenarios:
+#   - Checksum: success, failure
+#   - Signature: success, failure
+#   - Combined: success, checksum failure, signature failure
+#
+# To run the tests:
+#   ./tests/test_verifiers.sh
+#
 # Centralized checksum and signature verification for downloaded artifacts.
 
 # Expected dependencies to be sourced by runtime:

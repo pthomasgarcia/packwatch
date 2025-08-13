@@ -33,3 +33,8 @@ jobs:
       - name: Check formatting with shfmt (4-space indent)
         run: |
           shfmt -w -i 4 -ci -sr .
+
+      - name: Run Test Suite
+        run: |
+          chmod +x tests/test_verifiers.sh
+          ./tests/test_verifiers.sh

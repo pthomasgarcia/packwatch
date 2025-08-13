@@ -25,6 +25,7 @@ source "$CORE_DIR/configs.sh"
 source "$CORE_DIR/../lib/counters.sh"
 source "$CORE_DIR/../lib/notifiers.sh"
 source "$CORE_DIR/../util/checker_utils.sh"
+source "$CORE_DIR/../lib/gpg.sh"
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).

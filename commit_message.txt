@@ -1,16 +1,13 @@
-feat(core): Add post-verification hooks and improve GitHub release parsing
+refactor(core): Harden module loading and simplify verification calls
 
-This commit introduces a new hook system for verification results and significantly improves the robustness of parsing data from GitHub releases.
+This commit hardens the script's module loading, simplifies the verification workflow by removing a redundant abstraction layer, and expands the test suite.
 
-- **Post-Verification Hooks:**
-  - Added a new `post_verify` hook that is triggered after every checksum and GPG signature check.
-  - This hook provides detailed, structured JSON feedback on the verification outcome, including the algorithm, expected/actual values, and success status.
+- **Hardened Module Loading:**
+  - The `gpg.sh` library is now loaded unconditionally during the scaffolding phase. This ensures GPG functions are always available and removes complex, brittle lazy-loading logic from the `verifiers` and `extensions` modules.
 
-- **Robust GitHub Release Parsing:**
-  - The `extract_checksum_from_release_body` function in `repositories.sh` is now much more flexible. It can search for multiple filename variations (e.g., with/without path prefixes) and supports user-defined alternations in the `checksum_pattern`.
-  - The `find_asset_url` function was optimized to use a single, more efficient `jq` command to locate release assets.
+- **Simplified Verification API:**
+  - The `updates::verify_downloaded_artifact` wrapper function has been removed. All modules now call `verifiers::verify_artifact` directly, simplifying the code and removing an unnecessary layer of abstraction.
 
-- **Code Cleanup & Fixes:**
-  - Removed the now-redundant `verify_checksum` and `verify_gpg_key` functions from `validators.sh`, as this logic is fully centralized.
-  - Moved the GPG success message from `gpg.sh` to `updates.sh` to keep the library clean.
-  - Fixed a `printf` format string bug in `updates.sh`.
+- **Expanded Testing:**
+  - The test suite for `verifiers.sh` has been expanded to cover network failure scenarios for checksum and signature downloads, improving test coverage for the core security logic.
+  - A new `CHANGELOG.md` has been added to the project.

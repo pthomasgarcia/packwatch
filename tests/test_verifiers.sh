@@ -50,7 +50,13 @@ interfaces::print_ui_line() { :; }
 loggers::log_message() { :; }
 errors::handle_error() { :; }
 updates::trigger_hooks() { :; }
-networks::download_text_to_cache() { echo "mock_checksum_file"; }
+networks::download_text_to_cache() {
+    if [[ "${MOCK_DOWNLOAD_FAIL:-0}" -eq 1 ]]; then
+        return 1
+    else
+        echo "mock_checksum_file"
+    fi
+}
 networks::url_exists() { return 0; }
 validators::extract_checksum_from_file() { echo "mock_checksum"; }
 systems::unregister_temp_file() { :; }
@@ -163,7 +169,7 @@ test_verify_artifact_checksum_fails() {
 }
 
 test_verify_artifact_signature_fails() {
-    # shellcheck disable=SC2034
+    # shellcheck disable=SC2034 # MOCK_CONFIG is used by nameref in the function under test.
     declare -A MOCK_CONFIG=(
         [name]="test-app"
         [gpg_key_id]="TESTKEY"
@@ -173,6 +179,31 @@ test_verify_artifact_signature_fails() {
     assert_failure "verifiers::verify_artifact should fail if signature is invalid" \
         verifiers::verify_artifact MOCK_CONFIG "/tmp/dummy_file" "http://example.com/file" "mock_checksum"
     unset MOCK_GPG_VERIFY_FAIL
+}
+
+test_checksum_download_failure() {
+    # shellcheck disable=SC2034 # MOCK_CONFIG is used by nameref in the function under test.
+    declare -A MOCK_CONFIG=(
+        [name]="test-app"
+        [checksum_url]="http://example.com/checksums.txt"
+    )
+    MOCK_DOWNLOAD_FAIL=1
+    assert_failure "verifiers::resolve_expected_checksum should fail if checksum download fails" \
+        verifiers::resolve_expected_checksum MOCK_CONFIG "/tmp/dummy_file" "http://example.com/file"
+    unset MOCK_DOWNLOAD_FAIL
+}
+
+test_signature_download_failure() {
+    # shellcheck disable=SC2034 # MOCK_CONFIG is used by nameref in the function under test.
+    declare -A MOCK_CONFIG=(
+        [name]="test-app"
+        [gpg_key_id]="TESTKEY"
+        [gpg_fingerprint]="TESTFINGERPRINT"
+    )
+    MOCK_DOWNLOAD_FAIL=1
+    assert_failure "verifiers::verify_signature should fail if signature download fails" \
+        verifiers::verify_signature MOCK_CONFIG "/tmp/dummy_file" "http://example.com/file"
+    unset MOCK_DOWNLOAD_FAIL
 }
 
 # --- Test Runner ---
