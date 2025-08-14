@@ -1,125 +1,54 @@
 # Packwatch: App Update Checker
 
+![Packwatch Demo](assets/packwatch-demo.jpg)
+
 Packwatch is a powerful and extensible shell-based utility for checking for updates to your favorite applications. It is designed to be modular, allowing you to easily add new application checkers by creating simple JSON configuration files.
 
 ## Features
 
-- **Modular Design:** Each application is defined in its own JSON configuration file, making it easy to add, remove, or modify checkers.
-- **Multiple Check Methods:** Supports various methods for checking updates, including GitHub releases, APT repositories, and direct URL lookups.
-- **Configurable:** Easily configure which applications to check.
-- **Dry-Run Mode:** See what updates are available without performing any downloads or installations.
-- **Verbose Output:** Enable verbose logging for debugging and detailed information.
-- **Dependency Checking:** Ensures all required tools are available before running.
+- **Modular Design:** Each application is defined in its own JSON configuration file.
+- **Multiple Check Methods:** Supports GitHub releases, APT repositories, and direct URL lookups.
+- **Configurable:** Easily enable or disable application checks.
+- **Dry-Run Mode:** Check for updates without performing downloads or installations.
+- **Verbose Output:** Enable detailed logging for debugging.
+- **Dependency Checking:** Ensures all required tools are available.
 
 ## Requirements
 
-To run Packwatch, you need the following dependencies installed on your system:
+To run Packwatch, you need the following dependencies: `wget`, `curl`, `gpg`, `jq`, `dpkg`, `sha256sum`, `lsb_release`, `getent`, `coreutils`, and `libnotify-bin`.
 
-- `wget`
-- `curl`
-- `gpg`
-- `jq`
-- `dpkg`
-- `sha256sum`
-- `lsb_release`
-- `getent`
-- `coreutils`
-- `libnotify-bin` (for desktop notifications)
-
-You can typically install these on a Debian-based system with:
+On Debian-based systems, you can install them with:
 ```bash
-- `libc-bin` (provides `getent`)
-- `coreutils`
-- `libnotify-bin` (for desktop notifications)
-
-You can typically install these on a Debian-based system with:
-```bash
-sudo apt install -y wget curl gpg jq dpkg coreutils lsb-release libc-bin libnotify-bin
+sudo apt install -y wget curl gpg jq dpkg coreutils lsb-release getent libnotify-bin
 ```
+For Flatpak support, see [flatpak.org/setup/](https://flatpak.org/setup/).
 
-For Flatpak support, ensure you have Flatpak installed. You can find instructions at [flatpak.org/setup/](https://flatpak.org/setup/).
+## Installation & Usage
 
-## Installation
-
-1.  Clone this repository to your local machine:
+1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/yourusername/packwatch.git
-    cd <repository-directory>
+    git clone https://github.com/pthomasgarcia/packwatch.git
+    cd packwatch
     ```
-2.  (Optional) Create the default configuration files. This is a good way to get started.
+
+2.  **Run the script:**
+    - Check all enabled apps: `src/core/main.sh`
+    - Check specific apps: `src/core/main.sh ghostty tabby`
+    - Get help: `src/core/main.sh --help`
+
+3.  **(Optional) Create default configs:**
     ```bash
     src/core/main.sh --create-config
     ```
-    This will populate the `config/conf.d/` directory with example JSON files.
-
-## Usage
-
-The main entry point for the script is `src/core/main.sh`.
-
-### Basic Commands
-
--   **Check for all enabled applications:**
-    ```bash
-    src/core/main.sh
-    ```
-
--   **Check for specific applications:**
-    Provide the application keys (the JSON filename without the extension) as arguments.
-    ```bash
-    src/core/main.sh ghostty tabby zed
-    ```
-
--   **Show the help message:**
-    ```bash
-    src/core/main.sh --help
-    ```
-
-### Command-Line Options
-
--   `-h, --help`: Show the help message and exit.
--   `-v, --verbose`: Enable verbose output for debugging.
--   `-n, --dry-run`: Perform a dry run, checking for updates without downloading or installing anything.
--   `--cache-duration N`: Set the cache duration in seconds (default: 300).
--   `--create-config`: Create default modular configuration files and exit.
--   `--version`: Show the script version and exit.
 
 ## Configuration
 
-Packwatch is configured through JSON files located in the `config/conf.d/` directory. Each file represents an application to be checked.
+Customize Packwatch by editing the JSON files in `config/conf.d/`. Enable or disable applications by setting `"enabled": true/false`.
 
-You can enable or disable an application by setting the `"enabled": true/false` flag within its JSON file.
+## Contributing
 
-To add a new application, create a new `.json` file in the `config/conf.d/` directory, following the structure of the existing files.
+This project uses `shellcheck` for linting and `shfmt` for formatting. Use the provided `Makefile` to run checks before committing.
 
-## For Developers
-
-This project uses `shellcheck` for static analysis and `shfmt` for formatting.
-
-### Development Tools
-
--   **`shellcheck`**: A static analysis tool for shell scripts.
--   **`shfmt`**: A shell script formatter.
-
-### Makefile Commands
-
-The `Makefile` provides convenient targets for development:
-
--   **Lint Shell Scripts:**
-    ```bash
-    make lint-shell
-    ```
-
--   **Format Shell Scripts:**
-    ```bash
-    make format-shell
-    ```
-
--   **Check Formatting (without modifying files):**
-    ```bash
-    make format-check
-    ```
-
--   **Run all CI checks:**
-    ```bash
-    make ci
-    ```
+- **Run all CI checks:** `make ci`
+- **Lint scripts:** `make lint-shell`
+- **Format scripts:** `make format-shell`
