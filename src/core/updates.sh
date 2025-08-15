@@ -242,21 +242,14 @@ updates::_extract_release_checksum() {
     local config_ref_name="$5"
     local -n app_config_ref=$config_ref_name
 
-    local checksum_pattern="${app_config_ref[checksum_pattern]:-}"
     local checksum_algorithm="${app_config_ref[checksum_algorithm]:-sha256}"
+    local use_digest="${app_config_ref[checksum_from_github_release_digest]:-false}"
     local expected_checksum=""
+    local download_filename
+    download_filename=$(printf "$filename_template" "$version")
 
-    if [[ -n "$checksum_pattern" ]]; then
-        expected_checksum=$(repositories::extract_checksum_from_release_body \
-            "$release_json" \
-            "$checksum_pattern" \
-            "$app_name" \
-            "$checksum_algorithm")
-    else
-        local download_filename
-        # shellcheck disable=SC2059
-        download_filename=$(printf "$filename_template" "$version")
-        expected_checksum=$(repositories::find_asset_checksum \
+    if [[ "$use_digest" == "true" ]]; then
+        expected_checksum=$(repositories::find_asset_digest \
             "$release_json" \
             "$download_filename" \
             "$app_name")
@@ -787,8 +780,8 @@ updates::check_github_tgz() {
             return 1
         fi
 
-        local checksum_url
-        checksum_url=$(jq -r '.assets[] | select(.name | endswith("sha256sum.txt")).browser_download_url' "$latest_release_json_path")
+        local expected_checksum
+        expected_checksum=$(updates::_extract_release_checksum "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name" "$config_ref_name")
 
         updates::process_installation \
             "$name" \
@@ -799,7 +792,7 @@ updates::check_github_tgz() {
             "$config_ref_name" \
             "$app_key" \
             "$latest_version" \
-            "$checksum_url"
+            "$expected_checksum"
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
@@ -1045,9 +1038,9 @@ updates::check_appimage() {
                     loggers::log_message "WARN" "Failed to parse version from GitHub release for '$name'. Will try direct download URL."
                 fi
 
-                local download_filename_from_url
-                download_filename_from_url="$(basename "$download_url" | cut -d'?' -f1)"
-                if ! expected_checksum=$(repositories::find_asset_checksum "$latest_release_json_path" "$download_filename_from_url" "$name"); then loggers::log_message "WARN" "Failed to get GitHub checksum for '$name'."; fi
+                local filename_pattern_template
+                filename_pattern_template="$(basename "$download_url" | cut -d'?' -f1)"
+                expected_checksum=$(updates::_extract_release_checksum "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name" "app_config_ref")
                 source="GitHub Releases"
             fi
         else
@@ -1381,7 +1374,7 @@ updates::_install_tgz_command() {
     local config_ref_name="$2"
     local app_key="$3"
     local latest_version="$4"
-    local checksum_url="$5"
+    local expected_checksum="$5"
     local -n app_config_ref=$config_ref_name
     local app_name="${app_config_ref[name]}"
     local filename_template="${app_config_ref[filename_pattern_template]}"
@@ -1389,7 +1382,9 @@ updates::_install_tgz_command() {
     # 1. Define and Check Cache
     local artifact_cache_dir="${HOME}/.cache/packwatch/artifacts/${app_name}/v${latest_version}"
     mkdir -p "$artifact_cache_dir"
-    local cached_artifact_path="${artifact_cache_dir}/${filename_template}"
+    local base_filename
+    base_filename=$(printf "$filename_template" "$latest_version")
+    local cached_artifact_path="${artifact_cache_dir}/${base_filename}"
 
     if [[ ! -f "$cached_artifact_path" ]]; then
         loggers::log_message "INFO" "Artifact not found in cache. Downloading..."
@@ -1402,22 +1397,7 @@ updates::_install_tgz_command() {
     fi
 
     # 2. Perform Checksum Verification (Always Runs)
-    local checksum_pattern="${app_config_ref[checksum_pattern]:-${filename_template}}"
-    local temp_checksum_file
-    if ! temp_checksum_file=$(networks::fetch_cached_data "$checksum_url" "txt"); then
-        errors::handle_error "NETWORK_ERROR" "Failed to download checksum file for '$app_name'." "$app_name"
-        return 1
-    fi
-
-    local expected_checksum
-    expected_checksum=$(validators::extract_checksum_from_file "$temp_checksum_file" "$checksum_pattern")
-
-    if [[ -z "$expected_checksum" ]]; then
-        errors::handle_error "VALIDATION_ERROR" "Failed to extract expected checksum for '$app_name'." "$app_name"
-        return 1
-    fi
-
-    if ! verifiers::verify_checksum "$cached_artifact_path" "$expected_checksum"; then
+    if ! verifiers::verify_artifact "$config_ref_name" "$cached_artifact_path" "$download_url" "$expected_checksum"; then
         errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
         return 1
     fi

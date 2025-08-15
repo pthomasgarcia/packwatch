@@ -8,6 +8,6 @@
         "repo_owner": "ollama",
         "repo_name": "ollama",
         "filename_pattern_template": "ollama-linux-amd64.tgz",
-        "checksum_pattern": "./ollama-linux-amd64.tgz"
+        "checksum_from_github_release_digest": true
     }
 }
