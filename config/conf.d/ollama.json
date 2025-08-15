@@ -3,9 +3,12 @@
     "enabled": true,
     "application": {
         "name": "Ollama",
-        "type": "script",
-        "download_url": "https://ollama.com/install.sh",
-        "version_url": "https://api.github.com/repos/ollama/ollama/releases/latest",
-        "version_regex": "[0-9]+\\.[0-9]+\\.[0-9]+"
+        "type": "custom",
+        "repo_owner": "ollama",
+        "repo_name": "ollama",
+        "filename_pattern_template": "ollama-linux-amd64.tgz",
+        "checksum_pattern": "./ollama-linux-amd64.tgz",
+        "custom_checker_script": "ollama.sh",
+        "custom_checker_func": "check_ollama"
     }
 }

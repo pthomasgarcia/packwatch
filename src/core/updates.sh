@@ -101,6 +101,11 @@ updates::process_installation() {
             return 0
         fi
 
+        # Check for active sudo session before a sudo command
+        if [[ "$install_command_func" == "sudo" ]] && systems::is_sudo_session_active; then
+            interfaces::print_ui_line "  " "→ " "An active sudo session was found. Installing without a password prompt."
+        fi
+
         if "$install_command_func" "${install_command_args[@]}"; then
             if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
                 loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
@@ -615,32 +620,27 @@ updates::_prepare_deb_file() {
     local allow_http="${6:-0}" # New parameter
 
     local final_deb_path
-    if [[ -n "$deb_file_to_install" && -f "$deb_file_to_install" ]]; then
-        final_deb_path="$deb_file_to_install"
-        loggers::log_message "DEBUG" "Using pre-downloaded DEB: '$final_deb_path'"
+    local version
+    version=$(echo "$download_url" | grep -oP '\d+\.\d+\.\d+' | head -n1)
+    local artifact_cache_dir="${HOME}/.cache/packwatch/artifacts/${app_name}/v${version}"
+    mkdir -p "$artifact_cache_dir"
+    local base_filename
+    base_filename=$(basename "$download_url" | cut -d'?' -f1)
+    local cached_artifact_path="${artifact_cache_dir}/${base_filename}"
+
+    if [[ -f "$cached_artifact_path" ]]; then
+        loggers::log_message "INFO" "Using cached artifact: $cached_artifact_path"
+        final_deb_path="$cached_artifact_path"
     else
-        local temp_deb_file
-        local base_filename
-        base_filename="$(basename "${download_url}" | cut -d'?' -f1 | sed 's/\.deb$//')"
-        base_filename=$(systems::sanitize_filename "$base_filename")
-
-        # Capture only the last line which should be the file path
-        local create_output
-        if ! create_output=$(systems::create_temp_file "${base_filename}" 2>&1); then return 1; fi
-
-        # Extract the file path (assuming it's the last line)
-        temp_deb_file=$(echo "$create_output" | tail -n 1)
-        temp_deb_file="${temp_deb_file}.deb"
-
-        updates::on_download_start "$app_name" "unknown" # Initial download progress hook
-        # Use dependency injection for download_file
-        if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_deb_file" "" "" "$allow_http"; then
+        loggers::log_message "INFO" "Artifact not found in cache. Downloading..."
+        updates::on_download_start "$app_name" "unknown"
+        if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$cached_artifact_path" "" "" "$allow_http"; then
             errors::handle_error "NETWORK_ERROR" "Failed to download DEB package" "$app_name"
             updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download DEB package.\"}"
             return 1
         fi
-        updates::on_download_complete "$app_name" "$temp_deb_file" # Download complete hook
-        final_deb_path="$temp_deb_file"
+        updates::on_download_complete "$app_name" "$cached_artifact_path"
+        final_deb_path="$cached_artifact_path"
     fi
 
     echo "$final_deb_path"
@@ -653,53 +653,32 @@ updates::_prepare_deb_file() {
 
 updates::process_deb_package() {
     local config_ref_name="$1"
-    local -n app_config_ref=$config_ref_name
     local deb_filename_template="$2"
     local latest_version="$3"
     local download_url="$4"
     local deb_file_to_install="${5:-}"
-    local expected_checksum="${6:-}" # New parameter for direct checksum
-
+    local expected_checksum="${6:-}"
+    local -n app_config_ref=$config_ref_name
     local app_name="${app_config_ref[name]}"
     local app_key="${app_config_ref[app_key]}"
-    local checksum_algorithm="${app_config_ref[checksum_algorithm]:-sha256}" # Get from config
-    local allow_http="${app_config_ref[allow_insecure_http]:-0}"             # Get from config
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
 
-    if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url"; then
-        errors::handle_error "VALIDATION_ERROR" "Invalid parameters for DEB update flow" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"deb_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Invalid parameters for DEB update flow.\"}"
+    local final_deb_path
+    if ! final_deb_path=$(updates::_prepare_deb_file "$app_name" "$download_url" "$deb_file_to_install" "$expected_checksum" "" "$allow_http"); then
         return 1
     fi
 
-    # Prepare DEB file
-    local final_deb_path
-    if ! final_deb_path=$(updates::_prepare_deb_file "$app_name" "$download_url" "$deb_file_to_install" "$expected_checksum" "$checksum_algorithm" "$allow_http"); then return 1; fi # Pass allow_http
-
-    # Perform centralized verification
     if ! verifiers::verify_artifact "$config_ref_name" "$final_deb_path" "$download_url" "$expected_checksum"; then
         errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded DEB package: '$app_name'." "$app_name"
         return 1
     fi
 
-    # Handle file renaming
-    if [[ -n "$deb_filename_template" ]]; then
-        local renamed_path
-        if ! renamed_path=$(updates::_rename_deb_file "$final_deb_path" "$deb_filename_template" "$latest_version" "$app_name"); then
-            loggers::log_message "WARN" "Proceeding with original DEB file name."
-        fi
-        final_deb_path="$renamed_path"
-    fi
+    # The _rename_deb_file function is legacy and conflicts with the new caching mechanism.
+    # if [[ -n "$deb_filename_template" ]]; then
+    #     final_deb_path=$(updates::_rename_deb_file "$final_deb_path" "$deb_filename_template" "$latest_version" "$app_name")
+    # fi
 
-    # Use the generic process_installation function
-    updates::process_installation \
-        "$app_name" \
-        "$app_key" \
-        "$latest_version" \
-        "packages::install_deb_package" \
-        "$final_deb_path" \
-        "$app_name" \
-        "$latest_version" \
-        "$app_key"
+    packages::install_deb_package "$final_deb_path" "$app_name" "$latest_version" "$app_key"
 }
 
 # ------------------------------------------------------------------------------
@@ -746,13 +725,19 @@ updates::check_github_deb() {
         local expected_checksum
         expected_checksum=$(updates::_extract_release_checksum "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name" "$config_ref_name")
 
-        updates::process_deb_package \
+        updates::process_installation \
+            "$name" \
+            "$app_key" \
+            "$latest_version" \
+            "updates::process_deb_package" \
             "$config_ref_name" \
             "$filename_pattern_template" \
             "$latest_version" \
             "$download_url" \
             "" \
-            "$expected_checksum"
+            "$expected_checksum" \
+            "$name" \
+            "$app_key"
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date
@@ -1292,10 +1277,24 @@ updates::handle_custom_check() {
                     "$latest_version" \
                     "$flatpak_app_id_from_output"
                 ;;
+           "tgz")
+               local download_url_from_output
+               download_url_from_output=$(echo "$custom_checker_output" | jq -r '.download_url')
+               updates::process_installation \
+                   "$app_display_name" \
+                   "$app_key" \
+                   "$latest_version" \
+                   "updates::_install_tgz_command" \
+                   "$(echo "$custom_checker_output" | jq -r '.download_url')" \
+                   "$config_array_name" \
+                   "$app_key" \
+                   "$latest_version" \
+                   "$(echo "$custom_checker_output" | jq -r '.checksum_url')"
+               ;;
             *)
-                interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
-                return 1
-                ;;
+               interfaces::print_ui_line "  " "✗ " "Unknown install type from custom checker: $install_type" "${COLOR_RED}"
+               return 1
+               ;;
         esac
 
     elif [[ "$status" == "no_update" || "$status" == "success" ]]; then
@@ -1312,6 +1311,83 @@ updates::handle_custom_check() {
         return 1
     fi
 
+    return 0
+}
+
+updates::_install_tgz_command() {
+    local download_url="$1"
+    local config_ref_name="$2"
+    local app_key="$3"
+    local latest_version="$4"
+    local checksum_url="$5"
+    local -n app_config_ref=$config_ref_name
+    local app_name="${app_config_ref[name]}"
+    local filename_template="${app_config_ref[filename_pattern_template]}"
+
+    # 1. Define and Check Cache
+    local artifact_cache_dir="${HOME}/.cache/packwatch/artifacts/${app_name}/v${latest_version}"
+    mkdir -p "$artifact_cache_dir"
+    local cached_artifact_path="${artifact_cache_dir}/${filename_template}"
+
+    if [[ ! -f "$cached_artifact_path" ]]; then
+        loggers::log_message "INFO" "Artifact not found in cache. Downloading..."
+        if ! networks::download_file "$download_url" "$cached_artifact_path" "" "" "0" 600; then
+            errors::handle_error "NETWORK_ERROR" "Failed to download TGZ archive for '$app_name'." "$app_name"
+            return 1
+        fi
+    else
+        loggers::log_message "INFO" "Using cached artifact: $cached_artifact_path"
+    fi
+
+    # 2. Perform Checksum Verification (Always Runs)
+    local checksum_pattern="${app_config_ref[checksum_pattern]:-${filename_template}}"
+    local temp_checksum_file
+    if ! temp_checksum_file=$(networks::fetch_cached_data "$checksum_url" "txt"); then
+        errors::handle_error "NETWORK_ERROR" "Failed to download checksum file for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    local expected_checksum
+    expected_checksum=$(validators::extract_checksum_from_file "$temp_checksum_file" "$checksum_pattern")
+
+    if [[ -z "$expected_checksum" ]]; then
+        errors::handle_error "VALIDATION_ERROR" "Failed to extract expected checksum for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    if ! verifiers::verify_checksum "$cached_artifact_path" "$expected_checksum"; then
+        errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    # 3. Extract and Install
+    local install_dir="/usr/local/bin"
+    local temp_extract_dir
+    temp_extract_dir=$(mktemp -d -p "${HOME}/.cache/packwatch/tmp")
+    
+    if ! tar -xzf "$cached_artifact_path" -C "$temp_extract_dir"; then
+        errors::handle_error "INSTALLATION_ERROR" "Failed to extract TGZ archive for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    local binary_path
+    binary_path=$(find "$temp_extract_dir" -type f -name "ollama")
+    if [[ -z "$binary_path" ]]; then
+        errors::handle_error "INSTALLATION_ERROR" "Could not find executable in extracted archive for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    if ! sudo mv "$binary_path" "${install_dir}/ollama"; then
+        errors::handle_error "INSTALLATION_ERROR" "Failed to move binary for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    if ! sudo chmod +x "${install_dir}/ollama"; then
+        errors::handle_error "PERMISSION_ERROR" "Failed to make binary executable for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    # The generic process_installation function will handle the version update
     return 0
 }
 

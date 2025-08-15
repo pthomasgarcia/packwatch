@@ -1,16 +1,16 @@
-refactor(core): Abstract download-and-check logic into a utility module
+feat(config): Implement robust validation with JSON Schema
 
-This commit introduces a new utility module to abstract the common "download, verify, and extract version" workflow. It also includes numerous fixes to address ShellCheck warnings and improve robustness.
+This commit replaces the manual, brittle shell-based configuration validation with a robust system based on the industry-standard JSON Schema.
 
-- **New Updater Utility Module:**
-  - Created a new `src/util/updater_utils.sh` module to house shared helper functions for the update process.
-  - A new `updater_utils::check_and_get_version_from_download` function now encapsulates the logic for "direct download" style checks, reducing code duplication.
-  - The `check_direct_deb` handler has been refactored to use this new, simpler utility.
+- **JSON Schema Integration:**
+  - A formal `schema.json` has been introduced, defining the precise structure, types, and required fields for all application configurations.
+  - The validation logic in `configs.sh` has been completely replaced with a call to `ajv-cli`, which validates config files against this new schema.
+  - This provides far more reliable and maintainable validation with clearer error messages.
 
-- **Code Hardening & ShellCheck Fixes:**
-  - Addressed a wide range of ShellCheck warnings across the codebase, improving script reliability and correctness.
-  - The user confirmation prompt now defaults to "yes" in non-interactive shells, preventing hangs in CI environments.
-  - CLI flags (`--verbose`, `--dry-run`) are now correctly exported to ensure they are available in subshells.
+- **Dependency & Configuration Updates:**
+  - `ajv` is now a required dependency for the script to run.
+  - The `allow_insecure_http` flag has been updated to a proper boolean (`true`/`false`) in the schema and config files.
 
-- **`.gitignore`:**
-  - Added `CHANGELOG.md` to `.gitignore` to prevent it from being accidentally committed.
+- **Code Quality:**
+  - Addressed numerous new ShellCheck warnings across the codebase, particularly regarding unused variables and namerefs.
+  - Added `CHANGELOG.md` to `.gitignore`.

@@ -290,6 +290,18 @@ systems::require_json_value() {
 }
 
 # ------------------------------------------------------------------------------
+# SECTION: Sudo Session Check
+# ------------------------------------------------------------------------------
+
+# Checks if a sudo session is currently active without prompting for a password.
+# Usage: if systems::is_sudo_session_active; then ...
+systems::is_sudo_session_active() {
+    # -n (non-interactive) prevents a password prompt.
+    # The command returns 0 if sudo is active, 1 otherwise.
+    sudo -n true 2>/dev/null
+}
+
+# ------------------------------------------------------------------------------
 # SECTION: System Dependency Check
 # ------------------------------------------------------------------------------
 
