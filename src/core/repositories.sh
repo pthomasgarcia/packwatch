@@ -55,11 +55,7 @@ repositories::parse_version_from_release() {
     fi
 
     local latest_version
-    if ! latest_version=$(versions::extract_from_json "$release_json_path" ".tag_name" "$app_name"); then
-        errors::handle_error "PARSING_ERROR" "Failed to get version from latest release." "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get version from latest release.\"}"
-        return 1
-    fi
+    latest_version=$(versions::normalize "$raw_tag_name")
 
     if [[ -z "$latest_version" ]]; then
         errors::handle_error "VALIDATION_ERROR" "Failed to detect latest version for '$app_name' from tag '$raw_tag_name'." "$app_name"

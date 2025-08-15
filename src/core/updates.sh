@@ -42,6 +42,7 @@
 declare -A UPDATE_HANDLERS
 UPDATE_HANDLERS["github_deb"]="updates::check_github_deb"
 UPDATE_HANDLERS["direct_deb"]="updates::check_direct_deb"
+UPDATE_HANDLERS["github_tgz"]="updates::check_github_tgz"
 UPDATE_HANDLERS["appimage"]="updates::check_appimage"
 UPDATE_HANDLERS["script"]="updates::check_script"   # New type for script-based installations
 UPDATE_HANDLERS["flatpak"]="updates::check_flatpak" # Renamed for consistency as it also checks
@@ -51,6 +52,7 @@ UPDATE_HANDLERS["custom"]="updates::handle_custom_check"
 # Defines required fields for each app type.
 declare -A APP_TYPE_VALIDATIONS
 APP_TYPE_VALIDATIONS["github_deb"]="name,package_name,repo_owner,repo_name,filename_pattern_template"
+APP_TYPE_VALIDATIONS["github_tgz"]="name,repo_owner,repo_name,filename_pattern_template"
 APP_TYPE_VALIDATIONS["direct_deb"]="name,package_name,download_url"
 APP_TYPE_VALIDATIONS["appimage"]="name,install_path,download_url"
 APP_TYPE_VALIDATIONS["script"]="name,download_url,version_url,version_regex" # New type for script-based installations
@@ -738,6 +740,66 @@ updates::check_github_deb() {
             "$expected_checksum" \
             "$name" \
             "$app_key"
+    else
+        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+        counters::inc_up_to_date
+    fi
+
+    return 0
+}
+
+# ------------------------------------------------------------------------------
+# SECTION: GitHub TGZ Update Flow
+# ------------------------------------------------------------------------------
+
+# Updates module; checks for updates for a GitHub TGZ application.
+updates::check_github_tgz() {
+    local config_ref_name="$1"
+    local -n app_config_ref=$config_ref_name
+    local name="${app_config_ref[name]}"
+    local app_key="${app_config_ref[app_key]}"
+    local repo_owner="${app_config_ref[repo_owner]}"
+    local repo_name="${app_config_ref[repo_name]}"
+    local filename_pattern_template="${app_config_ref[filename_pattern_template]}"
+    local source="GitHub Releases"
+
+    interfaces::print_ui_line "  " "→ " "Checking GitHub releases for ${FORMAT_BOLD}$name${FORMAT_RESET}..."
+
+    local installed_version
+    installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key")
+
+    local fetch_result
+    fetch_result=$(updates::_fetch_github_version "$repo_owner" "$repo_name" "$name") || return 1
+    local latest_version
+    latest_version=$(echo "$fetch_result" | head -n1)
+    local latest_release_json_path
+    latest_release_json_path=$(echo "$fetch_result" | tail -n +2)
+
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
+
+    if updates::is_needed "$installed_version" "$latest_version"; then
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
+
+        local download_url
+        if ! download_url=$(updates::_build_download_url "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name"); then
+            return 1
+        fi
+
+        local checksum_url
+        checksum_url=$(jq -r '.assets[] | select(.name | endswith("sha256sum.txt")).browser_download_url' "$latest_release_json_path")
+
+        updates::process_installation \
+            "$name" \
+            "$app_key" \
+            "$latest_version" \
+            "updates::_install_tgz_command" \
+            "$download_url" \
+            "$config_ref_name" \
+            "$app_key" \
+            "$latest_version" \
+            "$checksum_url"
     else
         interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
         counters::inc_up_to_date

@@ -20,6 +20,7 @@
                 { "$ref": "#/definitions/custom" },
                 { "$ref": "#/definitions/direct_deb" },
                 { "$ref": "#/definitions/github_deb" },
+                { "$ref": "#/definitions/github_tgz" },
                 { "$ref": "#/definitions/script" }
             ]
         }
@@ -78,6 +79,17 @@
                 "filename_pattern_template": { "type": "string" }
             },
             "required": ["type", "name", "package_name", "repo_owner", "repo_name", "filename_pattern_template"],
+            "allOf": [{ "$ref": "#/definitions/common_properties" }]
+        },
+        "github_tgz": {
+            "type": "object",
+            "properties": {
+                "type": { "const": "github_tgz" },
+                "repo_owner": { "type": "string" },
+                "repo_name": { "type": "string" },
+                "filename_pattern_template": { "type": "string" }
+            },
+            "required": ["type", "name", "repo_owner", "repo_name", "filename_pattern_template"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         },
         "script": {

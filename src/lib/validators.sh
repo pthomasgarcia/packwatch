@@ -68,50 +68,6 @@ validators::check_executable_file() {
 # SECTION: Checksum and GPG Validators
 # ------------------------------------------------------------------------------
 
-# # Verify a GPG key's fingerprint against an expected value.
-# # Usage: validators::verify_gpg_key "KEYID" "FINGERPRINT" "AppName"
-# validators::verify_gpg_key() {
-#     local key_id="$1"
-#     local expected_fingerprint="$2"
-#     local app_name="${3:-unknown}"
-
-#     if [[ -z "$key_id" ]] || [[ -z "$expected_fingerprint" ]]; then
-#         errors::handle_error "GPG_ERROR" "Missing GPG key ID or fingerprint for GPG verification" "$app_name"
-#         return 1
-#     fi
-
-#     local actual_fingerprint
-
-#     # Ensure gpg.sh is sourced to use _get_gpg_fingerprint_as_user
-#     # shellcheck source=/dev/null
-#     source "$LIB_DIR/gpg.sh"
-
-#     actual_fingerprint=$(_get_gpg_fingerprint_as_user "$key_id")
-
-#     if [[ -z "$actual_fingerprint" ]]; then
-#         loggers::log_message "ERROR" "GPG fingerprint retrieval failed for key ID '$key_id'. This may indicate a security downgrade if falling back to root."
-#         errors::handle_error "GPG_ERROR" "GPG key not found in keyring for user '$ORIGINAL_USER': '$key_id'" "$app_name"
-#         loggers::log_message "INFO" "Please import the GPG key manually and verify its fingerprint:"
-#         loggers::log_message "INFO" "  gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys '$key_id'"
-#         loggers::log_message "INFO" "  gpg --fingerprint '$key_id'"
-#         return 1
-#     fi
-
-#     local normalized_expected
-#     normalized_expected="${expected_fingerprint//[[:space:]]/}"
-#     local normalized_actual
-#     normalized_actual="${actual_fingerprint//[[:space:]]/}"
-
-#     if [[ "$normalized_actual" != "$normalized_expected" ]]; then
-#         errors::handle_error "GPG_ERROR" "GPG key fingerprint mismatch. Expected: '$expected_fingerprint', Got: '$actual_fingerprint'" "$app_name"
-#         return 1
-#     fi
-
-#     loggers::log_message "DEBUG" "GPG key verification successful for: '$key_id'"
-#     interfaces::print_ui_line "  " "✓ " "GPG key verified: $key_id" "${COLOR_GREEN}"
-#     return 0
-# }
-
 validators::extract_checksum_from_file() {
     local checksum_file="$1"
     local target_name="$2"
@@ -137,5 +93,5 @@ validators::check_semver_format() {
     # Regex for semantic versioning: MAJOR.MINOR.PATCH-prerelease+build
     # Allows for just major, major.minor, major.minor.patch
     # Allows alphanumeric for pre-release and build metadata
-    [[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[0-9a-zA-Z.-]+)?(\+[0-9a-zA-Z.-]+)?$ ]]
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[0-9a-zA-Z.~-]+)?(\+[0-9a-zA-Z.-]+)?$ ]]
 }

@@ -1,4 +1,5 @@
 {
+  "$schema": "../schema.json",
   "app_key": "WaveTerm",
   "enabled": true,
   "application": {

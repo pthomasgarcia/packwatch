@@ -1,16 +1,19 @@
-feat(config): Implement robust validation with JSON Schema
+feat(installer): Add Ollama support via custom TGZ checker
 
-This commit replaces the manual, brittle shell-based configuration validation with a robust system based on the industry-standard JSON Schema.
+This commit introduces a new custom checker for the Ollama application, which is installed from a TGZ archive. This required significant enhancements to the installer to support this new package type.
 
-- **JSON Schema Integration:**
-  - A formal `schema.json` has been introduced, defining the precise structure, types, and required fields for all application configurations.
-  - The validation logic in `configs.sh` has been completely replaced with a call to `ajv-cli`, which validates config files against this new schema.
-  - This provides far more reliable and maintainable validation with clearer error messages.
+- **New Ollama Custom Checker:**
+  - A new checker script (`ollama.sh`) has been added to fetch release information from the GitHub API, including the TGZ download URL and checksums.
+  - The checker returns a JSON payload for the core update logic to process.
 
-- **Dependency & Configuration Updates:**
-  - `ajv` is now a required dependency for the script to run.
-  - The `allow_insecure_http` flag has been updated to a proper boolean (`true`/`false`) in the schema and config files.
+- **TGZ Installation Support:**
+  - The `updates.sh` module now includes a generic `_install_tgz_command` to handle the download, checksum verification, extraction, and installation of binaries from `.tgz` files.
+  - The custom checker flow has been updated to recognize and delegate to this new `tgz` installation type.
 
-- **Code Quality:**
-  - Addressed numerous new ShellCheck warnings across the codebase, particularly regarding unused variables and namerefs.
-  - Added `CHANGELOG.md` to `.gitignore`.
+- **DEB Package Caching:**
+  - The `.deb` file handling logic has been refactored to cache downloaded artifacts in `~/.cache/packwatch/artifacts/`.
+  - This avoids re-downloading packages and removes the legacy file renaming logic.
+
+- **UX Improvements:**
+  - The installer now checks for an active `sudo` session before running installation commands, preventing unnecessary password prompts.
+  - The `.gitignore` file has been updated to be more organized and to ignore `commit_message.txt`.

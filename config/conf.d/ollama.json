@@ -1,14 +1,13 @@
 {
+    "$schema": "../schema.json",
     "app_key": "Ollama",
     "enabled": true,
     "application": {
         "name": "Ollama",
-        "type": "custom",
+        "type": "github_tgz",
         "repo_owner": "ollama",
         "repo_name": "ollama",
         "filename_pattern_template": "ollama-linux-amd64.tgz",
-        "checksum_pattern": "./ollama-linux-amd64.tgz",
-        "custom_checker_script": "ollama.sh",
-        "custom_checker_func": "check_ollama"
+        "checksum_pattern": "./ollama-linux-amd64.tgz"
     }
 }
