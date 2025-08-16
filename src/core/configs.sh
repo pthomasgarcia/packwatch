@@ -277,18 +277,18 @@ configs::validate_loaded_app_count() {
     fi
 }
 
+
 # ------------------------------------------------------------------------------
-# SECTION: Modular Config Loader
+# SECTION: Unified Config Loader
 # ------------------------------------------------------------------------------
 
-# Orchestrate loading configuration from the modular directory.
-# Usage: configs::load_modular_directory()
-configs::load_modular_directory() {
+# Orchestrate loading all configurations, including network and modular apps.
+# This function serves as the single entry point for configuration loading.
+# Usage: configs::load_all
+configs::load_all() {
     if ! configs::load_network_settings "$CONFIG_ROOT/network_settings.json"; then
         return 1
     fi
-
-    # The load_schema step is no longer needed.
 
     local merged_json
     if ! merged_json=$(configs::get_validated_apps_json "$CONFIG_DIR"); then

@@ -141,8 +141,8 @@ DOC
     fi
 
     # Load modular configuration
-    if ! configs::load_modular_directory; then
-        errors::handle_error "INITIALIZATION_ERROR" "Failed to load modular directory" "configs"
+    if ! configs::load_all; then
+        errors::handle_error "INITIALIZATION_ERROR" "Failed to load application configurations" "configs"
         local exit_code=$?
         exit "$exit_code"
     fi
