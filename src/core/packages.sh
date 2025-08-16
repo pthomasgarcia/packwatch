@@ -263,6 +263,88 @@ packages::install_tgz_package() {
     return 0
 }
 
+# ------------------------------------------------------------------------------
+# SECTION: Package Processing
+# ------------------------------------------------------------------------------
+
+packages::process_deb_package() {
+    local config_ref_name="$1"
+    # local deb_filename_template="$2" # This variable is unused
+    local latest_version="$3"
+    local download_url="$4"
+    local expected_checksum="${5:-}"
+    local app_name="$6"
+    local -n app_config_ref=$config_ref_name
+    local app_key="${app_config_ref[app_key]}"
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
+
+    local version
+    version=$(echo "$download_url" | grep -oP '\d+\.\d+\.\d+' | head -n1)
+    local artifact_cache_dir="${HOME}/.cache/packwatch/artifacts/${app_name}/v${version}"
+    mkdir -p "$artifact_cache_dir"
+    local base_filename
+    base_filename=$(basename "$download_url" | cut -d'?' -f1)
+    local final_deb_path="${artifact_cache_dir}/${base_filename}"
+
+    if [[ ! -f "$final_deb_path" ]]; then
+        loggers::log_message "INFO" "Artifact not found in cache. Downloading..."
+        updates::on_download_start "$app_name" "unknown"
+        if ! networks::download_file "$download_url" "$final_deb_path" "" "" "$allow_http"; then
+            errors::handle_error "NETWORK_ERROR" "Failed to download DEB package" "$app_name"
+            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download DEB package.\"}"
+            return 1
+        fi
+        updates::on_download_complete "$app_name" "$final_deb_path"
+    else
+        loggers::log_message "INFO" "Using cached artifact: $final_deb_path"
+    fi
+
+    if ! verifiers::verify_artifact "$config_ref_name" "$final_deb_path" "$download_url" "$expected_checksum"; then
+        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded DEB package: '$app_name'." "$app_name"
+        return 1
+    fi
+
+    packages::install_deb_package "$final_deb_path" "$app_name" "$latest_version" "$app_key"
+}
+
+packages::process_tgz_package() {
+    local config_ref_name="$1"
+    local filename_template="$2"
+    local latest_version="$3"
+    local download_url="$4"
+    local expected_checksum="$5"
+    local app_name="$6"
+    local app_key="$7"
+    local binary_name="$8"
+
+    local -n app_config_ref=$config_ref_name
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
+
+    local artifact_cache_dir="${HOME}/.cache/packwatch/artifacts/${app_name}/v${latest_version}"
+    mkdir -p "$artifact_cache_dir"
+    local base_filename
+    # shellcheck disable=SC2059 # The template is a trusted config value.
+    base_filename=$(printf "$filename_template" "$latest_version")
+    local cached_artifact_path="${artifact_cache_dir}/${base_filename}"
+
+    if [[ ! -f "$cached_artifact_path" ]]; then
+        loggers::log_message "INFO" "Artifact not found in cache. Downloading..."
+        if ! networks::download_file "$download_url" "$cached_artifact_path" "" "" "$allow_http" 600; then
+            errors::handle_error "NETWORK_ERROR" "Failed to download TGZ archive for '$app_name'." "$app_name"
+            return 1
+        fi
+    else
+        loggers::log_message "INFO" "Using cached artifact: $cached_artifact_path"
+    fi
+
+    if ! verifiers::verify_artifact "$config_ref_name" "$cached_artifact_path" "$download_url" "$expected_checksum"; then
+        errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    packages::install_tgz_package "$cached_artifact_path" "$app_name" "$latest_version" "$app_key" "$binary_name"
+}
+
 # ==============================================================================
 # END OF MODULE
 # ==============================================================================
