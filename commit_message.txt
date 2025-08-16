@@ -1,19 +1,14 @@
-feat(installer): Add Ollama support via custom TGZ checker
+feat(checksum): Add support for GitHub release asset digests
 
-This commit introduces a new custom checker for the Ollama application, which is installed from a TGZ archive. This required significant enhancements to the installer to support this new package type.
+This commit introduces a more reliable method for checksum verification by utilizing the `digest` field provided by the GitHub Releases API for assets.
 
-- **New Ollama Custom Checker:**
-  - A new checker script (`ollama.sh`) has been added to fetch release information from the GitHub API, including the TGZ download URL and checksums.
-  - The checker returns a JSON payload for the core update logic to process.
+- **New `checksum_from_github_release_digest` flag:**
+  - A new boolean flag, `checksum_from_github_release_digest`, has been added to the configuration schema.
+  - When set to `true`, the application will fetch the `sha256` digest directly from the release asset's metadata, ignoring other checksum-related fields.
 
-- **TGZ Installation Support:**
-  - The `updates.sh` module now includes a generic `_install_tgz_command` to handle the download, checksum verification, extraction, and installation of binaries from `.tgz` files.
-  - The custom checker flow has been updated to recognize and delegate to this new `tgz` installation type.
+- **Repository Logic:**
+  - A new `repositories::find_asset_digest` function has been created to extract this digest.
+  - The old, complex logic for finding checksums in release bodies or separate files (`extract_checksum_from_release_body`, `find_asset_checksum`) has been removed, simplifying the codebase.
 
-- **DEB Package Caching:**
-  - The `.deb` file handling logic has been refactored to cache downloaded artifacts in `~/.cache/packwatch/artifacts/`.
-  - This avoids re-downloading packages and removes the legacy file renaming logic.
-
-- **UX Improvements:**
-  - The installer now checks for an active `sudo` session before running installation commands, preventing unnecessary password prompts.
-  - The `.gitignore` file has been updated to be more organized and to ignore `commit_message.txt`.
+- **Configuration Updates:**
+  - The `fastfetch` and `ollama` configurations have been updated to use this new, simpler digest-based verification.

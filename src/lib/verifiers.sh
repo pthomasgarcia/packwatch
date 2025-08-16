@@ -290,12 +290,12 @@ verifiers::verify_artifact() {
     local -n cfg="$config_ref_name"
     local app_name="${cfg[name]:-unknown}"
     local checksum_algorithm="${cfg[checksum_algorithm]:-sha256}"
-    local skip_checksum="${cfg[skip_checksum]:-0}"
+    local skip_checksum="${cfg[skip_checksum]:-false}"
 
     loggers::log_message "DEBUG" "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
 
     # 1) Checksum (optional)
-    if [[ "$skip_checksum" -ne 1 ]]; then
+    if [[ "$skip_checksum" != "true" ]]; then
         local expected
         expected=$(verifiers::resolve_expected_checksum "$config_ref_name" "$downloaded_file_path" "$download_url" "$direct_checksum") || {
             verifiers::_emit_verify_hook "checksum" 0 "<resolve-error>" "<no-hash>" "${checksum_algorithm,,}" \

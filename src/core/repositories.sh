@@ -112,8 +112,6 @@ repositories::find_asset_url() {
     return 1
 }
 
-
-
 # Find a digest SHA256 for a given asset from the GitHub release JSON.
 repositories::find_asset_digest() {
     local release_json_path="$1"
@@ -125,7 +123,7 @@ repositories::find_asset_digest() {
     local digest
     digest=$(jq -r --arg name "$target_filename" \
         '.assets[] | select(.name == $name) | .digest' \
-        "$release_json_path" 2>/dev/null)
+        "$release_json_path" 2> /dev/null)
 
     if [[ -z "$digest" ]] || [[ ! "$digest" == sha256:* ]]; then
         loggers::log_message "WARN" "Could not find sha256 digest for '$target_filename' in release assets for '$app_name'."

@@ -298,7 +298,7 @@ systems::require_json_value() {
 systems::is_sudo_session_active() {
     # -n (non-interactive) prevents a password prompt.
     # The command returns 0 if sudo is active, 1 otherwise.
-    sudo -n true 2>/dev/null
+    sudo -n true 2> /dev/null
 }
 
 # ------------------------------------------------------------------------------

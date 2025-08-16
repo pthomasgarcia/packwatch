@@ -3,8 +3,7 @@
   "app_key": "Tabby",
   "enabled": true,
   "application": {
-    "name": "Tabby",
-    "type": "github_deb",
+    "type": "github_release",
     "package_name": "tabby-terminal",
     "repo_owner": "Eugeny",
     "repo_name": "tabby",

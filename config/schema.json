@@ -19,8 +19,7 @@
                 { "$ref": "#/definitions/appimage" },
                 { "$ref": "#/definitions/custom" },
                 { "$ref": "#/definitions/direct_deb" },
-                { "$ref": "#/definitions/github_deb" },
-                { "$ref": "#/definitions/github_tgz" },
+                { "$ref": "#/definitions/github_release" },
                 { "$ref": "#/definitions/script" }
             ]
         }
@@ -46,7 +45,7 @@
                 "download_url": { "type": "string", "format": "uri" },
                 "install_path": { "type": "string" }
             },
-            "required": ["type", "name", "download_url", "install_path"],
+            "required": ["type", "download_url", "install_path"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         },
         "custom": {
@@ -56,7 +55,7 @@
                 "custom_checker_script": { "type": "string" },
                 "custom_checker_func": { "type": "string" }
             },
-            "required": ["type", "name", "custom_checker_script", "custom_checker_func"],
+            "required": ["type", "custom_checker_script", "custom_checker_func"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         },
         "direct_deb": {
@@ -66,30 +65,19 @@
                 "download_url": { "type": "string", "format": "uri" },
                 "package_name": { "type": "string" }
             },
-            "required": ["type", "name", "download_url", "package_name"],
+            "required": ["type", "download_url", "package_name"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         },
-        "github_deb": {
+        "github_release": {
             "type": "object",
             "properties": {
-                "type": { "const": "github_deb" },
-                "package_name": { "type": "string" },
+                "type": { "const": "github_release" },
                 "repo_owner": { "type": "string" },
                 "repo_name": { "type": "string" },
-                "filename_pattern_template": { "type": "string" }
+                "filename_pattern_template": { "type": "string" },
+                "package_name": { "type": "string" }
             },
-            "required": ["type", "name", "package_name", "repo_owner", "repo_name", "filename_pattern_template"],
-            "allOf": [{ "$ref": "#/definitions/common_properties" }]
-        },
-        "github_tgz": {
-            "type": "object",
-            "properties": {
-                "type": { "const": "github_tgz" },
-                "repo_owner": { "type": "string" },
-                "repo_name": { "type": "string" },
-                "filename_pattern_template": { "type": "string" }
-            },
-            "required": ["type", "name", "repo_owner", "repo_name", "filename_pattern_template"],
+            "required": ["type", "repo_owner", "repo_name", "filename_pattern_template"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         },
         "script": {
@@ -100,7 +88,7 @@
                 "version_url": { "type": "string", "format": "uri" },
                 "version_regex": { "type": "string" }
             },
-            "required": ["type", "name", "download_url", "version_url", "version_regex"],
+            "required": ["type", "download_url", "version_url", "version_regex"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         }
     }

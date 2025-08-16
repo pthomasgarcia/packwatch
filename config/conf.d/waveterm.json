@@ -3,8 +3,7 @@
   "app_key": "WaveTerm",
   "enabled": true,
   "application": {
-    "name": "WaveTerm",
-    "type": "github_deb",
+    "type": "github_release",
     "package_name": "waveterm",
     "repo_owner": "wavetermdev",
     "repo_name": "waveterm",

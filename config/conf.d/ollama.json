@@ -3,8 +3,8 @@
     "app_key": "Ollama",
     "enabled": true,
     "application": {
-        "name": "Ollama",
-        "type": "github_tgz",
+        "type": "github_release",
+        "package_name": "ollama",
         "repo_owner": "ollama",
         "repo_name": "ollama",
         "filename_pattern_template": "ollama-linux-amd64.tgz",

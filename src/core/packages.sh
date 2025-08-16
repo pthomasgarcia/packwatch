@@ -222,6 +222,46 @@ packages::install_deb_package() {
     notifiers::send_notification "$app_name Updated" "Successfully installed v$version" "normal"
     return 0
 }
+# Install a TGZ archive.
+# Usage: packages::install_tgz_package "/path/to/file.tgz" "AppName" "1.2.3" "AppKey" "binary_name"
+packages::install_tgz_package() {
+    local tgz_file="$1"
+    local app_name="$2"
+    local version="$3"
+    local app_key="$4"
+    local binary_name="$5"
+
+    interfaces::print_ui_line "  " "→ " "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." >&2
+
+    local install_dir="/usr/local/bin"
+    local temp_extract_dir
+    temp_extract_dir=$(mktemp -d -p "${HOME}/.cache/packwatch/tmp")
+
+    if ! tar -xzf "$tgz_file" -C "$temp_extract_dir"; then
+        errors::handle_error "INSTALLATION_ERROR" "Failed to extract TGZ archive for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    local binary_path
+    binary_path=$(find "$temp_extract_dir" -type f -name "$binary_name")
+    if [[ -z "$binary_path" ]]; then
+        errors::handle_error "INSTALLATION_ERROR" "Could not find executable '$binary_name' in extracted archive for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    if ! sudo mv "$binary_path" "${install_dir}/${binary_name}"; then
+        errors::handle_error "INSTALLATION_ERROR" "Failed to move binary for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    if ! sudo chmod +x "${install_dir}/${binary_name}"; then
+        errors::handle_error "PERMISSION_ERROR" "Failed to make binary executable for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    # The generic process_installation function handles the version update
+    return 0
+}
 
 # ==============================================================================
 # END OF MODULE

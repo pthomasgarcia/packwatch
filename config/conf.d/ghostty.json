@@ -3,8 +3,7 @@
   "app_key": "Ghostty",
   "enabled": true,
   "application": {
-    "name": "Ghostty",
-    "type": "github_deb",
+    "type": "github_release",
     "package_name": "ghostty",
     "repo_owner": "mkasberg",
     "repo_name": "ghostty-ubuntu",
