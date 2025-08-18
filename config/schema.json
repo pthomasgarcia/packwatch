@@ -18,7 +18,7 @@
             "oneOf": [
                 { "$ref": "#/definitions/appimage" },
                 { "$ref": "#/definitions/custom" },
-                { "$ref": "#/definitions/direct_deb" },
+                { "$ref": "#/definitions/direct_download" },
                 { "$ref": "#/definitions/github_release" },
                 { "$ref": "#/definitions/script" }
             ]
@@ -58,14 +58,14 @@
             "required": ["type", "custom_checker_script", "custom_checker_func"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         },
-        "direct_deb": {
+        "direct_download": {
             "type": "object",
             "properties": {
-                "type": { "const": "direct_deb" },
+                "type": { "const": "direct_download" },
                 "download_url": { "type": "string", "format": "uri" },
                 "package_name": { "type": "string" }
             },
-            "required": ["type", "download_url", "package_name"],
+            "required": ["type", "download_url"],
             "allOf": [{ "$ref": "#/definitions/common_properties" }]
         },
         "github_release": {

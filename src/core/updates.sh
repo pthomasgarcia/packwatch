@@ -41,7 +41,7 @@
 # Maps app 'type' to the function that handles its update check.
 declare -A UPDATE_HANDLERS
 UPDATE_HANDLERS["github_release"]="updates::check_github_release"
-UPDATE_HANDLERS["direct_deb"]="updates::check_direct_deb"
+UPDATE_HANDLERS["direct_download"]="updates::check_direct_download"
 UPDATE_HANDLERS["appimage"]="updates::check_appimage"
 UPDATE_HANDLERS["script"]="updates::check_script"   # New type for script-based installations
 UPDATE_HANDLERS["flatpak"]="updates::check_flatpak" # Renamed for consistency as it also checks
@@ -51,7 +51,7 @@ UPDATE_HANDLERS["custom"]="updates::handle_custom_check"
 # Defines required fields for each app type.
 declare -A APP_TYPE_VALIDATIONS
 APP_TYPE_VALIDATIONS["github_release"]="repo_owner,repo_name,filename_pattern_template"
-APP_TYPE_VALIDATIONS["direct_deb"]="name,package_name,download_url"
+APP_TYPE_VALIDATIONS["direct_download"]="name,download_url"
 APP_TYPE_VALIDATIONS["appimage"]="name,install_path,download_url"
 APP_TYPE_VALIDATIONS["script"]="name,download_url,version_url,version_regex" # New type for script-based installations
 APP_TYPE_VALIDATIONS["flatpak"]="name,flatpak_app_id"
@@ -614,70 +614,116 @@ updates::check_github_release() {
 # SECTION: Direct DEB Update Flow
 # ------------------------------------------------------------------------------
 
-# Updates module; checks for updates for a direct DEB application.
-updates::check_direct_deb() {
+# Updates module; checks for updates for a direct download application.
+updates::check_direct_download() {
     local -n app_config_ref=$1
     local name="${app_config_ref[name]}"
     local app_key="${app_config_ref[app_key]}"
-    local package_name="${app_config_ref[package_name]}"
     local download_url="${app_config_ref[download_url]}"
-    local deb_filename_template="${app_config_ref[deb_filename_template]}"
-    local source="Direct Download"
+    local allow_http="${app_config_ref[allow_insecure_http]:-0}"
+    local package_name="${app_config_ref[package_name]:-}" # Optional, for display or specific installers
 
-    if ! validators::check_url_format "$download_url"; then
-        errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
-        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
-        interfaces::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
-        return 1
-    fi
+    interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
 
     local installed_version
     installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
-    interfaces::print_ui_line "  " "→ " "Checking ${FORMAT_BOLD}$name${FORMAT_RESET} for latest version..."
+    local temp_download_dir
+    temp_download_dir=$(systems::create_temp_dir) || return 1
+    systems::register_temp_file "$temp_download_dir"
 
-    # Use the new generic helper to download, verify, and extract the version
-    local downloaded_version
-    local temp_download_file
-    if ! updater_utils::check_and_get_version_from_download \
-        app_config_ref \
-        "$UPDATES_EXTRACT_DEB_VERSION_IMPL" \
-        downloaded_version \
-        temp_download_file; then
+    local filename="$(basename "$download_url")"
+    local temp_download_file="${temp_download_dir}/${filename}"
+
+    updates::on_download_start "$name" "unknown"
+    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_download_file" "" "" "$allow_http"; then # DI applied, added allow_http
+        errors::handle_error "NETWORK_ERROR" "Failed to download file from '$download_url'" "$name"
+        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download file.\"}"
         return 1
+    fi
+
+    if ! verifiers::verify_artifact app_config_ref "$temp_download_file" "$download_url"; then
+        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded artifact: '$name'." "$name"
+        return 1
+    fi
+
+    local latest_version="0.0.0" # Default if version cannot be extracted
+    # Attempt to extract version from filename if possible
+    if ! latest_version=$(versions::extract_from_regex "$filename" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$name"); then
+        loggers::log_message "WARN" "Could not extract version from download URL filename for '$name'. Will default to 0.0.0 for comparison."
+        latest_version="0.0.0"
     fi
 
     # Standardized summary output
     interfaces::print_ui_line "  " "Installed: " "$installed_version"
-    interfaces::print_ui_line "  " "Source:    " "$source"
-    interfaces::print_ui_line "  " "Latest:    " "$downloaded_version"
+    interfaces::print_ui_line "  " "Source:    " "Direct Download"
 
     local needs_update=0
-    if updates::is_needed "$installed_version" "$downloaded_version"; then
+    if updates::is_needed "$installed_version" "$latest_version"; then
         needs_update=1
-    elif versions::compare_strings "$downloaded_version" "$installed_version" -eq 1; then
+    elif versions::compare_strings "$latest_version" "$installed_version" -eq 0; then
         # Versions are the same, and primary verification is done via verifiers::verify_artifact.
-        # No further checksum comparison is needed here.
-        needs_update=0
+        # If we reach here, it means the artifact was downloaded and verified, but the version
+        # is not newer. This implies a re-installation might be needed if the user wants to
+        # ensure integrity or if the local file was corrupted/deleted.
+        loggers::log_message "INFO" "Downloaded version '$latest_version' is not newer than installed '$installed_version' for '$name'. Skipping re-installation."
+        interfaces::print_ui_line "  " "✓ " "Already up-to-date." "${COLOR_GREEN}"
+        updates::on_install_skipped "$name" # Treat as skipped if no update needed
+        counters::inc_skipped
+        return 0
     fi
 
     if [[ "$needs_update" -eq 1 ]]; then
-        interfaces::print_ui_line "  " "⬆ " "New version available: $downloaded_version" "${COLOR_YELLOW}"
-        packages::process_deb_package \
-            app_config_ref \
-            "$deb_filename_template" \
-            "$downloaded_version" \
-            "$download_url" \
-            "" \
-            "$name"
-    else
-        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
-        counters::inc_up_to_date
-        # The temp file is already registered; unregister it upon successful no-op
-        systems::unregister_temp_file "$temp_download_file"
-    fi
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
-    return 0
+        local file_extension="${filename##*.}"
+        case "$file_extension" in
+            "deb")
+                updates::process_installation \
+                    "$name" \
+                    "$app_key" \
+                    "$latest_version" \
+                    "packages::install_deb_package" \
+                    "$temp_download_file" \
+                    "${package_name:-$name}" \
+                    "$latest_version" \
+                    "$app_key"
+                ;;
+            "tgz"|"tar.gz")
+                local binary_name="${package_name:-$(echo "$app_key" | tr '[:upper:]' '[:lower:]')}"
+                updates::process_installation \
+                    "$name" \
+                    "$app_key" \
+                    "$latest_version" \
+                    "packages::install_tgz_package" \
+                    "$temp_download_file" \
+                    "$name" \
+                    "$latest_version" \
+                    "$app_key" \
+                    "$binary_name"
+                ;;
+            "AppImage")
+                local install_target_full_path="${app_config_ref[install_path]:-$HOME/Applications/${name}.AppImage}"
+                updates::process_installation \
+                    "$name" \
+                    "$app_key" \
+                    "$latest_version" \
+                    "updates::_install_appimage_file_command" \
+                    "$temp_download_file" \
+                    "$install_target_full_path" \
+                    "$name"
+                ;;
+            *)
+                errors::handle_error "INSTALLATION_ERROR" "Unsupported file type for direct download: .$file_extension" "$name"
+                updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Unsupported file type for direct download.\"}"
+                return 1
+                ;;
+        esac
+    else
+        interfaces::print_ui_line "  " "✓ " "Already up-to-date." "${COLOR_GREEN}"
+        updates::on_install_skipped "$name" # Treat as skipped if no update needed
+        counters::inc_skipped
+    fi
 }
 
 # ------------------------------------------------------------------------------
