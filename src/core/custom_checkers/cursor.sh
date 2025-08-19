@@ -35,16 +35,11 @@ check_cursor() {
     local appimage_file_path="${install_base_dir}/${appimage_filename_final}"
 
     local installed_version
-    installed_version=$(packages::get_installed_version "$app_key")
+    installed_version=$(checker_utils::get_installed_version "$app_key")
 
     local api_endpoint="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
-    local api_json_path # This will now be a file path
-    if ! api_json_path=$(networks::fetch_cached_data "$api_endpoint" "json"); then
-        jq -n \
-            --arg status "error" \
-            --arg error_message "Failed to fetch Cursor API JSON for $name." \
-            --arg error_type "NETWORK_ERROR" \
-            '{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
+    local api_json_path
+    if ! api_json_path=$(checker_utils::fetch_cached_or_error "$api_endpoint" "json" "$name" "Failed to fetch Cursor API JSON for $name."); then
         return 1
     fi
 
@@ -55,34 +50,29 @@ check_cursor() {
     latest_version=$(systems::get_json_value "$api_json_path" '.version // empty')
 
     if [[ -z "$actual_download_url" ]] || [[ -z "$latest_version" ]]; then
-        jq -n \
-            --arg status "error" \
-            --arg error_message "Failed to extract version or download URL for $name." \
-            --arg error_type "PARSING_ERROR" \
-            '{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
+        checker_utils::emit_error "PARSING_ERROR" "Failed to extract version or download URL for $name." "$name" >/dev/null
         return 1
     fi
+
+    # Normalize versions (strip prefixes like v, version, release, etc.)
+    installed_version=$(checker_utils::strip_version_prefix "$installed_version")
+    latest_version=$(checker_utils::strip_version_prefix "$latest_version")
+
+    # Resolve + validate the download URL
+    local resolved_url
+    if ! resolved_url=$(checker_utils::resolve_and_validate_url "$actual_download_url"); then
+        checker_utils::emit_error "NETWORK_ERROR" "Invalid or unresolved download URL for $name." "$name" >/dev/null
+        return 1
+    fi
+
+    checker_utils::debug "CURSOR: installed_version='$installed_version' latest_version='$latest_version' url='$resolved_url'"
 
     local output_status
     output_status=$(checker_utils::determine_status "$installed_version" "$latest_version")
 
-    jq -n \
-        --arg status "$output_status" \
-        --arg latest_version "$latest_version" \
-        --arg download_url "$actual_download_url" \
-        --arg install_type "appimage" \
-        --arg install_target_path "$appimage_file_path" \
-        --arg source "Official API (JSON)" \
-        --arg error_type "NONE" \
-        '{
-             "status": $status,
-             "latest_version": $latest_version,
-             "download_url": $download_url,
-             "install_type": $install_type,
-             "install_target_path": $install_target_path,
-             "source": $source,
-             "error_type": $error_type
-           }'
+    checker_utils::emit_success "$output_status" "$latest_version" "appimage" "Official API (JSON)" \
+        download_url "$resolved_url" \
+        install_target_path "$appimage_file_path"
 
     return 0
 }

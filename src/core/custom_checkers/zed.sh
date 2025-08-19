@@ -29,47 +29,53 @@ check_zed() {
     local flatpak_app_id
     flatpak_app_id=$(systems::get_cached_json_value "$cache_key" "flatpak_app_id")
 
+    # Optional: some configs may provide a direct URL; if present, resolve+validate it.
+    local configured_download_url=""
+    configured_download_url=$(systems::get_cached_json_value "$cache_key" "download_url")
+    if [[ -n "$configured_download_url" ]]; then
+        local resolved_url
+        if ! resolved_url=$(checker_utils::resolve_and_validate_url "$configured_download_url"); then
+            checker_utils::emit_error "NETWORK_ERROR" "Invalid or unreachable download_url in config for $name." "$name"
+            return 1
+        fi
+        checker_utils::debug "ZED: resolved config download_url -> $resolved_url"
+        # We don't use this for installation (Flatpak), but we can surface it as an extra field.
+        configured_download_url="$resolved_url"
+    fi
+
     local installed_version
-    installed_version=$(packages::get_installed_version "$app_key")
+    installed_version=$(checker_utils::get_installed_version "$app_key")
+
+    # (9) Use scaffolded CLI fetch + parse
+    local flatpak_info
+    flatpak_info=$(checker_utils::cli_with_retry_or_error 3 5 "$name" "Failed to retrieve flatpak info for $name." -- \
+                   flatpak remote-info flathub "$flatpak_app_id") || return 1
+
     local latest_version
-    latest_version=$(
-        systems::reattempt_command 3 5 flatpak remote-info flathub "$flatpak_app_id" |
-            awk -F: '/Version:/ {print $2}' | xargs
-    )
+    latest_version=$(checker_utils::extract_colon_value "$flatpak_info" "^Version$")
 
     if [[ -z "$latest_version" ]]; then
-        jq -n \
-            --arg status "error" \
-            --arg error_message "Failed to retrieve latest version for $name." \
-            --arg error_type "NETWORK_ERROR" \
-            '{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
+        checker_utils::emit_error "PARSING_ERROR" "Failed to parse latest version from flatpak info for $name." "$name"
         return 1
     fi
 
-    # STRIP LEADING 'v'
+    # Normalize versions (strip prefixes like v, version, release, etc.)
     installed_version=$(checker_utils::strip_version_prefix "$installed_version")
     latest_version=$(checker_utils::strip_version_prefix "$latest_version")
 
-    loggers::log_message "DEBUG" "ZED: installed_version='$installed_version' latest_version='$latest_version'"
+    checker_utils::debug "ZED: installed_version='$installed_version' latest_version='$latest_version'"
 
     local output_status
     output_status=$(checker_utils::determine_status "$installed_version" "$latest_version")
 
-    jq -n \
-        --arg status "$output_status" \
-        --arg latest_version "$latest_version" \
-        --arg flatpak_app_id "$flatpak_app_id" \
-        --arg install_type "flatpak" \
-        --arg source "Flathub" \
-        --arg error_type "NONE" \
-        '{
-             "status": $status,
-             "latest_version": $latest_version,
-             "flatpak_app_id": $flatpak_app_id,
-             "install_type": $install_type,
-             "source": $source,
-             "error_type": $error_type
-           }'
+    if [[ -n "$configured_download_url" ]]; then
+        checker_utils::emit_success "$output_status" "$latest_version" "flatpak" "Flathub" \
+            flatpak_app_id "$flatpak_app_id" \
+            download_url "$configured_download_url"
+    else
+        checker_utils::emit_success "$output_status" "$latest_version" "flatpak" "Flathub" \
+            flatpak_app_id "$flatpak_app_id"
+    fi
 
     return 0
 }
