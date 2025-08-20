@@ -45,7 +45,7 @@ check_veracrypt() {
     local latest_version
     latest_version=$(echo "$page_content" | grep -oP 'VeraCrypt \K\d+\.\d+\.\d+' | head -n1)
     if [[ -z "$latest_version" ]]; then
-        checker_utils::emit_error "PARSING_ERROR" "Failed to detect latest version for $name." "$name" >/dev/null
+        checker_utils::emit_error "PARSING_ERROR" "Failed to detect latest version for $name." "$name" > /dev/null
         return 1
     fi
 
@@ -61,10 +61,11 @@ check_veracrypt() {
     # Try page-derived URL for the exact Ubuntu release (if present)
     local download_url_direct=""
     if [[ -n "$ubuntu_release" ]]; then
-        download_url_direct=$(echo "$page_content" | \
-            grep -A 10 "Ubuntu ${ubuntu_release}:" | \
-            grep -oP 'href="([^"]*veracrypt-'"${latest_version}"'-Ubuntu-'"${ubuntu_release}"'-amd64\.deb)"' | \
-            head -n 1 | sed -E 's/href="([^"]+)"/\1/')
+        download_url_direct=$(echo "$page_content" |
+            grep -A 10 "Ubuntu ${ubuntu_release}:" |
+            grep -E "href=\"[^\"]*veracrypt-${latest_version}-Ubuntu-${ubuntu_release}-amd64\\.deb\"" |
+            head -n 1 |
+            sed -nE "s/.*href=\"([^\"]*veracrypt-${latest_version}-Ubuntu-${ubuntu_release}-amd64\\.deb)\".*/\1/p")
         download_url_direct=$(checker_utils::decode_url "$download_url_direct")
         if [[ -n "$download_url_direct" ]]; then
             # Resolve + validate quickly
@@ -81,7 +82,7 @@ check_veracrypt() {
     local common_ubuntu_releases=("24.04" "22.04" "20.04" "18.04")
     local base_lp_url_template="https://launchpad.net/veracrypt/trunk/%s/+download/"
     local current_base_url
-    printf -v current_base_url "$base_lp_url_template" "$latest_version"
+    current_base_url="${base_lp_url_template/\%s/$latest_version}"
 
     local ubuntu_ver_fallback
     for ubuntu_ver_fallback in "${common_ubuntu_releases[@]}"; do
@@ -94,7 +95,7 @@ check_veracrypt() {
     # Choose the first alive candidate quickly
     local download_url_final
     if ! download_url_final=$(checker_utils::first_alive_url "${candidates[@]}"); then
-        checker_utils::emit_error "NETWORK_ERROR" "No compatible DEB package found for $name." "$name" >/dev/null
+        checker_utils::emit_error "NETWORK_ERROR" "No compatible DEB package found for $name." "$name" > /dev/null
         return 1
     fi
 

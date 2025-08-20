@@ -50,7 +50,20 @@ check_cursor() {
     latest_version=$(systems::get_json_value "$api_json_path" '.version // empty')
 
     if [[ -z "$actual_download_url" ]] || [[ -z "$latest_version" ]]; then
-        checker_utils::emit_error "PARSING_ERROR" "Failed to extract version or download URL for $name." "$name" >/dev/null
+        local -a missing_keys=()
+        [[ -z "$actual_download_url" ]] && missing_keys+=("downloadUrl")
+        [[ -z "$latest_version" ]] && missing_keys+=("version")
+        local missing_joined
+        if ((${#missing_keys[@]})); then
+            IFS=',' read -r -a _tmp <<< "${missing_keys[*]}" # normalize
+            missing_joined=$(
+                IFS=','
+                echo "${missing_keys[*]}"
+            )
+        else
+            missing_joined="unknown"
+        fi
+        checker_utils::emit_error "PARSING_ERROR" "Missing required field(s) [${missing_joined}] for $name (empty or absent in API JSON)." "$name"
         return 1
     fi
 
@@ -61,7 +74,7 @@ check_cursor() {
     # Resolve + validate the download URL
     local resolved_url
     if ! resolved_url=$(checker_utils::resolve_and_validate_url "$actual_download_url"); then
-        checker_utils::emit_error "NETWORK_ERROR" "Invalid or unresolved download URL for $name." "$name" >/dev/null
+        checker_utils::emit_error "NETWORK_ERROR" "Invalid or unresolved download URL for $name (url=$actual_download_url)." "$name"
         return 1
     fi
 

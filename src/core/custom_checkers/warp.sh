@@ -45,7 +45,7 @@ check_warp() {
     latest_version=$(checker_utils::strip_version_prefix "$latest_version_raw")
 
     if [[ -z "$latest_version" ]]; then
-        checker_utils::emit_error "PARSING_ERROR" "Failed to extract version for $name." "$name" >/dev/null
+        checker_utils::emit_error "PARSING_ERROR" "Failed to extract version for $name." "$name"
         return 1
     fi
 
@@ -54,7 +54,7 @@ check_warp() {
 
     local actual_deb_url
     if ! actual_deb_url=$(checker_utils::resolve_and_validate_url "https://app.warp.dev/download?package=deb"); then
-        checker_utils::emit_error "NETWORK_ERROR" "Failed to resolve download URL for $name." "$name" >/dev/null
+        checker_utils::emit_error "NETWORK_ERROR" "Failed to resolve download URL for $name." "$name"
         return 1
     fi
 

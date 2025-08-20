@@ -35,6 +35,7 @@ declare -A ERROR_CODES=(
     ["INSTALLATION_ERROR"]=17
     ["INITIALIZATION_ERROR"]=18
     ["CLI_ERROR"]=19
+    ["CACHE_ERROR"]=20
 )
 
 # ------------------------------------------------------------------------------
@@ -72,6 +73,9 @@ errors::handle_error() {
             ;;
         "INSTALLATION_ERROR")
             notifiers::send_notification "Installation Error" "$error_message" "critical"
+            ;;
+        "CACHE_ERROR")
+            notifiers::send_notification "Cache Error" "$error_message" "warning"
             ;;
     esac
 

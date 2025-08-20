@@ -80,7 +80,22 @@ systems::clear_json_cache() {
 # Usage: systems::sanitize_filename "filename"
 systems::sanitize_filename() {
     local filename="$1"
-    echo "${filename//[^a-zA-Z0-9._-]/-}"
+    # Replace any path separators or backslashes with dashes first to prevent traversal
+    filename=${filename//\//-}
+    filename=${filename//\\/-}
+    # Allow only [A-Za-z0-9._-]; replace others with '-'
+    filename=$(echo -n "$filename" | sed -E 's/[^A-Za-z0-9._-]+/-/g')
+    # Collapse multiple consecutive dots to a single dot to avoid spoofing like 'tar..gz'
+    filename=$(echo -n "$filename" | sed -E 's/\.{2,}/./g')
+    # Remove leading dots entirely (avoid hidden files or relative path implications)
+    filename=$(echo -n "$filename" | sed -E 's/^\.+//')
+    # Trim any leading dashes produced by stripping leading dots
+    filename=$(echo -n "$filename" | sed -E 's/^-+//')
+    # Fallback if empty after sanitization
+    if [[ -z "$filename" ]]; then
+        filename="unnamed"
+    fi
+    echo "$filename"
 }
 
 # ------------------------------------------------------------------------------

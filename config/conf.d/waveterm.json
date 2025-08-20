@@ -7,6 +7,7 @@
     "package_name": "waveterm",
     "repo_owner": "wavetermdev",
     "repo_name": "waveterm",
-    "filename_pattern_template": "waveterm-linux-amd64-%s.deb"
+    "filename_pattern_template": "waveterm-linux-amd64-%s.deb",
+    "checksum_from_github_release_digest": true
   }
 }

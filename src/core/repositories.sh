@@ -77,24 +77,20 @@ repositories::find_asset_url() {
     # - Replace %s with .*
     local escaped_pattern
     escaped_pattern=$(printf '%s' "$filename_pattern" |
-        sed 's/[.[\*^$+?{|}()\\]/\\&/g; s/%s/.*/g')
+        sed -E 's/([.[\*^$+?{|}()\\])/\\\1/g; s/%s/[0-9.]+[~-]?[a-zA-Z0-9.-]*/g')
+    local anchored_pattern="^${escaped_pattern}$"
 
     # Single jq pass:
     # 1) exact name match
     # 2) regex fallback
     # Return the first URL found.
     local url
-    url=$(
-        jq -r --arg pat "$filename_pattern" --arg re "$escaped_pattern" '
-          [
+    url=$(jq -r --arg pat "$filename_pattern" --arg re "$anchored_pattern" '
+        [
             (.assets[]? | select(.name == $pat) | .browser_download_url),
             (.assets[]? | select(.name | test($re)) | .browser_download_url)
-          ]
-          | flatten
-          | map(select(. != null))
-          | .[0] // empty
-        ' "$release_json_path" 2> /dev/null
-    )
+        ] | .[0] // empty
+    ' "$release_json_path" 2> /dev/null)
 
     if [[ -n "$url" ]]; then
         if validators::check_https_url "$url"; then
@@ -115,18 +111,25 @@ repositories::find_asset_url() {
 # Find a digest SHA256 for a given asset from the GitHub release JSON.
 repositories::find_asset_digest() {
     local release_json_path="$1"
-    local target_filename="$2"
+    local filename_template="$2"
     local app_name="$3"
 
+    # Build a regex from the pattern:
+    # - Escape regex meta characters
+    # - Replace %s with a flexible, version-aware regex (supports _, +)
+    local escaped_pattern
+    escaped_pattern=$(printf '%s' "$filename_template" |
+        sed -E 's/([.[\*^$+?{|}()\\])/\\\1/g; s/%s/[0-9.]+[~-]?[a-zA-Z0-9._+~-]*/g')
+    local anchored_re="^${escaped_pattern}$"
     # Find the asset with the matching name and extract its sha256 digest.
     # The digest is expected to be in the format "sha256:<hash>"
     local digest
-    digest=$(jq -r --arg name "$target_filename" \
-        '.assets[] | select(.name == $name) | .digest' \
+    digest=$(jq -r --arg re "$anchored_re" \
+        '[.assets[]? | select(.name | test($re)) | .digest?] | .[0] // empty' \
         "$release_json_path" 2> /dev/null)
 
     if [[ -z "$digest" ]] || [[ ! "$digest" == sha256:* ]]; then
-        loggers::log_message "WARN" "Could not find sha256 digest for '$target_filename' in release assets for '$app_name'."
+        loggers::log_message "WARN" "Could not find sha256 digest for '$filename_template' in release assets for '$app_name'."
         return 1
     fi
 
@@ -135,7 +138,7 @@ repositories::find_asset_digest() {
     checksum="${digest#sha256:}"
 
     if [[ -z "$checksum" ]] || [[ ${#checksum} -ne 64 ]]; then
-        loggers::log_message "WARN" "Invalid sha256 digest format for '$target_filename' in release assets for '$app_name': $digest"
+        loggers::log_message "WARN" "Invalid sha256 digest format for '$filename_template' in release assets for '$app_name': $digest"
         return 1
     fi
 

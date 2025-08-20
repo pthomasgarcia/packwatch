@@ -1,14 +1,63 @@
-feat(checksum): Add support for GitHub release asset digests
+refactor(utils/checkers)!: centralize and standardize custom checker logic; drop legacy digest workflow
 
-This commit introduces a more reliable method for checksum verification by utilizing the `digest` field provided by the GitHub Releases API for assets.
+This commit introduces a new utility module `checker_utils.sh` to centralize and standardize common logic used across custom application checkers. This refactoring significantly reduces code duplication and improves consistency in how checkers handle versioning, network operations, error reporting, and success output.
 
-- **New `checksum_from_github_release_digest` flag:**
-  - A new boolean flag, `checksum_from_github_release_digest`, has been added to the configuration schema.
-  - When set to `true`, the application will fetch the `sha256` digest directly from the release asset's metadata, ignoring other checksum-related fields.
+- **New `checker_utils.sh` module:**
+  - Provides helper functions for version normalization (stripping prefixes).
+  - Standardizes error and success JSON emission.
+  - Includes fast, robust network utilities for URL validation, resolution, and existence checks.
+  - Offers a utility for running CLI commands with retry logic.
+  - Adds a helper for extracting values from colon-separated text.
 
-- **Repository Logic:**
-  - A new `repositories::find_asset_digest` function has been created to extract this digest.
-  - The old, complex logic for finding checksums in release bodies or separate files (`extract_checksum_from_release_body`, `find_asset_checksum`) has been removed, simplifying the codebase.
+  API / Behavior Contracts:
+  - JSON Output (stdout only; human/log output goes to stderr):
+  - Success: {"status": string ("success"|"no_update"), "latest_version": string, "install_type": string, "source": string, "error_type": "NONE", "schema_version": string (default "1"), <optional extra string k/v pairs>}.
+    - Error:   {"status": "error", "error_message": string, "error_type": string}.
+  - error_type on success MUST be the literal "NONE" (required field) so clients can treat presence + value as authoritative; absence in future schemas would mean deprecated (do not rely on that yet).
+  - schema_version (optional for forward compatibility) defaults to "1" when omitted; producers SHOULD start including it now. Future incompatible changes will bump this and document migration; consumers SHOULD default to behavior of version "1" if field missing.
+  - Keys are flat; all values emitted as strings. Exactly one JSON object is emitted per invocation on stdout.
+  - CLI Runner (systems::reattempt_command via checker_utils::cli_with_retry_or_error):
+    - Default (if caller does not override): 3 attempts, initial delay 2s, exponential backoff (2s,4s); failure after all attempts -> emits error JSON and exit 1.
+    - Backoff doubles each retry; no jitter. Caller-provided retries/sleep respected verbatim.
+  - Fast Network Helpers (timeouts env-overridable):
+    - PW_CONNECT_TIMEOUT=1s, PW_MAX_TIME=3s (fast_head_status); PW_RESOLVE_MAX_TIME=4s (fast_resolve_url); PW_FIRST_ALIVE_WAIT=3s (not blocking currently, future use).
+  - Network Utility Semantics / Exit Codes:
+    - checker_utils::validate_url: 0 valid format, 1 invalid.
+    - checker_utils::fast_head_status: echoes HTTP code (2xx/3xx/etc) or empty on failure; exit code always 0 (emptiness signals transient failure).
+    - checker_utils::fast_url_exists: 0 if 2xx/3xx, 1 otherwise (includes empty / non-HTTP responses).
+    - checker_utils::fast_resolve_url: echoes final URL or empty; exit code 0 (emptiness = unresolved).
+    - checker_utils::resolve_and_validate_url: 0 + URL (validated & reachable/redirect-resolved), 1 on validation / resolution failure.
+    - checker_utils::first_alive_url: 0 + first alive URL, 1 if none alive.
+    - checker_utils::fetch_cached_or_error / fetch_and_load: 0 success (path/content), 1 on network/validation error (also emits JSON error via emit_error).
+  - networks::download_file (owned by networks module): 0 success; 1 on network / permission / insecure URL rejection (messages to stderr; no JSON here—verification layer or higher-level checker utilities handle JSON if needed). Not exposed via checker_utils currently.
+  - Interpretation Guidance: prefer checking (exit code == 0 && stdout non-empty) for success where functions may return empty strings with 0 for speed probes.
 
-- **Configuration Updates:**
-  - The `fastfetch` and `ollama` configurations have been updated to use this new, simpler digest-based verification.
+refactor(checkers,utils)!: Centralize checker logic via checker_utils.sh; remove legacy digest workflow
+
+Introduce `checker_utils.sh` to unify common logic across custom checkers. This reduces duplication and standardizes version handling, networking, and JSON output.
+
+- New `checker_utils.sh`:
+  - Version normalization helpers (strip common prefixes).
+  - Standardized JSON emission for errors/success.
+  - Fast network utilities: URL validation, resolution, existence checks.
+  - CLI command runner with retry logic.
+  - Helper for extracting values from colon-separated text.
+  - Note: document JSON schema and default retry/backoff/timeouts.
+
+- Refactored custom checkers:
+  - `cursor.sh`, `veracrypt.sh`, `warp.sh`, and `zed.sh` now leverage `checker_utils.sh`.
+  - Results in cleaner, more maintainable, and consistent implementations.
+
+- Removed:
+  - `checksum_from_github_release_digest` flag and associated configuration.
+  - Repository-level digest logic:
+    - `repositories::find_asset_digest`
+    - `extract_checksum_from_release_body`
+    - `find_asset_checksum`
+  - Configuration updates tied to the old digest verification (e.g., fastfetch, ollama).
+
+- Behavioral changes:
+  - JSON output and exit codes are standardized via the utilities.
+  - Network operations and retries are centralized for consistency.
+
+BREAKING CHANGE: The legacy digest-based verification workflow (flag and functions above) has been removed. Consumers relying on it must migrate to the new utilities. Update custom checkers to source `checker_utils.sh` and remove uses of the deprecated flags/functions. Refresh any configuration referencing the removed options.

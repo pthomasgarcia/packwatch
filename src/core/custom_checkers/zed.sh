@@ -29,6 +29,12 @@ check_zed() {
     local flatpak_app_id
     flatpak_app_id=$(systems::get_cached_json_value "$cache_key" "flatpak_app_id")
 
+    # Early guard: flatpak_app_id must be present for Flatpak-based checks
+    if [[ -z "$flatpak_app_id" ]]; then
+        checker_utils::emit_error "CONFIG_ERROR" "Missing required flatpak_app_id in config (cache_key=$cache_key) for $name. Set 'flatpak_app_id' to the Flathub application ID." "$name" > /dev/null
+        return 1
+    fi
+
     # Optional: some configs may provide a direct URL; if present, resolve+validate it.
     local configured_download_url=""
     configured_download_url=$(systems::get_cached_json_value "$cache_key" "download_url")
@@ -49,7 +55,7 @@ check_zed() {
     # (9) Use scaffolded CLI fetch + parse
     local flatpak_info
     flatpak_info=$(checker_utils::cli_with_retry_or_error 3 5 "$name" "Failed to retrieve flatpak info for $name." -- \
-                   flatpak remote-info flathub "$flatpak_app_id") || return 1
+        flatpak remote-info flathub "$flatpak_app_id") || return 1
 
     local latest_version
     latest_version=$(checker_utils::extract_colon_value "$flatpak_info" "^Version$")

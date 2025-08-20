@@ -79,7 +79,7 @@ checker_utils::emit_error() {
     local custom_error_type="${4:-}"
 
     # Prefer centralized handler if available; otherwise log locally.
-    if declare -F errors::handle_error >/dev/null 2>&1; then
+    if declare -F errors::handle_error > /dev/null 2>&1; then
         errors::handle_error "$error_type" "$error_message" "$app_name" "$custom_error_type"
     else
         loggers::log_message "ERROR" "[$error_type] $error_message (app: $app_name)"
@@ -102,15 +102,16 @@ checker_utils::emit_success() {
     local source="$4"
     shift 4
 
-    local jq_prog='{ "status": $status, "latest_version": $latest, "install_type": $install_type, "source": $source, "error_type": "NONE" }'
+    local jq_prog="{ \"status\": \$status, \"latest_version\": \$latest, \"install_type\": \$install_type, \"source\": \$source, \"error_type\": \"NONE\" }"
     local args=(--arg status "$status" --arg latest "$latest" --arg install_type "$install_type" --arg source "$source")
 
     # Append extra k/v pairs
-    while (( "$#" >= 2 )); do
-        local k="$1"; local v="$2"
+    while (("$#" >= 2)); do
+        local k="$1"
+        local v="$2"
         shift 2
         args+=(--arg "$k" "$v")
-        jq_prog="$jq_prog + {\"$k\": (\$$k)}"
+        jq_prog="${jq_prog} + {\"$k\": \"\$$k\"}"
     done
 
     jq -n "${args[@]}" "$jq_prog"
@@ -121,10 +122,22 @@ checker_utils::emit_success() {
 # ------------------------------------------------------------------------------
 
 # Internal: get timeout values (with env overrides)
-checker_utils::__timeout_connect() { : "${PW_CONNECT_TIMEOUT:=1}"; echo "${PW_CONNECT_TIMEOUT}"; }
-checker_utils::__timeout_max()     { : "${PW_MAX_TIME:=3}";        echo "${PW_MAX_TIME}"; }
-checker_utils::__timeout_resolve() { : "${PW_RESOLVE_MAX_TIME:=4}"; echo "${PW_RESOLVE_MAX_TIME}"; }
-checker_utils::__first_alive_wait(){ : "${PW_FIRST_ALIVE_WAIT:=3}"; echo "${PW_FIRST_ALIVE_WAIT}"; }
+checker_utils::__timeout_connect() {
+    : "${PW_CONNECT_TIMEOUT:=1}"
+    echo "${PW_CONNECT_TIMEOUT}"
+}
+checker_utils::__timeout_max() {
+    : "${PW_MAX_TIME:=3}"
+    echo "${PW_MAX_TIME}"
+}
+checker_utils::__timeout_resolve() {
+    : "${PW_RESOLVE_MAX_TIME:=4}"
+    echo "${PW_RESOLVE_MAX_TIME}"
+}
+checker_utils::__first_alive_wait() {
+    : "${PW_FIRST_ALIVE_WAIT:=3}"
+    echo "${PW_FIRST_ALIVE_WAIT}"
+}
 
 # Decode URL percent-encoding (noop if already decoded)
 checker_utils::decode_url() {
@@ -145,8 +158,8 @@ checker_utils::fast_head_status() {
     ct=$(checker_utils::__timeout_connect)
     mt=$(checker_utils::__timeout_max)
     curl -sS -o /dev/null -I \
-         --connect-timeout "$ct" --max-time "$mt" \
-         -w '%{http_code}' "$url" 2>/dev/null || true
+        --connect-timeout "$ct" --max-time "$mt" \
+        -w '%{http_code}' "$url" 2> /dev/null || true
 }
 
 # Boolean: quick existence check (2xx/3xx considered alive)
@@ -165,8 +178,8 @@ checker_utils::fast_resolve_url() {
     rt=$(checker_utils::__timeout_resolve)
     # Use HEAD with -L and capture final effective URL
     curl -sS -I -L --max-redirs 5 \
-         --connect-timeout "$ct" --max-time "$rt" \
-         -o /dev/null -w '%{url_effective}' "$url" 2>/dev/null || true
+        --connect-timeout "$ct" --max-time "$rt" \
+        -o /dev/null -w '%{url_effective}' "$url" 2> /dev/null || true
 }
 
 # Resolve + validate with fast paths; fall back to networks::get_effective_url if needed.
@@ -206,7 +219,7 @@ checker_utils::resolve_and_validate_url() {
 
     # Fallback to networks::get_effective_url (may be slower)
     local resolved
-    resolved=$(networks::get_effective_url "$decoded" 2>/dev/null || true)
+    resolved=$(networks::get_effective_url "$decoded" 2> /dev/null || true)
     if [[ -n "$resolved" ]] && checker_utils::validate_url "$resolved"; then
         printf '%s' "$resolved"
         return 0
@@ -219,7 +232,7 @@ checker_utils::resolve_and_validate_url() {
 # Usage: checker_utils::first_alive_url <url1> <url2> ...
 checker_utils::first_alive_url() {
     local urls=("$@")
-    (( ${#urls[@]} )) || return 1
+    ((${#urls[@]})) || return 1
 
     # Run quick sequential probes with tiny timeouts to avoid job-control complexity.
     local u
@@ -250,10 +263,13 @@ checker_utils::first_alive_url() {
 # Fetch a URL with caching; on failure emits uniform error JSON and returns non-zero.
 # Usage: checker_utils::fetch_cached_or_error <URL> <TYPE> <APP_NAME> [FAIL_MSG]
 checker_utils::fetch_cached_or_error() {
-    local url="$1" type="$2" app="$3" fail_msg="${4:-Failed to fetch $type from $url}"
+    local url="$1"
+    local type="$2"
+    local app="$3"
+    local fail_msg="${4:-Failed to fetch $type from $url}"
     local path
     if ! path=$(networks::fetch_cached_data "$url" "$type"); then
-        checker_utils::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >/dev/null
+        checker_utils::emit_error "NETWORK_ERROR" "$fail_msg" "$app" > /dev/null
         return 1
     fi
     printf '%s' "$path"
@@ -262,9 +278,11 @@ checker_utils::fetch_cached_or_error() {
 # Load cached file content; on failure emits uniform error JSON and returns non-zero.
 # Usage: checker_utils::load_cached_content_or_error <PATH> <APP_NAME> [FAIL_MSG]
 checker_utils::load_cached_content_or_error() {
-    local path="$1" app="$2" fail_msg="${3:-Cached file missing or unreadable: $path}"
+    local path="$1"
+    local app="$2"
+    local fail_msg="${3:-Cached file missing or unreadable: $path}"
     if [[ ! -f "$path" ]]; then
-        checker_utils::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >/dev/null
+        checker_utils::emit_error "CACHE_ERROR" "$fail_msg" "$app" > /dev/null
         return 1
     fi
     cat "$path"
@@ -281,7 +299,9 @@ checker_utils::fetch_and_load() {
     checker_utils::load_cached_content_or_error "$path" "$app" "$msg"
 }
 
-# Run a CLI with retry using systems::reattempt_command; echo stdout or emit error JSON.
+# Run a CLI with retry using systems::reattempt_command.
+# Success: echoes command stdout to STDOUT (machine-readable path preserved).
+# Failure: emits structured error JSON to STDERR (so STDOUT stays clean/empty) and returns non-zero.
 # Usage: checker_utils::cli_with_retry_or_error <RETRIES> <SLEEP> <APP_NAME> <FAIL_MSG> -- <cmd> [args...]
 checker_utils::cli_with_retry_or_error() {
     local retries="$1" sleep_secs="$2" app="$3" fail_msg="$4"
@@ -289,9 +309,18 @@ checker_utils::cli_with_retry_or_error() {
     # Optional "--" delimiter support
     [[ "$1" == "--" ]] && shift
     local output
-    if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2>/dev/null); then
-        checker_utils::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >/dev/null
-        return 1
+    if [[ -n "${DEBUG:-}" && "${DEBUG}" != "0" ]]; then
+        # Debug mode: preserve stderr from underlying command for diagnostics
+        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@"); then
+            checker_utils::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >&2
+            return 1
+        fi
+    else
+        # Normal mode: suppress underlying command stderr; still surface structured JSON on failure
+        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2> /dev/null); then
+            checker_utils::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >&2
+            return 1
+        fi
     fi
     printf '%s' "$output"
 }
@@ -310,5 +339,5 @@ checker_utils::extract_colon_value() {
              print v
              exit
           }
-        }' <<<"$text" | xargs
+        }' <<< "$text" | xargs
 }

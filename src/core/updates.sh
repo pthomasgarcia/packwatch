@@ -220,7 +220,7 @@ updates::_build_download_url() {
     download_filename=$(printf "$filename_template" "$version")
 
     local download_url
-    download_url=$(repositories::find_asset_url "$release_json" "$download_filename" "$app_name")
+    download_url=$(repositories::find_asset_url "$release_json" "$filename_template" "$app_name")
     if [[ $? -ne 0 || -z "$download_url" ]] || ! validators::check_url_format "$download_url"; then
         errors::handle_error "NETWORK_ERROR" "Download URL not found or invalid for '$download_filename'." "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Download URL not found or invalid.\"}"
@@ -248,10 +248,24 @@ updates::_extract_release_checksum() {
     download_filename=$(printf "$filename_template" "$version")
 
     if [[ "$use_digest" == "true" ]]; then
+        # First try using the template (with %s placeholder) so the digest lookup can
+        # match any version pattern (new style).
         expected_checksum=$(repositories::find_asset_digest \
             "$release_json" \
-            "$download_filename" \
-            "$app_name")
+            "$filename_template" \
+            "$app_name") || expected_checksum=""
+
+        # Older releases / legacy implementations may store the digest under the
+        # fully resolved filename instead of a pattern; if the first attempt
+        # yielded nothing, retry using the concrete resolved filename.
+        if [[ -z "$expected_checksum" ]]; then
+            local alt_checksum
+            alt_checksum=$(repositories::find_asset_digest \
+                "$release_json" \
+                "$download_filename" \
+                "$app_name") || alt_checksum=""
+            [[ -n "$alt_checksum" ]] && expected_checksum="$alt_checksum"
+        fi
     fi
 
     echo "$expected_checksum"
@@ -410,8 +424,14 @@ updates::on_download_progress() {
     local app_name="$1"
     local downloaded="$2"
     local total="$3"
-    local percent=$(((downloaded * 100) / total))
-    interfaces::print_ui_line "  " "⤓ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: $percent% ($(_format_bytes "$downloaded") / $(_format_bytes "$total"))" >&2 # Redirect to stderr
+    local percent
+    if [[ -z "$total" ]] || [[ "$total" -eq 0 ]]; then
+        percent=0
+    else
+        percent=$(((downloaded * 100) / total))
+        if ((percent > 100)); then percent=100; fi
+    fi
+    interfaces::print_ui_line "  " "⤓ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: ${percent}% ($(_format_bytes "$downloaded") / $(_format_bytes "${total:-0}"))" >&2 # Redirect to stderr
     # Note: Requires underlying networks::download_file to call this callback.
 }
 
@@ -632,7 +652,21 @@ updates::check_direct_download() {
     temp_download_dir=$(systems::create_temp_dir) || return 1
     systems::register_temp_file "$temp_download_dir"
 
-    local filename="$(basename "$download_url")"
+    local filename
+    # Derive a safe filename from the download URL:
+    #  1. Strip any query string or fragment (everything after first ? or #)
+    #  2. Take the basename of the cleaned URL
+    #  3. Sanitize to remove shell-unsafe characters (keep . _ - alnum)
+    #  4. Provide a fallback if the result is empty
+    local cleaned_url
+    cleaned_url="${download_url%%[?#]*}" # Remove query/fragment
+    local raw_filename
+    raw_filename="$(basename "$cleaned_url")"
+    filename="$(systems::sanitize_filename "$raw_filename")"
+    if [[ -z "$filename" ]]; then
+        # Fallback: use app_key or generic name
+        filename="$(systems::sanitize_filename "${app_key:-download}")"
+    fi
     local temp_download_file="${temp_download_dir}/${filename}"
 
     updates::on_download_start "$name" "unknown"
@@ -689,7 +723,7 @@ updates::check_direct_download() {
                     "$latest_version" \
                     "$app_key"
                 ;;
-            "tgz"|"tar.gz")
+            "tgz" | "tar.gz")
                 local binary_name="${package_name:-$(echo "$app_key" | tr '[:upper:]' '[:lower:]')}"
                 updates::process_installation \
                     "$name" \
