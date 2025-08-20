@@ -1,95 +1,214 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Packwatch Application Configuration",
-    "description": "Schema for a single application configuration file.",
-    "type": "object",
-    "properties": {
-        "app_key": {
-            "type": "string",
-            "description": "Unique identifier for the application (e.g., 'Ghostty')."
-        },
-        "enabled": {
-            "type": "boolean",
-            "description": "Whether to check this application for updates."
-        },
-        "application": {
-            "type": "object",
-            "description": "Contains the specific configuration for the application.",
-            "oneOf": [
-                { "$ref": "#/definitions/appimage" },
-                { "$ref": "#/definitions/custom" },
-                { "$ref": "#/definitions/direct_download" },
-                { "$ref": "#/definitions/github_release" },
-                { "$ref": "#/definitions/script" }
-            ]
-        }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Packwatch Application Configuration",
+  "description": "Schema for a single application configuration file.",
+  "type": "object",
+  "properties": {
+    "app_key": {
+      "type": "string",
+      "description": "Unique identifier for the application (e.g., 'Ghostty')."
     },
-    "required": ["app_key", "enabled", "application"],
-    "definitions": {
-        "common_properties": {
-            "type": "object",
-            "properties": {
-                "name": { "type": "string" },
-                "checksum_url": { "type": "string", "format": "uri" },
-                "checksum_algorithm": { "type": "string", "enum": ["sha256", "sha512"] },
-                "sig_url": { "type": "string", "format": "uri" },
-                "gpg_key_id": { "type": "string" },
-                "gpg_fingerprint": { "type": "string" },
-                "allow_insecure_http": { "type": "boolean" }
-            }
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether to check this application for updates."
+    },
+    "application": {
+      "type": "object",
+      "description": "Contains the specific configuration for the application.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/appimage"
         },
-        "appimage": {
-            "type": "object",
-            "properties": {
-                "type": { "const": "appimage" },
-                "download_url": { "type": "string", "format": "uri" },
-                "install_path": { "type": "string" }
-            },
-            "required": ["type", "download_url", "install_path"],
-            "allOf": [{ "$ref": "#/definitions/common_properties" }]
+        {
+          "$ref": "#/definitions/custom"
         },
-        "custom": {
-            "type": "object",
-            "properties": {
-                "type": { "const": "custom" },
-                "custom_checker_script": { "type": "string" },
-                "custom_checker_func": { "type": "string" }
-            },
-            "required": ["type", "custom_checker_script", "custom_checker_func"],
-            "allOf": [{ "$ref": "#/definitions/common_properties" }]
+        {
+          "$ref": "#/definitions/direct_download"
         },
-        "direct_download": {
-            "type": "object",
-            "properties": {
-                "type": { "const": "direct_download" },
-                "download_url": { "type": "string", "format": "uri" },
-                "package_name": { "type": "string" }
-            },
-            "required": ["type", "download_url"],
-            "allOf": [{ "$ref": "#/definitions/common_properties" }]
+        {
+          "$ref": "#/definitions/github_release"
         },
-        "github_release": {
-            "type": "object",
-            "properties": {
-                "type": { "const": "github_release" },
-                "repo_owner": { "type": "string" },
-                "repo_name": { "type": "string" },
-                "filename_pattern_template": { "type": "string" },
-                "package_name": { "type": "string" }
-            },
-            "required": ["type", "repo_owner", "repo_name", "filename_pattern_template"],
-            "allOf": [{ "$ref": "#/definitions/common_properties" }]
-        },
-        "script": {
-            "type": "object",
-            "properties": {
-                "type": { "const": "script" },
-                "download_url": { "type": "string", "format": "uri" },
-                "version_url": { "type": "string", "format": "uri" },
-                "version_regex": { "type": "string" }
-            },
-            "required": ["type", "download_url", "version_url", "version_regex"],
-            "allOf": [{ "$ref": "#/definitions/common_properties" }]
+        {
+          "$ref": "#/definitions/script"
         }
+      ]
     }
+  },
+  "required": [
+    "app_key",
+    "enabled",
+    "application"
+  ],
+  "definitions": {
+    "common_properties": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "checksum_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "checksum_algorithm": {
+          "type": "string",
+          "enum": [
+            "sha256",
+            "sha512"
+          ]
+        },
+        "sig_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "gpg_key_id": {
+          "type": "string"
+        },
+        "gpg_fingerprint": {
+          "type": "string"
+        },
+        "allow_insecure_http": {
+          "type": "boolean"
+        }
+      }
+    },
+    "appimage": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "appimage"
+        },
+        "download_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "install_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "download_url",
+        "install_path"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/definitions/common_properties"
+        }
+      ]
+    },
+    "custom": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "custom"
+        },
+        "install_path": {
+          "type": "string",
+          "description": "Optional installation path used by certain custom checkers (e.g., to derive base directory or validate presence). Not required for all custom apps."
+        },
+        "custom_checker_script": {
+          "type": "string"
+        },
+        "custom_checker_func": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "custom_checker_script",
+        "custom_checker_func"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/definitions/common_properties"
+        }
+      ]
+    },
+    "direct_download": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "direct_download"
+        },
+        "download_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "package_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "download_url"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/definitions/common_properties"
+        }
+      ]
+    },
+    "github_release": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "github_release"
+        },
+        "repo_owner": {
+          "type": "string"
+        },
+        "repo_name": {
+          "type": "string"
+        },
+        "filename_pattern_template": {
+          "type": "string"
+        },
+        "package_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "repo_owner",
+        "repo_name",
+        "filename_pattern_template"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/definitions/common_properties"
+        }
+      ]
+    },
+    "script": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "script"
+        },
+        "download_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "version_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "version_regex": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "download_url",
+        "version_url",
+        "version_regex"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/definitions/common_properties"
+        }
+      ]
+    }
+  }
 }

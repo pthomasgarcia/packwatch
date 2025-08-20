@@ -381,8 +381,7 @@ updates::check_script() {
             "${latest_version}" \
             "${download_url}"
     else
-        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
-        counters::inc_up_to_date
+        updates::handle_up_to_date
     fi
 
     return 0
@@ -542,6 +541,12 @@ updates::is_needed() {
     versions::is_newer "$latest_version" "$current_version"
 }
 
+# Handles the common "up to date" status display and counter increment.
+updates::handle_up_to_date() {
+    interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
+    counters::inc_up_to_date
+}
+
 # ------------------------------------------------------------------------------
 # SECTION: DEB Package Update Flow
 # ------------------------------------------------------------------------------
@@ -623,8 +628,7 @@ updates::check_github_release() {
             return 1
         fi
     else
-        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
-        counters::inc_up_to_date
+        updates::handle_up_to_date
     fi
 
     return 0
@@ -683,7 +687,7 @@ updates::check_direct_download() {
 
     local latest_version="0.0.0" # Default if version cannot be extracted
     # Attempt to extract version from filename if possible
-    if ! latest_version=$(versions::extract_from_regex "$filename" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$name"); then
+    if ! latest_version=$(versions::extract_from_regex "$filename" "FILENAME_REGEX" "$name"); then
         loggers::log_message "WARN" "Could not extract version from download URL filename for '$name'. Will default to 0.0.0 for comparison."
         latest_version="0.0.0"
     fi
@@ -754,9 +758,7 @@ updates::check_direct_download() {
                 ;;
         esac
     else
-        interfaces::print_ui_line "  " "✓ " "Already up-to-date." "${COLOR_GREEN}"
-        updates::on_install_skipped "$name" # Treat as skipped if no update needed
-        counters::inc_skipped
+        updates::handle_up_to_date
     fi
 }
 
@@ -930,7 +932,7 @@ updates::check_appimage() {
         loggers::log_message "DEBUG" "Attempting to extract version from download URL filename: '$download_url'"
         local filename_from_url
         filename_from_url=$(basename "$download_url" | cut -d'?' -f1)
-        if ! latest_version=$(versions::extract_from_regex "$filename_from_url" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$name"); then
+        if ! latest_version=$(versions::extract_from_regex "$filename_from_url" "FILENAME_REGEX" "$name"); then
             loggers::log_message "WARN" "Could not extract version from AppImage download URL filename for '$name'. Will default to 0.0.0 for comparison."
             latest_version="0.0.0"
         fi
@@ -970,8 +972,7 @@ updates::check_appimage() {
             "${app_config_ref[checksum_algorithm]:-sha256}" \
             "${app_config_ref[allow_insecure_http]:-0}"
     else
-        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
-        counters::inc_up_to_date
+        updates::handle_up_to_date
     fi
 
     return 0
@@ -1080,8 +1081,7 @@ updates::check_flatpak() {
             "$latest_version" \
             "$flatpak_app_id"
     else
-        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
-        counters::inc_up_to_date
+        updates::handle_up_to_date
     fi
 
     return 0
@@ -1231,8 +1231,7 @@ updates::handle_custom_check() {
         esac
 
     elif [[ "$status" == "no_update" || "$status" == "success" ]]; then
-        interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
-        counters::inc_up_to_date
+        updates::handle_up_to_date
 
     elif [[ "$status" == "error" ]]; then
         errors::handle_error "$error_type_from_checker" "$error_message" "$app_display_name"

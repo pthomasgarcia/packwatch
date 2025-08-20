@@ -133,16 +133,45 @@ versions::extract_from_json() {
 
 # Extract a version string from raw text using a regex pattern.
 # Usage: versions::extract_from_regex "$text_data" "v([0-9.]+)" "AppName"
+# Special sentinel: if regex_pattern is the literal string "FILENAME_REGEX" it will
+# be replaced internally with the value of $VERSION_FILENAME_REGEX (see globals.sh)
+# so callers can avoid duplicating that canonical pattern.
 # Returns the normalized version string or "0.0.0" on failure.
 versions::extract_from_regex() {
     local text_data="$1"
     local regex_pattern="$2"
     local app_name="$3"
-    local raw_version
 
-    raw_version=$(echo "$text_data" | grep -oE "$regex_pattern" | head -n1)
+    if [[ "$regex_pattern" == "FILENAME_REGEX" ]]; then
+        if [[ -z "${VERSION_FILENAME_REGEX:-}" ]]; then
+            loggers::log_message "WARN" "VERSION_FILENAME_REGEX is unset/empty; cannot extract version for '$app_name'. Defaulting to 0.0.0."
+            echo "0.0.0"
+            return 1
+        fi
+        regex_pattern="$VERSION_FILENAME_REGEX"
+    fi
+
+    local raw_version
+    raw_version=$(echo "$text_data" | grep -oE -m1 "$regex_pattern")
+    local grep_rc=$?
+    case $grep_rc in
+        0)
+            : # match found, proceed
+            ;;
+        1)
+            loggers::log_message "WARN" "Failed to extract version for '$app_name' using regex '$regex_pattern'. Defaulting to 0.0.0."
+            echo "0.0.0"
+            return 1
+            ;;
+        2)
+            loggers::log_message "ERROR" "Invalid regex '$regex_pattern' used for '$app_name'."
+            echo "0.0.0"
+            return 1
+            ;;
+    esac
     if [[ -z "$raw_version" ]]; then
-        loggers::log_message "WARN" "Failed to extract version for '$app_name' using regex '$regex_pattern'. Defaulting to 0.0.0."
+        # Defensive: in unlikely case of empty despite rc=0
+        loggers::log_message "WARN" "Empty version match for '$app_name' with regex '$regex_pattern'. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi

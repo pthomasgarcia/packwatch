@@ -55,12 +55,6 @@ packages::get_installed_version_from_json() {
     version=$(systems::get_json_value "$(cat "$versions_file")" ".\"$app_key\"" "$app_key")
 
     if [[ -z "$version" ]]; then
-        loggers::log_message "DEBUG" "Failed to parse installed versions JSON file for app: '$app_key'"
-        echo "0.0.0"
-        return 0
-    fi
-
-    if [[ -z "$version" ]]; then
         loggers::log_message "DEBUG" "No installed version found for app: '$app_key'"
         echo "0.0.0"
         return 0
@@ -154,6 +148,9 @@ packages::get_installed_version() {
 packages::extract_deb_version() {
     local deb_file="$1"
     local version=""
+    # Cache basename to avoid repeated subshell invocations
+    local deb_basename
+    deb_basename="$(basename "$deb_file")"
 
     if [[ ! -f "$deb_file" ]]; then
         errors::handle_error "VALIDATION_ERROR" "DEB file not found: '$deb_file'"
@@ -162,8 +159,11 @@ packages::extract_deb_version() {
 
     version=$(dpkg-deb -f "$deb_file" Version 2> /dev/null)
 
+    # Fallback: attempt to parse version from filename using canonical sentinel pattern
     if [[ -z "$version" ]]; then
-        version=$(versions::extract_from_regex "$(basename "$deb_file")" '^[0-9]+([.-][0-9a-zA-Z]+)*(-[0-9a-zA-Z.-]+)?(\+[0-9a-zA-Z.-]+)?' "$(basename "$deb_file")")
+        # versions::extract_from_regex expects (text_data, pattern-key/sentinel, app_name)
+        # Passing literal "FILENAME_REGEX" triggers substitution with $VERSION_FILENAME_REGEX internally.
+        version=$(versions::extract_from_regex "$deb_basename" "FILENAME_REGEX" "$deb_basename")
     fi
 
     echo "${version:-0.0.0}"
@@ -236,6 +236,8 @@ packages::install_tgz_package() {
     local install_dir="/usr/local/bin"
     local temp_extract_dir
     temp_extract_dir=$(mktemp -d -p "${HOME}/.cache/packwatch/tmp")
+    # Ensure cleanup on any return path (trap executes inline command)
+    trap '[[ -d "'"$temp_extract_dir"'" ]] && rm -rf "'"$temp_extract_dir"'"' RETURN
 
     if ! tar -xzf "$tgz_file" -C "$temp_extract_dir"; then
         errors::handle_error "INSTALLATION_ERROR" "Failed to extract TGZ archive for '$app_name'." "$app_name"
@@ -243,7 +245,8 @@ packages::install_tgz_package() {
     fi
 
     local binary_path
-    binary_path=$(find "$temp_extract_dir" -type f -name "$binary_name")
+    # Find only the first matching file to avoid mv ambiguity
+    binary_path=$(find "$temp_extract_dir" -type f -name "$binary_name" -print -quit)
     if [[ -z "$binary_path" ]]; then
         errors::handle_error "INSTALLATION_ERROR" "Could not find executable '$binary_name' in extracted archive for '$app_name'." "$app_name"
         return 1
@@ -259,6 +262,8 @@ packages::install_tgz_package() {
         return 1
     fi
 
+    # Explicit cleanup (trap also serves as safeguard)
+    [[ -d "$temp_extract_dir" ]] && rm -rf "$temp_extract_dir"
     # The generic process_installation function handles the version update
     return 0
 }

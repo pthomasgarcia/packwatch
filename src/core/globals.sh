@@ -24,6 +24,9 @@ readonly APP_NAME="Packwatch"
 readonly APP_DESCRIPTION="Application Update Checker"
 readonly SCRIPT_VERSION="2.0.0"
 
+# Regular expression for extracting versions from filenames
+readonly VERSION_FILENAME_REGEX='^[0-9]+([.-][0-9A-Za-z]+)*(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?'
+
 SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_NAME
 export SCRIPT_NAME

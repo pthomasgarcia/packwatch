@@ -1,63 +1,27 @@
-refactor(utils/checkers)!: centralize and standardize custom checker logic; drop legacy digest workflow
+refactor(config, updates): Standardize JSON schema and update handling
 
-This commit introduces a new utility module `checker_utils.sh` to centralize and standardize common logic used across custom application checkers. This refactoring significantly reduces code duplication and improves consistency in how checkers handle versioning, network operations, error reporting, and success output.
+This commit introduces several improvements to standardize the application configuration schema and streamline update handling logic.
 
-- **New `checker_utils.sh` module:**
-  - Provides helper functions for version normalization (stripping prefixes).
-  - Standardizes error and success JSON emission.
-  - Includes fast, robust network utilities for URL validation, resolution, and existence checks.
-  - Offers a utility for running CLI commands with retry logic.
-  - Adds a helper for extracting values from colon-separated text.
+- **Standardized JSON Schema (`config/schema.json`):**
+  - Introduced `common_properties` definition to ensure consistent validation rules across all application types (e.g., `name`, `checksum_url`, `gpg_key_id`).
+  - Applied `common_properties` to `appimage`, `custom`, `direct_download`, `github_release`, and `script` definitions.
+  - Reformatted the entire schema for better readability and maintainability.
 
-  API / Behavior Contracts:
-  - JSON Output (stdout only; human/log output goes to stderr):
-  - Success: {"status": string ("success"|"no_update"), "latest_version": string, "install_type": string, "source": string, "error_type": "NONE", "schema_version": string (default "1"), <optional extra string k/v pairs>}.
-    - Error:   {"status": "error", "error_message": string, "error_type": string}.
-  - error_type on success MUST be the literal "NONE" (required field) so clients can treat presence + value as authoritative; absence in future schemas would mean deprecated (do not rely on that yet).
-  - schema_version (optional for forward compatibility) defaults to "1" when omitted; producers SHOULD start including it now. Future incompatible changes will bump this and document migration; consumers SHOULD default to behavior of version "1" if field missing.
-  - Keys are flat; all values emitted as strings. Exactly one JSON object is emitted per invocation on stdout.
-  - CLI Runner (systems::reattempt_command via checker_utils::cli_with_retry_or_error):
-    - Default (if caller does not override): 3 attempts, initial delay 2s, exponential backoff (2s,4s); failure after all attempts -> emits error JSON and exit 1.
-    - Backoff doubles each retry; no jitter. Caller-provided retries/sleep respected verbatim.
-  - Fast Network Helpers (timeouts env-overridable):
-    - PW_CONNECT_TIMEOUT=1s, PW_MAX_TIME=3s (fast_head_status); PW_RESOLVE_MAX_TIME=4s (fast_resolve_url); PW_FIRST_ALIVE_WAIT=3s (not blocking currently, future use).
-  - Network Utility Semantics / Exit Codes:
-    - checker_utils::validate_url: 0 valid format, 1 invalid.
-    - checker_utils::fast_head_status: echoes HTTP code (2xx/3xx/etc) or empty on failure; exit code always 0 (emptiness signals transient failure).
-    - checker_utils::fast_url_exists: 0 if 2xx/3xx, 1 otherwise (includes empty / non-HTTP responses).
-    - checker_utils::fast_resolve_url: echoes final URL or empty; exit code 0 (emptiness = unresolved).
-    - checker_utils::resolve_and_validate_url: 0 + URL (validated & reachable/redirect-resolved), 1 on validation / resolution failure.
-    - checker_utils::first_alive_url: 0 + first alive URL, 1 if none alive.
-    - checker_utils::fetch_cached_or_error / fetch_and_load: 0 success (path/content), 1 on network/validation error (also emits JSON error via emit_error).
-  - networks::download_file (owned by networks module): 0 success; 1 on network / permission / insecure URL rejection (messages to stderr; no JSON here—verification layer or higher-level checker utilities handle JSON if needed). Not exposed via checker_utils currently.
-  - Interpretation Guidance: prefer checking (exit code == 0 && stdout non-empty) for success where functions may return empty strings with 0 for speed probes.
+- **Standardized "Up to Date" Handling (`src/core/updates.sh`):**
+  - Created `updates::handle_up_to_date` function to centralize the display of "up to date" messages and increment the `up_to_date` counter.
+  - Replaced direct calls to `interfaces::print_ui_line` and `counters::inc_up_to_date` with `updates::handle_up_to_date` in `check_script`, `check_github_release`, `check_direct_download`, `check_appimage`, and `handle_custom_check`.
+  - Refactor only; no user-visible change to messaging or counters.
 
-refactor(checkers,utils)!: Centralize checker logic via checker_utils.sh; remove legacy digest workflow
+- **Global Version Filename Regex:**
+  - Defined `VERSION_FILENAME_REGEX` in `src/core/globals.sh` for consistent version extraction from filenames.
+  - Updated `packages::extract_deb_version`, `updates::check_direct_download`, `updates::check_appimage`, and `versions::extract_from_regex` to utilize this new global regex.
+  - Intent: unify prior ad‑hoc extraction patterns with a single canonical matcher to reduce drift and false negatives.
+  - Matches examples: `v1.2.3`, `1.2.3-beta`, `myapp-1.2.3.tar.gz` (captures `1.2.3` / `1.2.3-beta`). Excludes non-semver or too-short forms like `1.2` (missing patch) or build tags like `build123` lacking dotted core.
+  - Supports: optional leading `v`, pre-release suffixes (e.g., `-alpha`, `-beta.1`, `-rc.0`), and build metadata after `+` (ignored downstream by normalization which strips `+...`).
+  - Compatibility: replaces previous scattered filename regex usages with no intended behavior change for existing configs; normalization still trims leading `v` and coerces prerelease to dpkg style.
+  - Known exceptions: none identified requiring a divergent pattern at this time.
+  - Verification: exercised against existing filenames in repository and related tests; no regressions observed.
 
-Introduce `checker_utils.sh` to unify common logic across custom checkers. This reduces duplication and standardizes version handling, networking, and JSON output.
-
-- New `checker_utils.sh`:
-  - Version normalization helpers (strip common prefixes).
-  - Standardized JSON emission for errors/success.
-  - Fast network utilities: URL validation, resolution, existence checks.
-  - CLI command runner with retry logic.
-  - Helper for extracting values from colon-separated text.
-  - Note: document JSON schema and default retry/backoff/timeouts.
-
-- Refactored custom checkers:
-  - `cursor.sh`, `veracrypt.sh`, `warp.sh`, and `zed.sh` now leverage `checker_utils.sh`.
-  - Results in cleaner, more maintainable, and consistent implementations.
-
-- Removed:
-  - `checksum_from_github_release_digest` flag and associated configuration.
-  - Repository-level digest logic:
-    - `repositories::find_asset_digest`
-    - `extract_checksum_from_release_body`
-    - `find_asset_checksum`
-  - Configuration updates tied to the old digest verification (e.g., fastfetch, ollama).
-
-- Behavioral changes:
-  - JSON output and exit codes are standardized via the utilities.
-  - Network operations and retries are centralized for consistency.
-
-BREAKING CHANGE: The legacy digest-based verification workflow (flag and functions above) has been removed. Consumers relying on it must migrate to the new utilities. Update custom checkers to source `checker_utils.sh` and remove uses of the deprecated flags/functions. Refresh any configuration referencing the removed options.
+- **Configuration File Reformatting:**
+  - Applied consistent JSON formatting to `config/conf.d/cursor.json`, `config/conf.d/fastfetch.json`, and `config/conf.d/ollama.json`.
+  - Formatting only; no semantic or behavioral changes to these JSON files.
