@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# MODULE: src/core/updates/flatpak.sh
+# ==============================================================================
+# Responsibilities:
+#   - Deals with Flatpak application checks and updates.
+# ==============================================================================
+
+# Updates module; installs/updates a Flatpak application.
+updates::process_flatpak_app() {
+    local app_name="$1"
+    local app_key="$2"
+    local latest_version="$3"
+    local flatpak_app_id="$4"
+
+    if [[ -z "$app_name" ]] || [[ -z "$app_key" ]] || [[ -z "$latest_version" ]] || [[ -z "$flatpak_app_id" ]]; then
+        errors::handle_error "VALIDATION_ERROR" "Missing required parameters for Flatpak installation" "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"flatpak_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Missing required parameters for Flatpak installation.\"}"
+        return 1
+    fi
+
+    if ! command -v flatpak &> /dev/null; then
+        errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot update $app_name." "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
+        interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot update ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_RED}"
+        return 1
+    fi
+    if ! flatpak remotes | awk '{print $1}' | grep -xq flathub; then
+        interfaces::print_ui_line "  " "→ " "Adding Flathub remote..."
+        sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || {
+            errors::handle_error "INSTALLATION_ERROR" "Failed to add Flathub remote. Cannot update $app_name." "$app_name"
+            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to add Flathub remote.\"}"
+            interfaces::print_ui_line "  " "✗ " "Failed to add Flathub remote." "${COLOR_RED}"
+            return 1
+        }
+    fi
+    interfaces::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
+    sudo flatpak update --appstream -y || {
+        loggers::log_message "WARN" "Failed to update Flatpak appstream data for $app_name. Installation might proceed but information could be stale."
+        interfaces::print_ui_line "  " "! " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
+    }
+
+    # Use the generic process_installation function
+    updates::process_installation \
+        "$app_name" \
+        "$app_key" \
+        "$latest_version" \
+        "sudo" \
+        "flatpak" \
+        "install" \
+        "--or-update" \
+        "-y" \
+        "flathub" \
+        "$flatpak_app_id"
+}
+
+# Updates module; checks for updates for a Flatpak application.
+updates::check_flatpak() {
+    local -n app_config_ref=$1
+    local name="${app_config_ref[name]}"
+    local app_key="${app_config_ref[app_key]}"
+    local flatpak_app_id="${app_config_ref[flatpak_app_id]}"
+    local source="Flathub"
+
+    if ! command -v flatpak &> /dev/null; then
+        errors::handle_error "DEPENDENCY_ERROR" "Flatpak is not installed. Cannot check $name." "$name"
+        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"DEPENDENCY_ERROR\", \"message\": \"Flatpak is not installed.\"}"
+        interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot check ${FORMAT_BOLD}$name${FORMAT_RESET}." "${COLOR_RED}"
+        return 1
+    fi
+
+    interfaces::print_ui_line "  " "→ " "Checking Flatpak for ${FORMAT_BOLD}$name${FORMAT_RESET}..."
+
+    local latest_version="0.0.0"
+    local flatpak_search_output
+    if flatpak_search_output=$("$UPDATES_FLATPAK_SEARCH_IMPL" --columns=application,version,summary "$flatpak_app_id" 2> /dev/null); then # DI applied
+        if [[ "$flatpak_search_output" =~ "$flatpak_app_id"[[:space:]]+([0-9.]+[^[:space:]]*)[[:space:]]+.* ]]; then
+            latest_version=$(versions::normalize "${BASH_REMATCH[1]}")
+        else
+            loggers::log_message "WARN" "Could not parse Flatpak version for '$name' from search output."
+        fi
+    else
+        errors::handle_error "NETWORK_ERROR" "Failed to search Flatpak remote for '$name'." "$name"
+        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to search Flatpak remote.\"}"
+        interfaces::print_ui_line "  " "✗ " "Failed to search Flatpak remote for '$name'. Cannot determine latest version." "${COLOR_RED}"
+        return 1
+    fi
+
+    local installed_version
+    installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
+
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
+
+    if updates::is_needed "$installed_version" "$latest_version"; then
+        interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
+        updates::process_flatpak_app \
+            "$name" \
+            "$app_key" \
+            "$latest_version" \
+            "$flatpak_app_id"
+    else
+        updates::handle_up_to_date
+    fi
+
+    return 0
+}

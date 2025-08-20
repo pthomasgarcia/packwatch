@@ -63,6 +63,62 @@ assert_equal() {
     fi
 }
 
+# Assert that a string contains a substring.
+# Usage: assert_contains "haystack" "needle" "Description of the test"
+assert_contains() {
+    local haystack="$1"
+    local needle="$2"
+    local description="$3"
+    ((TEST_TOTAL++))
+    # Treat empty needle as a hard error (mis-specified test)
+    if [[ -z "$needle" ]]; then
+        echo "✗ FAIL: $description (empty needle)"
+        ((TEST_FAILED++))
+        return 1
+    fi
+
+    if [[ "$haystack" == *"$needle"* ]]; then
+        echo "✓ PASS: $description"
+        ((TEST_PASSED++))
+    else
+        # Escape / quote both haystack and needle so whitespace & special chars are visible
+        local q_haystack q_needle
+        q_haystack=$(printf '%q' "$haystack")
+        q_needle=$(printf '%q' "$needle")
+        echo "✗ FAIL: $description (substring not found) haystack=$q_haystack needle=$q_needle"
+        ((TEST_FAILED++))
+    fi
+}
+
+# Assert that a string does NOT contain a substring.
+# Usage: assert_not_contains "haystack" "needle" "Description of the test"
+assert_not_contains() {
+    local haystack="$1"
+    local needle="$2"
+    local description="$3"
+    ((TEST_TOTAL++))
+
+    # Treat empty needle as a hard error (mis-specified test)
+    if [[ -z "$needle" ]]; then
+        echo "✗ FAIL: $description (empty needle)"
+        ((TEST_FAILED++))
+        return 1
+    fi
+
+    if [[ "$haystack" == *"$needle"* ]]; then
+        local q_haystack q_needle
+        q_haystack=$(printf '%q' "$haystack")
+        q_needle=$(printf '%q' "$needle")
+        echo "✗ FAIL: $description (unexpected substring present) haystack=$q_haystack needle=$q_needle"
+        ((TEST_FAILED++))
+        return 1
+    else
+        echo "✓ PASS: $description"
+        ((TEST_PASSED++))
+        return 0
+    fi
+}
+
 # --- Test Runner ---
 
 # Run all functions in the current script that start with "test_".
