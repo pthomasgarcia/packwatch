@@ -101,20 +101,27 @@ updates::on_download_start() {
 
 updates::on_download_progress() {
     local app_name="$1"
-    updates::on_download_progress() {
-        local app_name="$1"
-        local downloaded="$2"
-        local total="$3"
-        local percent=0
-        local total_disp="unknown"
-        if [[ "$total" =~ ^[0-9]+$ ]] && [[ "$downloaded" =~ ^[0-9]+$ ]] && ((total > 0)); then
+    local downloaded="$2"
+    local total="$3"
+    local percent=0
+    local total_disp="unknown"
+    local downloaded_disp="unknown"
+
+    if [[ "$downloaded" =~ ^[0-9]+$ ]]; then
+        downloaded_disp="$(_format_bytes "$downloaded")"
+    fi
+    if [[ "$total" =~ ^[0-9]+$ ]] && ((total > 0)); then
+        total_disp="$(_format_bytes "$total")"
+        if [[ "$downloaded" =~ ^[0-9]+$ ]]; then
             percent=$((downloaded * 100 / total))
             ((percent > 100)) && percent=100
-            total_disp="$(_format_bytes "$total")"
         fi
-        interfaces::print_ui_line "  " "⤓ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: ${percent}% ($(_format_bytes "$downloaded") / ${total_disp})" >&2 # Redirect to stderr
-        # Note: Requires underlying networks::download_file to call this callback.
-    }
+    fi
+    interfaces::print_ui_line "  " "⤓ " \
+        "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: ${percent}% (${downloaded_disp} / ${total_disp})" >&2
+    # Note: Requires underlying networks::download_file to call this callback.
+}
+updates::on_download_complete() {
     local app_name="$1"
     local file_path="$2"
     interfaces::print_ui_line "  " "✓ " "Download for ${FORMAT_BOLD}$app_name${FORMAT_RESET} complete." "${COLOR_GREEN}" >&2 # Redirect to stderr

@@ -7,15 +7,19 @@
 #   dry runs, error handling, and notifications.
 # ==============================================================================
 
+# shellcheck disable=SC2034,SC2154,SC2005
+
 # Resolve script directory and repository root for robust sourcing
 script_dir="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 repo_root="$(cd -- "${script_dir}/.." &> /dev/null && pwd)"
 CORE_DIR="${repo_root}/src/core"
 
 # Source common test helpers using absolute path
+# shellcheck source=/dev/null
 source "${script_dir}/test_helpers.sh"
 
 # Source the module under test using absolute path
+# shellcheck source=/dev/null
 source "${CORE_DIR}/updates.sh"
 
 # --- GLOBAL DECLARATIONS FOR TESTING ---
@@ -425,10 +429,14 @@ packages::update_installed_version_json() {
 repositories::get_latest_release_info() {
     local owner="$1"
     local repo="$2"
-    # Simulate a JSON file containing release info
     local temp_file
-    temp_file=$(mktemp)
+    if declare -F systems::create_temp_file > /dev/null 2>&1; then
+        temp_file=$(systems::create_temp_file "release_info") || temp_file=$(mktemp)
+    else
+        temp_file=$(mktemp)
+    fi
     echo "[{\"tag_name\":\"v1.1.0\", \"assets\":[{\"name\":\"test-app-v1.1.0.deb\", \"browser_download_url\":\"http://example.com/test-app-v1.1.0.deb\"}]}]" > "$temp_file"
+    test_register_temp_file "$temp_file"
     echo "$temp_file"
     return 0
 }
@@ -436,7 +444,9 @@ repositories::get_latest_release_info() {
 repositories::parse_version_from_release() {
     local json_file="$1"
     local app_name="$2"
-    jq -r '.[0].tag_name' "$json_file" | sed 's/^v//'
+    local tag_name
+    tag_name=$(jq -r '.[0].tag_name' "$json_file")
+    echo "${tag_name#v}"
 }
 
 repositories::find_asset_url() {
@@ -496,7 +506,7 @@ versions::is_newer() {
 
 versions::normalize() {
     # Basic normalization for mock purposes
-    echo "$1" | sed 's/^v//'
+    echo "${1#v}"
 }
 
 versions::extract_from_regex() {
@@ -564,6 +574,14 @@ reset_test_state() {
     TEST_UPDATED_COUNT=0
     TEST_SKIPPED_COUNT=0
     TEST_UP_TO_DATE_COUNT=0
+    if ((${#TEST_TEMP_FILES[@]})); then
+        for _f in "${TEST_TEMP_FILES[@]}"; do
+            if [[ -f "$_f" ]]; then
+                rm -f "$_f"
+            fi
+        done
+        TEST_TEMP_FILES=()
+    fi
     MOCKED_INSTALL_APP=""
     MOCKED_INSTALL_VERSION=""
     MOCKED_INSTALL_TYPE=""
