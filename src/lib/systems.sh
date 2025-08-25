@@ -222,10 +222,13 @@ systems::reattempt_command() {
 
     for ((attempt = 1; attempt <= max_attempts; attempt++)); do
         loggers::log_message "DEBUG" "Attempt $attempt/$max_attempts: ${cmd[*]}"
-        if "${cmd[@]}"; then
+        local command_output
+        if command_output=$("${cmd[@]}" 2>&1); then
+            loggers::log_message "DEBUG" "Command output (stdout+stderr): $command_output"
             return 0
         fi
         loggers::log_message "WARN" "Command failed (attempt $attempt): ${cmd[*]}"
+        loggers::log_message "DEBUG" "Failed command full output: $command_output" # Log the captured output on failure too
         if ((attempt < max_attempts)); then
             sleep "$delay_secs"
             delay_secs=$((delay_secs * 2)) # Exponential backoff

@@ -54,9 +54,21 @@ check_zed() {
 
     # (9) Use scaffolded CLI fetch + parse
     local flatpak_info
-    flatpak_info=$(checker_utils::cli_with_retry_or_error 3 5 "$name" "Failed to retrieve flatpak info for $name." -- \
-        flatpak remote-info flathub "$flatpak_app_id") || return 1
+    loggers::log_message "DEBUG" "ZED: Attempting flatpak remote-info for flatpak_app_id='$flatpak_app_id'"
 
+    # TEMPORARY DIRECT EXECUTION FOR DEBUGGING
+    set +e # Allow command to fail without exiting script
+    flatpak_info=$(flatpak remote-info flathub "$flatpak_app_id" 2>&1)
+    local flatpak_exit_code=$?
+    set -e # Re-enable exit on error
+
+    loggers::log_message "DEBUG" "ZED: Direct flatpak command output: $flatpak_info"
+    loggers::log_message "DEBUG" "ZED: Direct flatpak command exit code: $flatpak_exit_code"
+
+    if [[ "$flatpak_exit_code" -ne 0 ]]; then
+        checker_utils::emit_error "NETWORK_ERROR" "Flatpak command failed with exit code $flatpak_exit_code and output: $flatpak_info" "$name"
+        return 1
+    fi
     local latest_version
     latest_version=$(checker_utils::extract_colon_value "$flatpak_info" "^Version$")
 

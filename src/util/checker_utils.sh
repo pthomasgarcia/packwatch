@@ -111,7 +111,7 @@ checker_utils::emit_success() {
         local v="$2"
         shift 2
         args+=(--arg "$k" "$v")
-        jq_prog="${jq_prog} + {\"$k\": \"\$$k\"}"
+        jq_prog="${jq_prog} + {\"$k\": \$${k}}"
     done
 
     jq -n "${args[@]}" "$jq_prog"
@@ -317,7 +317,7 @@ checker_utils::cli_with_retry_or_error() {
         fi
     else
         # Normal mode: suppress underlying command stderr; still surface structured JSON on failure
-        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2> /dev/null); then
+        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2>&1); then
             checker_utils::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >&2
             return 1
         fi

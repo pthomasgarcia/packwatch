@@ -287,8 +287,16 @@ packages::process_deb_package() {
     version=$(echo "$download_url" | grep -oP '\d+\.\d+\.\d+' | head -n1)
     local artifact_cache_dir="${HOME}/.cache/packwatch/artifacts/${app_name}/v${version}"
     mkdir -p "$artifact_cache_dir"
+    local effective_download_url
+    if ! effective_download_url=$(networks::get_effective_url "$download_url"); then
+        errors::handle_error "NETWORK_ERROR" "Failed to get effective download URL for '$app_name'." "$app_name"
+        return 1
+    fi
+
     local base_filename
-    base_filename=$(basename "$download_url" | cut -d'?' -f1)
+    # Extract filename after the last slash, then remove any query parameters
+    base_filename="${effective_download_url##*/}"
+    base_filename="${base_filename%%\?*}"
     local final_deb_path="${artifact_cache_dir}/${base_filename}"
 
     if [[ ! -f "$final_deb_path" ]]; then

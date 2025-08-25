@@ -164,7 +164,7 @@ networks::fetch_cached_data() {
 networks::require_https_or_fail() {
     local url="$1" allow_http="${2:-0}"
     if [[ "$allow_http" != "true" ]] && ! validators::check_https_url "$url"; then
-        errors::handle_error "NETWORK_ERROR" "Refusing insecure URL: '$url'"
+        errors::handle_error "NETWORK_ERROR" "Refusing insecure URL: \"$url\""
         return 1
     fi
 }
