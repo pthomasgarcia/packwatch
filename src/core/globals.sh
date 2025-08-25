@@ -45,6 +45,12 @@ CONFIG_ROOT="$(dirname "$(dirname "$CORE_DIR")")/config"
 readonly CONFIG_ROOT
 readonly CONFIG_DIR="$CONFIG_ROOT/conf.d"
 
+# Library directory (respect pre-defined value)
+if [[ -z "${LIB_DIR:-}" ]]; then
+    LIB_DIR="$(dirname "$CORE_DIR")/lib"
+fi
+declare -rx LIB_DIR # Export and make readonly
+
 # Cache directory - exported for subprocesses that may need it
 CACHE_DIR="${HOME}/.cache/packwatch/cache"
 export CACHE_DIR
@@ -120,6 +126,11 @@ globals::validate_state() {
     fi
     if [[ ! -d "$CONFIG_DIR" ]]; then
         echo "CONFIG_DIR does not exist: $CONFIG_DIR" >&2
+        return 1
+    fi
+    # Library directory must exist
+    if [[ ! -d "$LIB_DIR" ]]; then
+        echo "LIB_DIR does not exist: $LIB_DIR" >&2
         return 1
     fi
     # Cache directory can be created lazily by systems::perform_housekeeping, but ensure it's a valid path

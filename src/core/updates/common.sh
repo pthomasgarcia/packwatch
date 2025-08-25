@@ -7,6 +7,9 @@
 #     the installation process and progress tracking.
 # ==============================================================================
 
+# shellcheck source=src/lib/progress.sh
+: "${LIB_DIR:?LIB_DIR must be set before sourcing progress.sh}"
+source "$LIB_DIR/progress.sh"
 # Generic function to handle the common installation flow elements.
 # This includes prompting the user, handling dry runs, and updating the installed version.
 # Usage: updates::process_installation "app_name" "app_key" "latest_version" "install_command_func" "install_command_args..."
@@ -26,9 +29,9 @@ updates::process_installation() {
     fi
 
     local prompt_msg
-    prompt_msg="Do you want to install ${FORMAT_BOLD}${app_name}${FORMAT_RESET} v${latest_version}?"
+    prompt_msg="Do you want to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v${latest_version}?"
     if [[ "$current_installed_version" != "0.0.0" ]]; then
-        prompt_msg="Do you want to update ${FORMAT_BOLD}${app_name}${FORMAT_RESET} to v${latest_version}?"
+        prompt_msg="Do you want to update ${FORMAT_BOLD}$app_name${FORMAT_RESET} to v${latest_version}?"
     fi
 
     notifiers::send_notification "$app_name Update Available" "v$latest_version ready for install" "normal"
@@ -68,29 +71,6 @@ updates::process_installation() {
     fi
 }
 
-# Helper function for formatting bytes for progress tracking
-_format_bytes() {
-    local bytes="$1"
-    if ((bytes < 1024)); then
-        echo "${bytes} B"
-    elif ((bytes < 1024 * 1024)); then
-        # Convert to KB with 1 decimal place using pure bash
-        local kb_int=$((bytes / 1024))
-        local kb_frac=$(((bytes * 10 / 1024) % 10))
-        printf "%d.%d KB" "$kb_int" "$kb_frac"
-    elif ((bytes < 1024 * 1024 * 1024)); then
-        # Convert to MB with 1 decimal place using pure bash
-        local mb_int=$((bytes / (1024 * 1024)))
-        local mb_frac=$(((bytes * 10 / (1024 * 1024)) % 10))
-        printf "%d.%d MB" "$mb_int" "$mb_frac"
-    else
-        # Convert to GB with 1 decimal place using pure bash
-        local gb_int=$((bytes / (1024 * 1024 * 1024)))
-        local gb_frac=$(((bytes * 10 / (1024 * 1024 * 1024)) % 10))
-        printf "%d.%d GB" "$gb_int" "$gb_frac"
-    fi
-}
-
 # Placeholder functions for download/install progress.
 updates::on_download_start() {
     local app_name="$1"
@@ -103,27 +83,14 @@ updates::on_download_progress() {
     local app_name="$1"
     local downloaded="$2"
     local total="$3"
-    local percent=0
-    local total_disp="unknown"
-    local downloaded_disp="unknown"
-
-    if [[ "$downloaded" =~ ^[0-9]+$ ]]; then
-        downloaded_disp="$(_format_bytes "$downloaded")"
-    fi
-    if [[ "$total" =~ ^[0-9]+$ ]] && ((total > 0)); then
-        total_disp="$(_format_bytes "$total")"
-        if [[ "$downloaded" =~ ^[0-9]+$ ]]; then
-            percent=$((downloaded * 100 / total))
-            ((percent > 100)) && percent=100
-        fi
-    fi
-    interfaces::print_ui_line "  " "⤓ " \
-        "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: ${percent}% (${downloaded_disp} / ${total_disp})" >&2
-    # Note: Requires underlying networks::download_file to call this callback.
+    # Call the new progress bar rendering function
+    progress::render_bar "$app_name" "$downloaded" "$total"
 }
+
 updates::on_download_complete() {
     local app_name="$1"
     local file_path="$2"
+    progress::clear_line                                                                                                     # Clear the progress line before printing completion message
     interfaces::print_ui_line "  " "✓ " "Download for ${FORMAT_BOLD}$app_name${FORMAT_RESET} complete." "${COLOR_GREEN}" >&2 # Redirect to stderr
     loggers::log_message "INFO" "Download complete for $app_name: $file_path"
 }
