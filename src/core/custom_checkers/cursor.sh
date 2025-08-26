@@ -85,7 +85,8 @@ check_cursor() {
 
     checker_utils::emit_success "$output_status" "$latest_version" "appimage" "Official API (JSON)" \
         download_url "$resolved_url" \
-        install_target_path "$appimage_file_path"
+        install_target_path "$appimage_file_path" \
+        app_key "$app_key"
 
     return 0
 }

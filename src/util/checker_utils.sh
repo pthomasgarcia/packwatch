@@ -111,7 +111,7 @@ checker_utils::emit_success() {
         local v="$2"
         shift 2
         args+=(--arg "$k" "$v")
-        jq_prog="${jq_prog} + {\"$k\": \"\$$k\"}"
+        jq_prog="${jq_prog} + {\"$k\": \$$k}"
     done
 
     jq -n "${args[@]}" "$jq_prog"
