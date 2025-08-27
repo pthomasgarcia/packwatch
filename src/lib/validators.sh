@@ -4,60 +4,63 @@
 # ==============================================================================
 # Responsibilities:
 #   - Input and file validation helpers
-#   - Check URL, file path, executability, checksums, and GPG keys
+#   - Check URL, file path, executability, checksums, and semantic versions
 #
 # Usage:
-#   Source this file in your main script:
-#     source "$CORE_DIR/validators.sh"
+#   source "$CORE_DIR/validators.sh"
+#   validators::check_url_format "https://example.com"
+#   validators::check_file_path "/usr/bin/foo"
+#   validators::check_executable_file "/usr/bin/foo"
+#   validators::check_semver_format "1.2.3"
 #
-#   Then use:
-#     validators::check_url_format "https://example.com"
-#     validators::check_file_path "/usr/bin/foo"
-#     validators::check_executable_file "/usr/bin/foo"
-#     validators::verify_checksum "/tmp/file" "abc123" "sha256"
-#     validators::verify_gpg_key "KEYID" "FINGERPRINT" "AppName"
-#
-# Dependencies:
-#   - errors.sh
-#   - globals.sh
-#   - loggers.sh
-#   - interfaces.sh
-#   - gpg.sh # Added for _get_gpg_fingerprint_as_user
+# Dependencies (optional):
+#   - errors.sh (for errors::handle_error)
+#   - loggers.sh (for loggers::warn)
 # ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION: Dependency Self-Check (Optional)
+# ------------------------------------------------------------------------------
+validators::_require_bin() {
+    command -v "$1" > /dev/null 2>&1 || {
+        echo "validators.sh: missing required command '$1'" >&2
+        return 1
+    }
+}
+# Example: Uncomment if jq or gpg is actually required by this module
+# validators::_require_bin jq || return 1
 
 # ------------------------------------------------------------------------------
 # SECTION: URL and File Path Validators
 # ------------------------------------------------------------------------------
 
-# Check if a URL format is valid (http/https, basic domain/path check).
+# Check if a URL format is valid (http/https only, stricter host check).
 # Usage: validators::check_url_format "https://example.com"
 validators::check_url_format() {
     local url="$1"
-    [[ -n "$url" ]] && [[ "$url" =~ ^https?://[a-zA-Z0-9.-]+(/.*)?$ ]]
+    [[ -n "$url" ]] &&
+        [[ "$url" =~ ^https?://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(/[^[:space:]]*)?$ ]]
 }
 
-# Check if a URL uses HTTPS.
+# Check if a URL uses HTTPS (strict).
 # Usage: validators::check_https_url "https://example.com"
-# Returns 0 if the URL starts with https://, 1 otherwise.
 validators::check_https_url() {
     local url="$1"
-    if [[ "$url" =~ ^https:// ]]; then
-        return 0 # Valid HTTPS URL
-    else
-        return 1 # Invalid (not HTTPS)
-    fi
+    [[ "$url" =~ ^https:// ]]
 }
 
-# Check if a file path is safe (prevents directory traversal).
+# Check if a file path is safe (absolute path or home, no traversal).
+# Disallows '..', control chars, and shell metacharacters.
 # Usage: validators::check_file_path "/usr/bin/foo"
 validators::check_file_path() {
     local path="$1"
     [[ -n "$path" ]] &&
+        [[ "$path" =~ ^(~|/)[A-Za-z0-9._/-]*$ ]] &&
         [[ ! "$path" =~ \.\. ]] &&
-        [[ "$path" =~ ^(~|\/)([a-zA-Z0-9.\/_-]*)$ ]]
+        [[ ! "$path" =~ [[:space:]\;\&\|\$\>\<\'\"\`] ]]
 }
 
-# Check if a file is executable.
+# Check if a file is executable and path is valid.
 # Usage: validators::check_executable_file "/usr/bin/foo"
 validators::check_executable_file() {
     local file_path="$1"
@@ -65,33 +68,18 @@ validators::check_executable_file() {
 }
 
 # ------------------------------------------------------------------------------
-# SECTION: Checksum and GPG Validators
+# SECTION: Semantic Version Validator
 # ------------------------------------------------------------------------------
 
-validators::extract_checksum_from_file() {
-    local checksum_file="$1"
-    local target_name="$2"
-    [[ -f "$checksum_file" ]] || return 1
-    local line
-    if [[ -n "$target_name" ]]; then
-        line=$(grep -Ei "^[0-9a-f]{64}\s+(\*|)${target_name//\./\\.}\s*$" "$checksum_file" | head -n1)
-    fi
-    line=${line:-$(head -n1 "$checksum_file")}
-    awk '{print $1}' <<< "$line"
+# Check if a string is a valid semantic version (basic semver 2.0.0).
+# Allows MAJOR.MINOR.PATCH with optional pre-release/build metadata.
+# Usage: validators::check_semver_format "1.2.3-beta+exp"
+validators::check_semver_format() {
+    local version="$1"
+    [[ -n "$version" ]] &&
+        [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}(-[0-9A-Za-z.~-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
 }
 
 # ==============================================================================
 # END OF MODULE
 # ==============================================================================
-
-# Check if a string is a valid semantic version (basic check).
-# Allows for X.Y.Z, X.Y, X, and optional pre-release/build metadata.
-# Usage: validators::check_semver_format "1.2.3"
-# Returns 0 for valid, 1 for invalid.
-validators::check_semver_format() {
-    local version="$1"
-    # Regex for semantic versioning: MAJOR.MINOR.PATCH-prerelease+build
-    # Allows for just major, major.minor, major.minor.patch
-    # Allows alphanumeric for pre-release and build metadata
-    [[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[0-9a-zA-Z.~-]+)?(\+[0-9a-zA-Z.-]+)?$ ]]
-}
