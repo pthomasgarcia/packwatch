@@ -18,14 +18,14 @@ PACKWATCH_SCAFFOLDING_LOADED=1
 # 1. configs.sh: Central to loading application configurations.
 # 2. counters.sh: Manages application-wide statistics.
 # 3. notifiers.sh: Handles desktop notifications.
-# 4. util/checker_utils.sh: Basic utilities for custom checkers.
-#    (Placed here because custom checkers might be referenced early in config loading)
 
 source "$CORE_DIR/configs.sh"
 source "$CORE_DIR/../lib/counters.sh"
 source "$CORE_DIR/../lib/notifiers.sh"
-source "$CORE_DIR/../util/checker_utils.sh"
 source "$CORE_DIR/../lib/gpg.sh"
+source "$CORE_DIR/../lib/string_utils.sh"
+source "$CORE_DIR/../lib/systems.sh"
+source "$CORE_DIR/../lib/json_response.sh"
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).

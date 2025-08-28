@@ -37,61 +37,15 @@ updates::check_direct_download() {
     local installed_version
     installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
 
-    local temp_download_dir
-    temp_download_dir=$(systems::create_temp_dir) || return 1
-    systems::register_temp_file "$temp_download_dir"
+    local latest_version
+    local temp_download_file
 
-    local filename
-    # Derive a safe filename from the download URL:
-    #  1. Strip any query string or fragment (everything after first ? or #)
-    #  2. Take the basename of the cleaned URL
-    #  3. Sanitize to remove shell-unsafe characters (keep . _ - alnum)
-    #  4. Provide a fallback if the result is empty
-    local cleaned_url
-    cleaned_url="${download_url%%[?#]*}" # Remove query/fragment
-    local raw_filename
-    raw_filename="$(basename "$cleaned_url")"
-    filename="$(systems::sanitize_filename "$raw_filename")"
-    if [[ -z "$filename" ]]; then
-        # Fallback: use app_key or generic name
-        filename="$(systems::sanitize_filename "${app_key:-download}")"
-    fi
-    local temp_download_file="${temp_download_dir}/${filename}"
-
-    # Early version extraction from filename to potentially skip unnecessary download
-    local latest_version="0.0.0" early_latest_extracted=0
-    if early_latest=$(versions::extract_from_regex "$filename" "FILENAME_REGEX" "$name" 2> /dev/null); then
-        latest_version=$(versions::normalize "$early_latest")
-        early_latest_extracted=1
-        # Decide if update needed before downloading
-        if ! updates::is_needed "$installed_version" "$latest_version"; then
-            loggers::log_message "INFO" "Skipping download for '$name'; installed version '$installed_version' is up-to-date against '$latest_version'."
-            interfaces::print_ui_line "  " "✓ " "Already up-to-date." "${COLOR_GREEN}"
-            updates::on_install_skipped "$name"
-            counters::inc_skipped
-            return 0
-        fi
-    fi
-
-    updates::on_download_start "$name" "unknown"
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_download_file" "" "" "$allow_http"; then # DI applied, added allow_http
-        errors::handle_error "NETWORK_ERROR" "Failed to download file from '$download_url'" "$name"
-        updates::trigger_hooks "ERROR_HOOKS" "$name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download file.\"}"
+    if ! "$UPDATER_UTILS_CHECK_AND_GET_VERSION_FROM_DOWNLOAD_IMPL" \
+        app_config_ref \
+        "versions::extract_from_regex" \
+        latest_version \
+        temp_download_file; then
         return 1
-    fi
-
-    if ! verifiers::verify_artifact app_config_ref "$temp_download_file" "$download_url"; then
-        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded artifact: '$name'." "$name"
-        updates::trigger_hooks "ERROR_HOOKS" "$name" "{\"phase\": \"download\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Verification failed for downloaded artifact.\"}"
-        return 1
-    fi
-
-    # Fallback extraction only if not already done early
-    if [[ $early_latest_extracted -eq 0 ]]; then
-        if ! latest_version=$(versions::extract_from_regex "$filename" "FILENAME_REGEX" "$name"); then
-            loggers::log_message "WARN" "Could not extract version from download URL filename for '$name'. Will default to 0.0.0 for comparison."
-            latest_version="0.0.0"
-        fi
     fi
 
     # Standardized summary output

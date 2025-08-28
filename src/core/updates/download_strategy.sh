@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# MODULE: updater_utils.sh
+# MODULE: download_strategy.sh
 # ==============================================================================
 # Responsibilities:
 #   - Provide shared helper functions for the update process, particularly for
@@ -20,7 +20,7 @@
 : "${UPDATES_DOWNLOAD_FILE_IMPL:?UPDATES_DOWNLOAD_FILE_IMPL is not set.}"
 
 # ==============================================================================
-# FUNCTION: updater_utils::check_and_get_version_from_download
+# FUNCTION: download_strategy::check_and_get_version_from_download
 # ==============================================================================
 # Description:
 #   A generic helper to encapsulate the "download-first-then-compare" logic.
@@ -39,7 +39,7 @@
 #   0 on success, non-zero on failure.
 #   Populates the output variables referenced by $3 and $4.
 # ==============================================================================
-updater_utils::check_and_get_version_from_download() {
+download_strategy::check_and_get_version_from_download() {
     local -n app_config_ref=$1
     local version_extractor_func="$2"
     local -n out_version_var=$3

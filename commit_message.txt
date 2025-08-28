@@ -1,25 +1,20 @@
-refactor(updates)!: Modularize updates module for improved maintainability and testability
+refactor(verifiers): Enhance modularity, robustness, and testability
 
-This commit undertakes a significant refactoring of the `updates` module, breaking down the monolithic `updates.sh` script into smaller, more focused, and testable components. This enhances code organization, reduces complexity, and lays the groundwork for more robust feature development and testing.
+This commit introduces a significant refactoring of the `verifiers` and `validators` modules to improve their robustness, modularity, and maintainability. The changes focus on hardening the verification process, improving error handling, and increasing portability.
 
-- **Modular Structure:**
-  - The `src/core/updates/` directory is introduced to house specialized scripts for each update type (e.g., `github.sh`, `direct_download.sh`, `appimage.sh`, `flatpak.sh`, `script.sh`, `custom.sh`).
-  - Common update-related utilities are consolidated into `common.sh` and `validation.sh`.
-  - `updates.sh` now acts as a central orchestrator, sourcing these modules and managing the overall update flow.
+- **`verifiers.sh` Refactoring:**
+  - **Modularity:** The module is broken down into smaller, single-responsibility functions (e.g., `_verify_checksum_with_hooks`, `_perform_gpg_verification`, `_download_signature_file`). This improves readability and simplifies testing.
+  - **Robustness:**
+    - **Dependency Checks:** The module now performs an upfront check for required command-line tools (e.g., `jq`, `awk`, `gpg`), failing fast if a dependency is missing.
+    - **Safe Cleanup:** A `trap` is used to ensure that temporary files are cleaned up, even if the script exits unexpectedly.
+    - **Safer Hooks:** Hook triggering is now more robust, with better error handling and logging.
+  - **Portability:** The `_lower` function is now used for case-insensitive comparisons, making the script more portable (e.g., to macOS's older bash version).
+  - **Checksum Extraction:** The `extract_checksum_from_file` function is now more flexible, supporting SHA-256, SHA-512, and falling back to the first available hex digest.
 
-- **Relocated and Refined Logic:**
-  - All type-specific update checking and installation logic has been moved to their respective new modules.
-  - `updates::process_installation` (now in `common.sh`) is enhanced with better installed version handling and `sudo` session checks.
-  - `updates::handle_custom_check` (now in `custom.sh`) gains improved custom checker script path resolution, robust JSON output validation, and explicit parameter validation for various install types.
-  - `updates::trigger_hooks` is updated to use safer nameref iteration.
+- **`validators.sh` Refactoring:**
+  - **Stricter Validation:** The URL and file path validation functions have been improved with stricter regular expressions to prevent common security vulnerabilities.
+  - **Improved Semver:** The `check_semver_format` function now uses a more accurate regular expression for semantic versioning.
+  - **Clarity:** The module's responsibilities and usage examples have been updated for better clarity.
 
-- **Enhanced Testing:**
-  - A comprehensive test suite (`tests/test_updates.sh`) is introduced, leveraging extensive mocking to validate the behavior of the refactored `updates` module across various scenarios (e.g., dry runs, update availability, error handling).
-  - New `assert_contains` and `assert_not_contains` helpers are added to `tests/test_helpers.sh` for more flexible assertion capabilities.
-
-- **Improved User Experience & Robustness:**
-  - Download progress reporting (`_format_bytes`, `on_download_progress` in `common.sh`) is made more robust.
-  - Configuration validation for `direct_download` type is strengthened.
-  - New public hook: `updates::on_download_complete()` — invoked when a download completes.
-
-BREAKING CHANGE: The internal structure of the `updates` module has been completely reorganized. Direct calls to functions previously defined in `updates.sh` that have been moved to sub-modules will now fail if `updates.sh` is not sourced or if the functions are not properly exposed. This change primarily affects internal development and testing, requiring updates to any scripts or tests that directly interact with these moved functions without going through the `updates.sh` orchestrator.
+- **Code Relocation:**
+  - `networks.sh` has been moved from `src/core` to `src/lib` to better reflect its role as a library module. The import path in `src/core/init/runtime.sh` has been updated accordingly.

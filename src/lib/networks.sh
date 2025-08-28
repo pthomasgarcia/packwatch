@@ -211,20 +211,36 @@ networks::get_effective_url() {
     return 0
 }
 
-# ------------------------------------------------------------------------------
-# SECTION: File Downloading
-# Efficiently check if a URL exists using a HEAD request.
-# Usage: networks::url_exists "url"
-networks::url_exists() {
+# Return HTTP status from a quick HEAD probe (no redirects). Empty on failure.
+# Uses PW_CONNECT_TIMEOUT and PW_MAX_TIME from globals.sh
+networks::fast_head_status() {
     local url="$1"
-    networks::apply_rate_limit
-    if curl -s --head --fail -A "$(networks::_user_agent)" "$url" > /dev/null; then
-        return 0
-    else
-        return 1
-    fi
+    local ct="${PW_CONNECT_TIMEOUT:-1}"
+    local mt="${PW_MAX_TIME:-3}"
+    curl -sS -o /dev/null -I \
+        --connect-timeout "$ct" --max-time "$mt" \
+        -w '%{http_code}' "$url" 2> /dev/null || true
 }
-# ------------------------------------------------------------------------------
+
+# Boolean: quick existence check (2xx/3xx considered alive)
+# Uses networks::fast_head_status
+networks::fast_url_exists() {
+    local url="$1"
+    local code
+    code=$(networks::fast_head_status "$url")
+    [[ -n "$code" && "$code" -ge 200 && "$code" -lt 400 ]]
+}
+# Follow redirects quickly and return the effective URL (limited time/redirs)
+# Uses PW_CONNECT_TIMEOUT and PW_RESOLVE_MAX_TIME from globals.sh
+networks::fast_resolve_url() {
+    local url="$1"
+    local ct="${PW_CONNECT_TIMEOUT:-1}"
+    local rt="${PW_RESOLVE_MAX_TIME:-4}"
+    # Use HEAD with -L and capture final effective URL
+    curl -sS -I -L --max-redirs 5 \
+        --connect-timeout "$ct" --max-time "$rt" \
+        -o /dev/null -w '%{url_effective}' "$url" 2> /dev/null || true
+}
 
 # Download a file from a given URL.
 # Usage: networks::download_file "url" "/tmp/file" "checksum" "sha256"
@@ -271,6 +287,123 @@ networks::download_file() {
     # fi
 
     return 0
+}
+
+# Resolve + validate with fast paths; fall back to networks::get_effective_url if needed.
+networks::resolve_and_validate_url() {
+    local raw="$1"
+
+    # Preliminary validation on raw and decoded
+    local decoded
+    decoded=$(networks::decode_url "$raw")
+
+    if ! validators::check_url_format "$decoded"; then
+        return 1
+    fi
+
+    # Quick probe
+    local code
+    code=$(networks::fast_head_status "$decoded")
+
+    # 2xx: good as-is
+    if [[ -n "$code" && "$code" -ge 200 && "$code" -lt 300 ]]; then
+        printf '%s' "$decoded"
+        return 0
+    fi
+
+    # 3xx or unknown: try fast resolve
+    local fast_resolved
+    fast_resolved=$(networks::fast_resolve_url "$decoded")
+    if [[ -n "$fast_resolved" ]] && validators::check_url_format "$fast_resolved"; then
+        # Confirm it exists quickly; if not, still return the resolved (some servers block HEAD)
+        if networks::fast_url_exists "$fast_resolved"; then
+            printf '%s' "$fast_resolved"
+            return 0
+        fi
+        printf '%s' "$fast_resolved"
+        return 0
+    fi
+
+    # Fallback to networks::get_effective_url (may be slower)
+    local resolved
+    resolved=$(networks::get_effective_url "$decoded" 2> /dev/null || true)
+    if [[ -n "$resolved" ]] && validators::check_url_format "$resolved"; then
+        printf '%s' "$resolved"
+        return 0
+    fi
+
+    return 1
+}
+
+# Fetch a URL with caching; on failure emits uniform error JSON and returns non-zero.
+# Usage: networks::fetch_cached_or_error <URL> <TYPE> <APP_NAME> [FAIL_MSG]
+networks::fetch_cached_or_error() {
+    local url="$1"
+    local type="$2"
+    local app="$3"
+    local fail_msg="${4:-Failed to fetch $type from $url}"
+    local path
+    if ! path=$(networks::fetch_cached_data "$url" "$type"); then
+        # Use json_response::emit_error for consistency with custom checkers
+        # This creates a dependency from networks.sh back to checker_utils.sh, which is not ideal.
+        # Ideally, emit_error would be in a more generic error handling module.
+        # For now, we'll keep the dependency for functional correctness.
+        json_response::emit_error "NETWORK_ERROR" "$fail_msg" "$app" > /dev/null
+        return 1
+    fi
+    printf '%s' "$path"
+}
+
+# Load cached file content; on failure emits uniform error JSON and returns non-zero.
+# Usage: networks::load_cached_content_or_error <PATH> <APP_NAME> [FAIL_MSG]
+networks::load_cached_content_or_error() {
+    local path="$1"
+    local app="$2"
+    local fail_msg="${3:-Cached file missing or unreadable: $path}"
+    if [[ ! -f "$path" ]]; then
+        # Use json_response::emit_error for consistency with custom checkers
+        json_response::emit_error "CACHE_ERROR" "$fail_msg" "$app" > /dev/null
+        return 1
+    fi
+    cat "$path"
+}
+
+# Convenience: fetch -> load content; echoes content on success.
+# Usage: networks::fetch_and_load <URL> <TYPE> <APP_NAME> [FAIL_MSG]
+networks::fetch_and_load() {
+    local url="$1" type="$2" app="$3" msg="${4:-}"
+    local path
+    if ! path=$(networks::fetch_cached_or_error "$url" "$type" "$app" "$msg"); then
+        return 1
+    fi
+    networks::load_cached_content_or_error "$path" "$app" "$msg"
+}
+# Try multiple URLs and return the first that responds (2xx/3xx) within a short window.
+# Usage: networks::first_alive_url <url1> <url2> ...
+networks::first_alive_url() {
+    local urls=("$@")
+    ((${#urls[@]})) || return 1
+
+    # Run quick sequential probes with tiny timeouts to avoid job-control complexity.
+    local u
+    for u in "${urls[@]}"; do
+        if validators::check_url_format "$u" && networks::fast_url_exists "$u"; then
+            printf '%s' "$u"
+            return 0
+        fi
+    done
+
+    # As a last attempt, try fast resolve on each
+    for u in "${urls[@]}"; do
+        local r
+        r=$(networks::fast_resolve_url "$u")
+        if [[ -n "$r" ]] && validators::check_url_format "$r"; then
+            printf '%s' "$r"
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 # ==============================================================================

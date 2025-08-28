@@ -71,6 +71,9 @@ UPDATES_GET_LATEST_RELEASE_INFO_IMPL="${UPDATES_GET_LATEST_RELEASE_INFO_IMPL:-re
 UPDATES_EXTRACT_DEB_VERSION_IMPL="${UPDATES_EXTRACT_DEB_VERSION_IMPL:-packages::extract_deb_version}"
 UPDATES_FLATPAK_SEARCH_IMPL="${UPDATES_FLATPAK_SEARCH_IMPL:-flatpak search}" # Direct binary call
 
+# DI for updater_utils.sh functions
+UPDATER_UTILS_CHECK_AND_GET_VERSION_FROM_DOWNLOAD_IMPL="${UPDATER_UTILS_CHECK_AND_GET_VERSION_FROM_DOWNLOAD_IMPL:-download_strategy::check_and_get_version_from_download}"
+
 # Event Hooks
 # Arrays to store function names to be called at specific events.
 declare -a PRE_CHECK_HOOKS

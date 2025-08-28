@@ -1,23 +1,14 @@
 #!/usr/bin/env bash
-# Test suite for checker_utils.sh focused on cache / IO error paths.
-
+# Test suite for refactored utility functions.
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$TEST_DIR/test_helpers.sh"
 
-# Minimal stubs for dependencies used by checker_utils::emit_error and related functions
+# Minimal stubs for dependencies
 loggers::log_message() { :; }
-# Capture last notification (notifiers)
-notifiers::send_notification() {
-    LAST_NOTIFICATION_TYPE=$1
-    LAST_NOTIFICATION_MSG=$2
-    LAST_NOTIFICATION_LEVEL=$3
-    : "$LAST_NOTIFICATION_TYPE" "$LAST_NOTIFICATION_MSG" "$LAST_NOTIFICATION_LEVEL"
-}
-errors::handle_error() { # mimic logging + exit code mapping
+errors::handle_error() {
     local type="$1" msg="$2" app="$3"
     : "$msg" "$app" # suppress unused warnings
-    # simulate exit code mapping; return 20 for CACHE_ERROR, else 1
     case "$type" in
         CACHE_ERROR) return 20 ;;
     esac
@@ -25,17 +16,20 @@ errors::handle_error() { # mimic logging + exit code mapping
 }
 validators::check_url_format() { return 0; }
 networks::decode_url() { echo "$1"; }
+networks::fetch_cached_data() { return 1; } # Simulate a cache miss/failure
 
-# Source systems + checker_utils
+# Source the new library files
 # shellcheck source=/dev/null
-source "$TEST_DIR/../src/util/checker_utils.sh"
+source "$TEST_DIR/../src/lib/json_response.sh"
+# shellcheck source=/dev/null
+source "$TEST_DIR/../src/lib/networks.sh"
 
 # --- Tests ---
 
 # Ensure load_cached_content_or_error emits CACHE_ERROR JSON to stdout when file missing.
 test_load_cached_content_or_error_missing_file() {
     local output
-    output=$(checker_utils::load_cached_content_or_error "/nonexistent/path/hopefully" "test-app" 2> /dev/null || true)
+    output=$(networks::load_cached_content_or_error "/nonexistent/path/hopefully" "test-app" 2> /dev/null || true)
     # We redirected stderr to /dev/null to isolate JSON (emit_error prints JSON to stdout)
     local error_type
     error_type=$(echo "$output" | jq -r '.error_type // empty')

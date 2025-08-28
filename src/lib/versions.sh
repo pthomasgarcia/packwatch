@@ -131,6 +131,25 @@ versions::extract_from_json() {
     return 0
 }
 
+# Normalize common version prefixes to compare versions reliably.
+# Handles leading whitespace, path-like prefixes (e.g., refs/tags/),
+# and textual prefixes like v, version, ver, release, stable.
+versions::strip_version_prefix() {
+    local version="$1"
+
+    # Trim leading/trailing whitespace
+    version="${version#"${version%%[![:space:]]*}"}"
+    version="${version%"${version##*[![:space:]]}"}"
+
+    # Drop common path-like refs (e.g., refs/tags/, releases/)
+    version=$(printf '%s' "$version" | sed -E 's#^(refs/tags/|tags/|releases?/)+##I')
+
+    # Drop common textual prefixes followed by separators
+    version=$(printf '%s' "$version" | sed -E 's#^(v|version|ver|release|stable)[[:space:]_/:.-]*##I')
+
+    echo "$version"
+}
+
 # Extract a version string from raw text using a regex pattern.
 # Usage: versions::extract_from_regex "$text_data" "v([0-9.]+)" "AppName"
 # Special sentinel: if regex_pattern is the literal string "FILENAME_REGEX" it will

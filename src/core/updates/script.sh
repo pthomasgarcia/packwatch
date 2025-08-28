@@ -29,46 +29,21 @@ updates::process_script_installation() {
         return 1
     fi
 
-    local temp_script_path
-    local base_filename_for_tmp
-    base_filename_for_tmp="$(basename "$download_url" | cut -d'?' -f1 | sed 's/\.sh$//')"
-    base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
-    if ! temp_script_path=$(systems::create_temp_file "${base_filename_for_tmp}"); then
-        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file for script: '${base_filename_for_tmp}'" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"script_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to create temporary file.\"}"
+    local latest_version
+    local temp_download_file
+
+    if ! "$UPDATER_UTILS_CHECK_AND_GET_VERSION_FROM_DOWNLOAD_IMPL" \
+        app_config_ref \
+        "versions::extract_from_regex" \
+        latest_version \
+        temp_download_file; then
         return 1
     fi
-    TEMP_FILES+=("$temp_script_path")
 
-    # Attempt to obtain expected download size via HEAD request
-    local download_size="unknown"
-    if networks::require_https_or_fail "$download_url" "$allow_http"; then
-        local head_output
-        # Reuse network timeout config if available; fallback sensible defaults
-        local timeout_val="${NETWORK_CONFIG[TIMEOUT]:-10}"
-        if head_output=$(curl -s -I -L -A "$(networks::_user_agent)" \
-            --connect-timeout "$timeout_val" \
-            --max-time "$((timeout_val * 2))" \
-            "$download_url" 2> /dev/null); then
-            local cl
-            cl=$(printf '%s\n' "$head_output" | awk -F': ' 'tolower($1)=="content-length"{val=$2} END {gsub(/\r/,"",val); if(val ~ /^[0-9]+$/) print val}')
-            if [[ -n "$cl" ]]; then
-                download_size="$cl"
-            fi
-        fi
-    fi
-
-    updates::on_download_start "$app_name" "$download_size"
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_script_path" "$download_size" "" "$allow_http"; then # Pass size for implementations that support it
-        errors::handle_error "NETWORK_ERROR" "Failed to download script" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download script.\"}"
-        return 1
-    fi
-    updates::on_download_complete "$app_name" "$temp_script_path" # Hook
-
-    # Perform verification after download
-    if ! verifiers::verify_artifact app_config_ref "$temp_script_path" "$download_url"; then
-        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded script: '$app_name'." "$app_name"
+    # The downloaded file needs to be executable for script installations
+    if ! chmod +x "$temp_download_file"; then
+        errors::handle_error "PERMISSION_ERROR" "Failed to make script executable: '$temp_download_file'" "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to make script executable.\"}"
         return 1
     fi
 
