@@ -1,20 +1,15 @@
-refactor(verifiers): Enhance modularity, robustness, and testability
+fix(scripts): Improve quoting and script logic
 
-This commit introduces a significant refactoring of the `verifiers` and `validators` modules to improve their robustness, modularity, and maintainability. The changes focus on hardening the verification process, improving error handling, and increasing portability.
+This commit includes several minor fixes and cleanups to improve the robustness and clarity of the scripts.
 
-- **`verifiers.sh` Refactoring:**
-  - **Modularity:** The module is broken down into smaller, single-responsibility functions (e.g., `_verify_checksum_with_hooks`, `_perform_gpg_verification`, `_download_signature_file`). This improves readability and simplifies testing.
-  - **Robustness:**
-    - **Dependency Checks:** The module now performs an upfront check for required command-line tools (e.g., `jq`, `awk`, `gpg`), failing fast if a dependency is missing.
-    - **Safe Cleanup:** A `trap` is used to ensure that temporary files are cleaned up, even if the script exits unexpectedly.
-    - **Safer Hooks:** Hook triggering is now more robust, with better error handling and logging.
-  - **Portability:** The `_lower` function is now used for case-insensitive comparisons, making the script more portable (e.g., to macOS's older bash version).
-  - **Checksum Extraction:** The `extract_checksum_from_file` function is now more flexible, supporting SHA-256, SHA-512, and falling back to the first available hex digest.
+- **`script.sh`:**
+  - The JSON payload for `updates::trigger_hooks` is now single-quoted to prevent issues with double quotes and special characters.
+  - A redundant `chmod +x` call has been removed.
+  - The `temp_script_path` variable is now explicitly assigned from `temp_download_file` for clarity.
 
-- **`validators.sh` Refactoring:**
-  - **Stricter Validation:** The URL and file path validation functions have been improved with stricter regular expressions to prevent common security vulnerabilities.
-  - **Improved Semver:** The `check_semver_format` function now uses a more accurate regular expression for semantic versioning.
-  - **Clarity:** The module's responsibilities and usage examples have been updated for better clarity.
+- **`direct_download.sh`:**
+  - The `filename` variable is now explicitly declared and assigned to avoid potential issues with variable scope.
 
-- **Code Relocation:**
-  - `networks.sh` has been moved from `src/core` to `src/lib` to better reflect its role as a library module. The import path in `src/core/init/runtime.sh` has been updated accordingly.
+- **`systems.sh`:**
+  - The `cli_with_retry_or_error` function has been moved to a more logical location within the file.
+  - Shellcheck disable comments have been added to `direct_download.sh` and `script.sh` to ignore unused variable warnings.

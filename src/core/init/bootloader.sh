@@ -23,6 +23,7 @@ source "$CORE_DIR/globals.sh"
 source "$CORE_DIR/../lib/systems.sh"
 source "$CORE_DIR/../lib/loggers.sh"
 source "$CORE_DIR/../lib/errors.sh"
+source "$CORE_DIR/../util/hash_utils.sh"
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).

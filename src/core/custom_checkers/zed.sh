@@ -19,22 +19,28 @@
 check_zed() {
     local app_config_json="$1" # Now receives JSON string
 
-    # Cache all fields at once to reduce jq process spawning
+    # Generate cache key and cache all fields at once
     local cache_key
-    cache_key="zed_$(echo "$app_config_json" | md5sum | cut -d' ' -f1)"
+    local _hash
+    _hash="$(hash_utils::generate_hash "$app_config_json")"
+    cache_key="zed_${_hash}"
     systems::cache_json_fields "$app_config_json" "$cache_key"
 
-    # Get all values from cache instead of multiple jq calls
-    local name
+    # Retrieve all required fields from cache
+    local name app_key flatpak_app_id
     name=$(systems::get_cached_json_value "$cache_key" "name")
-    local app_key
     app_key=$(systems::get_cached_json_value "$cache_key" "app_key")
-    local flatpak_app_id
     flatpak_app_id=$(systems::get_cached_json_value "$cache_key" "flatpak_app_id")
+
+    # Defaults and required-field guards
+    if [[ -z "$name" || -z "$app_key" ]]; then
+        json_response::emit_error "CONFIG_ERROR" "Missing required fields: name/app_key." "${name:-zed}"
+        return 1
+    fi
 
     # Early guard: flatpak_app_id must be present for Flatpak-based checks
     if [[ -z "$flatpak_app_id" ]]; then
-        json_response::emit_error "CONFIG_ERROR" "Missing required flatpak_app_id in config (cache_key=$cache_key) for $name. Set 'flatpak_app_id' to the Flathub application ID." "$name" > /dev/null
+        json_response::emit_error "CONFIG_ERROR" "Missing required flatpak_app_id in config (cache_key=$cache_key) for $name. Set 'flatpak_app_id' to the Flathub application ID." "$name"
         return 1
     fi
 
@@ -52,14 +58,22 @@ check_zed() {
         configured_download_url="$resolved_url"
     fi
 
-    local installed_version
-    installed_version=$(packages::get_installed_version "$app_key")
+    # Get installed version (defensive: don't propagate errors)
+    local installed_version=""
+    local _iv_rc=0
+    installed_version=$(packages::get_installed_version "$app_key" 2> /dev/null) || _iv_rc=$?
+    if ((_iv_rc != 0)); then
+        # Leave installed_version empty; downstream logic will handle it
+        loggers::log_message "DEBUG" "ZED: get_installed_version failed for app_key='$app_key' (rc=${_iv_rc}); proceeding with empty installed_version"
+        installed_version=""
+    fi
 
-    # (9) Use scaffolded CLI fetch + parse
+    # Fetch flatpak info
     local flatpak_info
     flatpak_info=$(systems::cli_with_retry_or_error 3 5 "$name" "Failed to retrieve flatpak info for $name." -- \
         flatpak remote-info flathub "$flatpak_app_id") || return 1
 
+    # Extract latest version
     local latest_version
     latest_version=$(string_utils::extract_colon_value "$flatpak_info" "^Version$")
 
@@ -68,15 +82,18 @@ check_zed() {
         return 1
     fi
 
-    # Normalize versions (strip prefixes like v, version, release, etc.)
+    # Normalize versions
     installed_version=$(versions::strip_version_prefix "$installed_version")
     latest_version=$(versions::strip_version_prefix "$latest_version")
 
+    # Log debug info
     loggers::log_message "DEBUG" "ZED: installed_version='$installed_version' latest_version='$latest_version'"
 
+    # Determine status
     local output_status
     output_status=$(json_response::determine_status "$installed_version" "$latest_version")
 
+    # Emit success response
     if [[ -n "$configured_download_url" ]]; then
         json_response::emit_success "$output_status" "$latest_version" "flatpak" "Flathub" \
             flatpak_app_id "$flatpak_app_id" \

@@ -378,33 +378,6 @@ networks::fetch_and_load() {
     fi
     networks::load_cached_content_or_error "$path" "$app" "$msg"
 }
-# Try multiple URLs and return the first that responds (2xx/3xx) within a short window.
-# Usage: networks::first_alive_url <url1> <url2> ...
-networks::first_alive_url() {
-    local urls=("$@")
-    ((${#urls[@]})) || return 1
-
-    # Run quick sequential probes with tiny timeouts to avoid job-control complexity.
-    local u
-    for u in "${urls[@]}"; do
-        if validators::check_url_format "$u" && networks::fast_url_exists "$u"; then
-            printf '%s' "$u"
-            return 0
-        fi
-    done
-
-    # As a last attempt, try fast resolve on each
-    for u in "${urls[@]}"; do
-        local r
-        r=$(networks::fast_resolve_url "$u")
-        if [[ -n "$r" ]] && validators::check_url_format "$r"; then
-            printf '%s' "$r"
-            return 0
-        fi
-    done
-
-    return 1
-}
 
 # ==============================================================================
 # END OF MODULE
