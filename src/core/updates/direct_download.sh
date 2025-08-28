@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # ==============================================================================
 # MODULE: src/core/updates/direct_download.sh
 # ==============================================================================
@@ -71,6 +72,9 @@ updates::check_direct_download() {
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
         # Determine artifact type using filename patterns to handle multi-part extensions
+        local filename                             # Declare filename
+        filename=$(basename "$temp_download_file") # Assign filename from temp_download_file
+
         local artifact_type=""
         if [[ "$filename" == *.tar.gz ]]; then
             artifact_type="tar.gz"

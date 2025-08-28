@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # ==============================================================================
 # MODULE: src/core/updates/script.sh
 # ==============================================================================
@@ -25,7 +26,7 @@ updates::process_script_installation() {
 
     if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$app_key" ]]; then
         errors::handle_error "VALIDATION_ERROR" "Invalid parameters for script update flow (version, URL, or app_key missing)" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"script_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Invalid parameters for script update flow.\"}"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" '{"phase": "script_process", "error_type": "VALIDATION_ERROR", "message": "Invalid parameters for script update flow."}'
         return 1
     fi
 
@@ -43,15 +44,12 @@ updates::process_script_installation() {
     # The downloaded file needs to be executable for script installations
     if ! chmod +x "$temp_download_file"; then
         errors::handle_error "PERMISSION_ERROR" "Failed to make script executable: '$temp_download_file'" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to make script executable.\"}"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" '{"phase": "install", "error_type": "PERMISSION_ERROR", "message": "Failed to make script executable."}'
         return 1
     fi
 
-    if ! chmod +x "$temp_script_path"; then
-        errors::handle_error "PERMISSION_ERROR" "Failed to make script executable: '$temp_script_path'" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to make script executable.\"}"
-        return 1
-    fi
+    # temp_script_path should be the same as temp_download_file
+    local temp_script_path="$temp_download_file"
 
     updates::process_installation \
         "$app_name" \
@@ -110,19 +108,19 @@ updates::check_script() {
     # Configuration validation (same as before)
     if ! validators::check_url_format "$download_url"; then
         errors::handle_error "CONFIG_ERROR" "Invalid download URL in configuration" "$name"
-        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid download URL configured.\"}"
+        updates::trigger_hooks ERROR_HOOKS "$name" '{"phase": "check", "error_type": "CONFIG_ERROR", "message": "Invalid download URL configured."}'
         interfaces::print_ui_line "  " "✗ " "Invalid download URL configured." "${COLOR_RED}"
         return 1
     fi
     if ! validators::check_url_format "$version_url"; then
         errors::handle_error "CONFIG_ERROR" "Invalid version URL in configuration" "$name"
-        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Invalid version URL configured.\"}"
+        updates::trigger_hooks ERROR_HOOKS "$name" '{"phase": "check", "error_type": "CONFIG_ERROR", "message": "Invalid version URL configured."}'
         interfaces::print_ui_line "  " "✗ " "Invalid version URL configured." "${COLOR_RED}"
         return 1
     fi
     if [[ -z "$version_regex" ]]; then
         errors::handle_error "CONFIG_ERROR" "Missing version regex in configuration" "$name"
-        updates::trigger_hooks ERROR_HOOKS "$name" "{\"phase\": \"check\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Missing version regex configured.\"}"
+        updates::trigger_hooks ERROR_HOOKS "$name" '{"phase": "check", "error_type": "CONFIG_ERROR", "message": "Missing version regex configured."}'
         interfaces::print_ui_line "  " "✗ " "Missing version regex configured." "${COLOR_RED}"
         return 1
     fi

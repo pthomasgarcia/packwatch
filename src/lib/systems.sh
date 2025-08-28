@@ -1,32 +1,3 @@
-# Run a CLI with retry using systems::reattempt_command.
-# Success: echoes command stdout to STDOUT (machine-readable path preserved).
-# Failure: emits structured error JSON to STDERR (so STDOUT stays clean/empty) and returns non-zero.
-# Usage: systems::cli_with_retry_or_error <RETRIES> <SLEEP> <APP_NAME> <FAIL_MSG> -- <cmd> [args...]
-systems::cli_with_retry_or_error() {
-    local retries="$1" sleep_secs="$2" app="$3" fail_msg="$4"
-    shift 4
-    # Optional "--" delimiter support
-    [[ "$1" == "--" ]] && shift
-    local output
-    if [[ -n "${DEBUG:-}" && "${DEBUG}" != "0" ]]; then
-        # Debug mode: preserve stderr from underlying command for diagnostics
-        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@"); then
-            # Use json_response::emit_error for consistency with custom checkers
-            # This creates a dependency from systems.sh back to json_response.sh, which is not ideal.
-            # Ideally, emit_error would be in a more generic error handling module.
-            # For now, we'll keep the dependency for functional correctness.
-            json_response::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
-            return 1
-        fi
-    else
-        # Normal mode: suppress underlying command stderr; still surface structured JSON on failure
-        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2> /dev/null); then
-            json_response::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
-            return 1
-        fi
-    fi
-    printf '%s' "$output"
-}
 #!/usr/bin/env bash
 # ==============================================================================
 # MODULE: systems.sh
@@ -34,6 +5,7 @@ systems::cli_with_retry_or_error() {
 # Responsibilities:
 #   - System-level helpers (temp files, cleanup, background processes, file sanitization, etc.)
 #   - System dependency validation
+#   - Command retry and CLI error handling
 #
 # Usage:
 #   Source this file in your main script:
@@ -44,6 +16,7 @@ systems::cli_with_retry_or_error() {
 #     systems::delete_temp_files
 #     systems::sanitize_filename "filename"
 #     systems::reattempt_command 3 2 some_command arg1 arg2
+#     systems::cli_with_retry_or_error 3 2 "app" "error message" -- command args
 #     systems::check_dependencies
 #
 # Dependencies:
@@ -51,6 +24,7 @@ systems::cli_with_retry_or_error() {
 #   - globals.sh
 #   - interfaces.sh
 #   - loggers.sh
+#   - json_response.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -61,10 +35,9 @@ declare -a TEMP_FILES=()
 declare -a BACKGROUND_PIDS=()
 
 # ------------------------------------------------------------------------------
-# SECTION: JSON Parsing Cache (ADD THIS NEW SECTION HERE)
+# SECTION: JSON Parsing Cache
 # ------------------------------------------------------------------------------
 
-# Add to systems.sh
 declare -gA _jq_cache=() # Global cache for parsed JSON
 
 # Parse entire JSON once and cache results
@@ -208,10 +181,8 @@ systems::_clean_cache_files() {
 
 # Perform all cleanup actions (temp files, background pids, cache).
 # Usage: systems::perform_housekeeping
-# In systems.sh
 systems::perform_housekeeping() {
     loggers::log_message "DEBUG" "Performing application housekeeping..."
-    # local cache_dir="${CACHE_DIR:-}" # This variable is unused.
     local lock_file="${LOCK_FILE:-}"
 
     # Clean up temporary files
@@ -263,13 +234,42 @@ systems::reattempt_command() {
     return 1 # Command failed after all attempts
 }
 
+# Run a CLI with retry using systems::reattempt_command.
+# Success: echoes command stdout to STDOUT (machine-readable path preserved).
+# Failure: emits structured error JSON to STDERR (so STDOUT stays clean/empty) and returns non-zero.
+# Usage: systems::cli_with_retry_or_error <RETRIES> <SLEEP> <APP_NAME> <FAIL_MSG> -- <cmd> [args...]
+systems::cli_with_retry_or_error() {
+    local retries="$1" sleep_secs="$2" app="$3" fail_msg="$4"
+    shift 4
+    # Optional "--" delimiter support
+    [[ "$1" == "--" ]] && shift
+    local output
+    if [[ -n "${DEBUG:-}" && "${DEBUG}" != "0" ]]; then
+        # Debug mode: preserve stderr from underlying command for diagnostics
+        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@"); then
+            # Use json_response::emit_error for consistency with custom checkers
+            # This creates a dependency from systems.sh back to json_response.sh, which is not ideal.
+            # Ideally, emit_error would be in a more generic error handling module.
+            # For now, we'll keep the dependency for functional correctness.
+            json_response::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
+            return 1
+        fi
+    else
+        # Normal mode: suppress underlying command stderr; still surface structured JSON on failure
+        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2> /dev/null); then
+            json_response::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
+            return 1
+        fi
+    fi
+    printf '%s' "$output"
+}
+
 # ------------------------------------------------------------------------------
 # SECTION: JSON Helpers
 # ------------------------------------------------------------------------------
 
 # Extract a value from a JSON string using jq.
 # Usage: systems::get_json_value "$json" ".field" "app_name"
-# Modify systems::get_json_value in systems.sh
 systems::get_json_value() {
     local json_source="$1"
     local jq_expression="$2"
