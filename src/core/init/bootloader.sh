@@ -23,7 +23,14 @@ source "$CORE_DIR/globals.sh"
 source "$CORE_DIR/../lib/systems.sh"
 source "$CORE_DIR/../lib/loggers.sh"
 source "$CORE_DIR/../lib/errors.sh"
-source "$CORE_DIR/../util/hash_utils.sh"
+HASH_UTILS_PATH="$CORE_DIR/../util/hash_utils.sh"
+if [ -f "$HASH_UTILS_PATH" ]; then
+    # shellcheck source=/dev/null
+    source "$HASH_UTILS_PATH"
+else
+    printf '%s\n' "bootloader: missing $HASH_UTILS_PATH" >&2
+    return 1
+fi
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).

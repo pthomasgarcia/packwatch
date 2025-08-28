@@ -14,6 +14,11 @@
 #   The generated hash string.
 hash_utils::generate_hash() {
     local input_string="$1"
+    # Validate required argument: must be set and non-empty
+    if [[ -z "${input_string+x}" || -z "$input_string" ]]; then
+        echo "hash_utils::generate_hash: input_string is required" >&2
+        return 1
+    fi
     local _hash
     if command -v sha256sum > /dev/null 2>&1; then
         _hash="$(printf %s "$input_string" | sha256sum | cut -d' ' -f1)"

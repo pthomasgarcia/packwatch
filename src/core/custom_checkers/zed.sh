@@ -29,8 +29,11 @@ check_zed() {
     # Retrieve all required fields from cache
     local name app_key flatpak_app_id
     name=$(systems::get_cached_json_value "$cache_key" "name")
+    [[ "$name" == "null" ]] && name=""
     app_key=$(systems::get_cached_json_value "$cache_key" "app_key")
+    [[ "$app_key" == "null" ]] && app_key=""
     flatpak_app_id=$(systems::get_cached_json_value "$cache_key" "flatpak_app_id")
+    [[ "$flatpak_app_id" == "null" ]] && flatpak_app_id=""
 
     # Defaults and required-field guards
     if [[ -z "$name" || -z "$app_key" ]]; then
