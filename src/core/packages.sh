@@ -91,8 +91,9 @@ packages::update_installed_version_json() {
     fi
 
     local temp_versions_file
-    temp_versions_file=$(systems::create_temp_file "versions_update")
-    if ! temp_versions_file=$(systems::create_temp_file "versions_update"); then return 1; fi
+    if ! temp_versions_file=$(systems::create_temp_file "versions_update"); then
+        return 1
+    fi
 
     if jq --arg key "$app_key" --arg version "$new_version" '.[$key] = $version' "$versions_file" > "$temp_versions_file"; then
         if mv "$temp_versions_file" "$versions_file"; then
@@ -263,7 +264,7 @@ packages::install_tgz_package() {
     local temp_extract_dir
     temp_extract_dir=$(mktemp -d -p "${HOME}/.cache/packwatch/tmp")
     # Ensure cleanup on any return path (trap executes inline command)
-    trap '[[ -d "'"$temp_extract_dir"'" ]] && rm -rf "'"$temp_extract_dir"'"' RETURN
+    trap '[[ -d "$temp_extract_dir" ]] && rm -rf "$temp_extract_dir"' RETURN EXIT
 
     if ! tar -xzf "$tgz_file" -C "$temp_extract_dir"; then
         errors::handle_error "INSTALLATION_ERROR" "Failed to extract TGZ archive for '$app_name'." "$app_name"
@@ -275,6 +276,11 @@ packages::install_tgz_package() {
     binary_path=$(find "$temp_extract_dir" -type f -name "$binary_name" -print -quit)
     if [[ -z "$binary_path" ]]; then
         errors::handle_error "INSTALLATION_ERROR" "Could not find executable '$binary_name' in extracted archive for '$app_name'." "$app_name"
+        return 1
+    fi
+
+    if ! command -v sudo &> /dev/null; then
+        errors::handle_error "DEPENDENCY_ERROR" "sudo command not found. Installation requires sudo privileges." "$app_name"
         return 1
     fi
 

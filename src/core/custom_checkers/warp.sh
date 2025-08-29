@@ -60,8 +60,10 @@ check_warp() {
     filename=$(basename "$actual_deb_url")
 
     # Extract latest version directly from the filename
+    # More flexible regex: allows YYYY.MM.DD(.HH.MM)?(.stable)?(.N)?(_N)?
     local latest_version_raw
-    latest_version_raw=$(echo "$filename" | grep -oP '[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.stable(\.[0-9]+)?(_[0-9]+)?')
+    latest_version_raw=$(echo "$filename" | grep -oP \
+        '[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?')
 
     local latest_version
     latest_version=$(versions::strip_version_prefix "$latest_version_raw")
@@ -72,7 +74,7 @@ check_warp() {
         return 1
     fi
 
-    # Normalize installed version
+    # Normalize installed version (Warp-specific: strip trailing ".stable" etc.)
     installed_version=$(versions::strip_version_prefix "$installed_version")
 
     # Determine status
@@ -102,10 +104,11 @@ check_warp() {
     version_prefix=$(echo "$latest_version" | cut -d'.' -f1-3) # e.g. 2025.08.27
     local versioned_dir="v${version_prefix}"
 
+    # Ensure cache directory exists
+    mkdir -p "$download_dir/$versioned_dir"
     local downloaded_file="${download_dir}/${versioned_dir}/${filename}"
 
     if [[ -f "$downloaded_file" ]]; then
-        # The dpkg-deb sanity check is now handled by packages::process_deb_package
         # Prepare a temporary config for verifiers::verify_artifact for MD5 check
         # We explicitly skip checksum as Warp does not publish them.
         # shellcheck disable=SC2034
@@ -119,6 +122,8 @@ check_warp() {
 
         # Perform MD5 verification using the generalized verifiers::verify_artifact
         if ! verifiers::verify_artifact "$temp_app_config_ref" "$downloaded_file" "$actual_deb_url"; then
+            json_response::emit_error "VALIDATION_ERROR" \
+                "MD5 verification failed for $name." "$name"
             return 1
         fi
     fi

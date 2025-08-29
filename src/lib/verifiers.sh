@@ -72,7 +72,7 @@ verifiers::_safe_unregister() {
 # Require external commands early (fail-fast)
 verifiers::_require_cmds() {
     local missing=0
-    local cmds=(jq awk grep cut head date sha256sum sha512sum)
+    local cmds=(jq awk grep cut head date sha256sum sha512sum curl base64 xxd md5sum)
     for c in "${cmds[@]}"; do
         if ! command -v "$c" > /dev/null 2>&1; then
             missing=1
@@ -465,7 +465,7 @@ verifiers::_perform_gpg_verification() {
     local sig_download_url="$7"
 
     # Ensure temp signature file is cleaned even on early returns
-    trap 'verifiers::_safe_unregister "'"$sigf"'"' RETURN
+    trap 'verifiers::_safe_unregister "'"$sigf"'"' RETURN EXIT
 
     # Hard fail if the function is still missing
     if ! verifiers::_has_func gpg::verify_detached; then
@@ -518,34 +518,23 @@ verifiers::verify_signature() {
 
     if [[ -z "$gpg_key_id" || -z "$gpg_fingerprint" ]]; then
         verifiers::_has_func loggers::log_message &&
-            loggers::log_message "DEBUG" "No gpg_key_id or gpg_fingerprint configured for '$app_name'. Skipping GPG verification."
+            loggers::log_message "DEBUG" \
+                "No gpg_key_id or gpg_fingerprint configured for '$app_name'. Skipping GPG verification."
         return 0
     fi
 
-    # Download signature file
+    # Download signature file (with fallback)
     local sigf
-    sigf=$(networks::download_text_to_cache "$VERIFIERS_SIG_DOWNLOAD_URL" "$allow_http") || {
-        # Try .asc fallback only if no explicit override was set
-        if [[ -z "$sig_url_override" ]]; then
-            local asc_url="${download_url}.asc"
-            if networks::url_exists "$asc_url"; then
-                # VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=1
-                sigf=$(networks::download_text_to_cache "$asc_url" "$allow_http") || {
-                    verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
-                    return 1
-                }
-                VERIFIERS_SIG_DOWNLOAD_URL="$asc_url"
-            else
-                verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
-                return 1
-            fi
-        else
-            verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
-            return 1
-        fi
-    }
+    if ! sigf=$(verifiers::_download_signature_file \
+        "$sig_url_override" "$download_url" "$allow_http" \
+        "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"); then
+        return 1
+    fi
 
-    echo "$sigf"
+    # Perform actual GPG verification
+    verifiers::_perform_gpg_verification \
+        "$sigf" "$downloaded_file_path" "$gpg_key_id" "$gpg_fingerprint" \
+        "$app_name" "$download_url" "$VERIFIERS_SIG_DOWNLOAD_URL"
 }
 
 # --------------------------------------------------------------------
