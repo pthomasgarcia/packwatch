@@ -25,7 +25,7 @@ responses::emit_error() {
     if declare -F errors::handle_error > /dev/null 2>&1; then
         errors::handle_error "$error_type" "$error_message" "$app_name" "$custom_error_type"
     else
-        loggers::log_message "ERROR" "[$error_type] $error_message (app: $app_name)"
+        loggers::error "[$error_type] $error_message (app: $app_name)"
     fi
 
     jq -n \

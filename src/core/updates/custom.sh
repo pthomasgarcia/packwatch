@@ -57,7 +57,7 @@ updates::handle_custom_check() {
     fi
 
     # Export functions/vars used by custom checkers
-    export -f loggers::log_message interfaces::print_ui_line systems::fetch_json systems::require_json_value \
+    export -f loggers::debug loggers::info loggers::warn loggers::error interfaces::print_ui_line systems::fetch_json systems::require_json_value \
         systems::create_temp_file systems::unregister_temp_file systems::sanitize_filename systems::reattempt_command \
         errors::handle_error validators::check_url_format packages::fetch_version versions::is_newer
     export UPDATES_DOWNLOAD_FILE_IMPL UPDATES_GET_JSON_VALUE_IMPL UPDATES_PROMPT_CONFIRM_IMPL \

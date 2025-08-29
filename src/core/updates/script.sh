@@ -79,7 +79,7 @@ updates::_fetch_version_from_url() {
             if parsed_version=$(versions::extract_from_regex "$file_content" "$version_regex" "$app_name"); then
                 latest_version="$parsed_version"
             else
-                loggers::log_message "WARN" "Could not extract version from '$version_url' for '$app_name' using JSON or regex. Defaulting to 0.0.0."
+                loggers::warn "Could not extract version from '$version_url' for '$app_name' using JSON or regex. Defaulting to 0.0.0."
             fi
         fi
     fi

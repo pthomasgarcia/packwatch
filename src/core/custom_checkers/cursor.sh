@@ -94,7 +94,7 @@ cursor::check() {
     fi
 
     # Log debug info
-    loggers::log_message "DEBUG" "CURSOR: installed_version='$installed_version' latest_version='$latest_version' url='$resolved_url'"
+    loggers::debug "CURSOR: installed_version='$installed_version' latest_version='$latest_version' url='$resolved_url'"
 
     # Determine status and emit response
     local output_status

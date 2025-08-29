@@ -12,8 +12,8 @@
 #     source "$CORE_DIR/loggers.sh"
 #
 #   Then use:
-#     loggers::log_message "INFO" "This is an info message"
-#     loggers::print_message "Simple message"
+#     loggers::log "INFO" "This is an info message"
+#     loggers::output "Simple message"
 #
 # Dependencies:
 #   - None
@@ -24,8 +24,8 @@
 # ------------------------------------------------------------------------------
 
 # Internal log message (to STDERR), with timestamp, PID, and colorized level.
-# Usage: loggers::log_message LEVEL MESSAGE...
-loggers::log_message() {
+# Usage: loggers::log LEVEL MESSAGE...
+loggers::log() {
     local level="$1"
     shift
     local message="$*"
@@ -52,9 +52,37 @@ loggers::log_message() {
     esac
 }
 
+# ------------------------------------------------------------------------------
+# SECTION: Semantic Logger Functions
+# ------------------------------------------------------------------------------
+
+# Log a debug message.
+# Usage: loggers::debug "This is a debug message"
+loggers::debug() {
+    loggers::log "DEBUG" "$@"
+}
+
+# Log an info message.
+# Usage: loggers::info "This is an info message"
+loggers::info() {
+    loggers::log "INFO" "$@"
+}
+
+# Log a warning message.
+# Usage: loggers::warn "This is a warning message"
+loggers::warn() {
+    loggers::log "WARN" "$@"
+}
+
+# Log an error message.
+# Usage: loggers::error "This is an error message"
+loggers::error() {
+    loggers::log "ERROR" "$@"
+}
+
 # Simple message to STDOUT (legacy, unstructured).
-# Usage: loggers::print_message "Hello, world!"
-loggers::print_message() {
+# Usage: loggers::output "Hello, world!"
+loggers::output() {
     printf "%b\n" "$*"
 }
 

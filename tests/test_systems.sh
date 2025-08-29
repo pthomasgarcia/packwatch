@@ -8,7 +8,7 @@ source "$TEST_DIR/test_helpers.sh"
 source "$TEST_DIR/../src/lib/systems.sh"
 
 # Stub loggers & errors to avoid side effects
-loggers::log_message() { :; }
+loggers::log() { :; }
 errors::handle_error() { :; }
 
 # Test cases

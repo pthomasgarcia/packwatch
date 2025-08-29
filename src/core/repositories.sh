@@ -129,7 +129,7 @@ repositories::find_asset_digest() {
         "$release_json_path" 2> /dev/null)
 
     if [[ -z "$digest" ]] || [[ ! "$digest" == sha256:* ]]; then
-        loggers::log_message "WARN" "Could not find sha256 digest for '$filename_template' in release assets for '$app_name'."
+        loggers::warn "Could not find sha256 digest for '$filename_template' in release assets for '$app_name'."
         return 1
     fi
 
@@ -138,7 +138,7 @@ repositories::find_asset_digest() {
     checksum="${digest#sha256:}"
 
     if [[ -z "$checksum" ]] || [[ ${#checksum} -ne 64 ]]; then
-        loggers::log_message "WARN" "Invalid sha256 digest format for '$filename_template' in release assets for '$app_name': $digest"
+        loggers::warn "Invalid sha256 digest format for '$filename_template' in release assets for '$app_name': $digest"
         return 1
     fi
 

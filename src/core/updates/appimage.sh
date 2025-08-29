@@ -92,21 +92,21 @@ updates::_install_appimage_file_command() {
         fi
     fi
 
-    loggers::log_message "DEBUG" "Moving from '$temp_appimage_path' to '$install_target_full_path'"
+    loggers::debug "Moving from '$temp_appimage_path' to '$install_target_full_path'"
     if mv "$temp_appimage_path" "$install_target_full_path"; then
         systems::unregister_temp_file "$temp_appimage_path"
-        chmod +x "$install_target_full_path" || loggers::log_message "WARN" "Failed to make final AppImage executable: '$install_target_full_path'."
+        chmod +x "$install_target_full_path" || loggers::warn "Failed to make final AppImage executable: '$install_target_full_path'."
         if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
             if [[ $(id -u) -eq 0 ]]; then
                 chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null ||
-                    loggers::log_message "WARN" "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER' (running as root)."
+                    loggers::warn "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER' (running as root)."
             else
                 if command -v sudo > /dev/null 2>&1; then
                     if ! sudo -n chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null; then
-                        loggers::log_message "WARN" "Skipping ownership change for '$install_target_full_path' (sudo failed or password required)."
+                        loggers::warn "Skipping ownership change for '$install_target_full_path' (sudo failed or password required)."
                     fi
                 else
-                    loggers::log_message "WARN" "Skipping ownership change for '$install_target_full_path' (sudo not available)."
+                    loggers::warn "Skipping ownership change for '$install_target_full_path' (sudo not available)."
                 fi
             fi
         fi
@@ -165,7 +165,7 @@ updates::check_appimage() {
             local latest_release_json_path                                                                             # This will be the path to the JSON file
             if latest_release_json_path=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response_file" '.[0]' "$name"); then    # DI applied
                 if ! latest_version=$(repositories::parse_version_from_release "$latest_release_json_path" "$name"); then
-                    loggers::log_message "WARN" "Failed to parse version from GitHub release for '$name'. Will try direct download URL."
+                    loggers::warn "Failed to parse version from GitHub release for '$name'. Will try direct download URL."
                 fi
 
                 local filename_pattern_template
@@ -174,30 +174,30 @@ updates::check_appimage() {
                 source="GitHub Releases"
             fi
         else
-            loggers::log_message "WARN" "Failed to fetch GitHub latest release for '$name'. Will try direct download URL."
+            loggers::warn "Failed to fetch GitHub latest release for '$name'. Will try direct download URL."
         fi
     fi
 
     # Verbose log lines: Installed & final Source after source resolution
     if [[ $VERBOSE -eq 1 ]]; then
-        loggers::log_message "INFO" "Installed: $installed_version"
-        loggers::log_message "INFO" "Source:    $source"
+        loggers::info "Installed: $installed_version"
+        loggers::info "Source:    $source"
     fi
 
     if [[ -z "$latest_version" ]]; then
-        loggers::log_message "DEBUG" "Attempting to extract version from download URL filename: '$download_url'"
+        loggers::debug "Attempting to extract version from download URL filename: '$download_url'"
         local filename_from_url
         filename_from_url=$(basename "$download_url" | cut -d'?' -f1)
         if ! latest_version=$(versions::extract_from_regex "$filename_from_url" "FILENAME_REGEX" "$name"); then
-            loggers::log_message "WARN" "Could not extract version from AppImage download URL filename for '$name'. Will default to 0.0.0 for comparison."
+            loggers::warn "Could not extract version from AppImage download URL filename for '$name'. Will default to 0.0.0 for comparison."
             latest_version="0.0.0"
         fi
     fi
 
     # Verbose log line: Latest after fetch
     if [[ $VERBOSE -eq 1 ]]; then
-        loggers::log_message "INFO" "Latest:    $latest_version"
-        loggers::print_message ""
+        loggers::info "Latest:    $latest_version"
+        loggers::output ""
     fi
 
     # Standardized summary output

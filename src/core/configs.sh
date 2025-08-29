@@ -98,7 +98,7 @@ configs::load_network_settings() {
 
             local network_config_json
             network_config_json=$(systems::fetch_json "$settings_content" '.network_config' "Network Configuration Block") || {
-                loggers::log_message "WARN" "Missing 'network_config' block in network settings. Using defaults for NETWORK_CONFIG."
+                loggers::log "WARN" "Missing 'network_config' block in network settings. Using defaults for NETWORK_CONFIG."
                 network_config_json=
             }
 
@@ -113,16 +113,16 @@ configs::load_network_settings() {
                 done < <(echo "$network_config_json" | jq -c 'to_entries[]')
             fi
 
-            loggers::log_message "DEBUG" "Loaded network settings from '$network_settings_file'"
+            loggers::log "DEBUG" "Loaded network settings from '$network_settings_file'"
         fi
     else
-        loggers::log_message "WARN" "Network settings file not found: '$network_settings_file'. Using defaults."
+        loggers::log "WARN" "Network settings file not found: '$network_settings_file'. Using defaults."
     fi
 
     # Finally, overlay ENV overrides
     configs::_apply_env_overrides
 
-    loggers::log_message "DEBUG" "Effective network settings: CACHE_DIR='$CACHE_DIR', CACHE_DURATION='$CACHE_DURATION', MAX_RETRIES='${NETWORK_CONFIG["MAX_RETRIES"]}', TIMEOUT='${NETWORK_CONFIG["TIMEOUT"]}', USER_AGENT='${NETWORK_CONFIG["USER_AGENT"]}', RATE_LIMIT='${NETWORK_CONFIG["RATE_LIMIT"]}', RETRY_DELAY='${NETWORK_CONFIG["RETRY_DELAY"]}'"
+    loggers::log "DEBUG" "Effective network settings: CACHE_DIR='$CACHE_DIR', CACHE_DURATION='$CACHE_DURATION', MAX_RETRIES='${NETWORK_CONFIG["MAX_RETRIES"]}', TIMEOUT='${NETWORK_CONFIG["TIMEOUT"]}', USER_AGENT='${NETWORK_CONFIG["USER_AGENT"]}', RATE_LIMIT='${NETWORK_CONFIG["RATE_LIMIT"]}', RETRY_DELAY='${NETWORK_CONFIG["RETRY_DELAY"]}'"
     return 0
 }
 
@@ -202,11 +202,11 @@ configs::get_validated_apps_json() {
                 merged_json_array=$(echo "$merged_json_array" | jq --argjson item "$file_content" '. + [$item]')
                 ((validated_and_enabled_files++))
             else
-                loggers::log_message "INFO" "Skipping disabled config file: '$(basename "$file")'"
+                loggers::log "INFO" "Skipping disabled config file: '$(basename "$file")'"
                 counters::inc_skipped
             fi
         else
-            loggers::log_message "WARN" "Skipping invalid config file: '$(basename "$file")' (error logged above)"
+            loggers::log "WARN" "Skipping invalid config file: '$(basename "$file")' (error logged above)"
             counters::inc_failed
         fi
     done
@@ -271,7 +271,7 @@ configs::validate_loaded_app_count() {
     local total_apps=$1
 
     if [[ $total_apps -eq 0 ]]; then
-        loggers::print_message \
+        loggers::output \
             "No applications configured to check in '$CONFIG_DIR' directory with '\"enabled\": true'. Exiting."
         exit "${EXIT_SUCCESS}"
     fi
@@ -296,7 +296,7 @@ configs::load_all() {
 
     configs::populate_globals_from_json "$merged_json"
 
-    loggers::log_message "INFO" "Successfully loaded ${#CUSTOM_APP_KEYS[@]} enabled modular configurations from: '$CONFIG_DIR'"
+    loggers::log "INFO" "Successfully loaded ${#CUSTOM_APP_KEYS[@]} enabled modular configurations from: '$CONFIG_DIR'"
     return 0
 }
 
@@ -314,7 +314,7 @@ configs::create_default_files() {
         return 1
     }
 
-    loggers::print_message "Creating default modular configuration files in: '$target_conf_dir'"
+    loggers::output "Creating default modular configuration files in: '$target_conf_dir'"
 
     local default_app_configs
     default_app_configs=$(
@@ -415,16 +415,16 @@ EOF
         if [[ ! -f "$target_file" ]]; then
             echo "$default_app_configs" | jq --arg key "$app_key" '.[$key]' > "$target_file"
             if configs::validate_single_config_file "$target_file"; then
-                loggers::log_message "INFO" "Created default config file: '$target_file'"
+                loggers::log "INFO" "Created default config file: '$target_file'"
             else
                 errors::handle_error "CONFIG_ERROR" "Failed to create default config file: '$target_file'"
             fi
         else
-            loggers::log_message "INFO" "Default config file already exists: '$target_file' (skipped creation)"
+            loggers::log "INFO" "Default config file already exists: '$target_file' (skipped creation)"
         fi
     done < <(echo "$default_app_configs" | jq -r 'keys[]')
 
-    loggers::print_message "Default modular configuration setup complete."
+    loggers::output "Default modular configuration setup complete."
     return 0
 }
 
@@ -438,7 +438,7 @@ configs::get_app_config() {
     local app_key="$1"
     local app_config_nameref="$2"
     if [[ -z "$app_config_nameref" ]] || ! declare -p "$app_config_nameref" 2> /dev/null | grep -q 'declare -A'; then
-        loggers::log_message "ERROR" "configs::get_app_config: Second argument '$app_config_nameref' is missing or not an associative array for app_key '$app_key'"
+        loggers::log "ERROR" "configs::get_app_config: Second argument '$app_config_nameref' is missing or not an associative array for app_key '$app_key'"
         return 1
     fi
     local -n app_config_ref=$app_config_nameref # Nameref to the array in the caller's scope
@@ -458,7 +458,7 @@ configs::get_app_config() {
     done
 
     if [[ "$found" -eq 0 ]]; then
-        loggers::log_message "ERROR" "Application configuration not found for key: '$app_key'"
+        loggers::log "ERROR" "Application configuration not found for key: '$app_key'"
         return 1
     fi
 

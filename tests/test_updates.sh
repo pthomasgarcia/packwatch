@@ -148,12 +148,12 @@ interfaces::print_ui_line() {
     :
 }
 
-loggers::print_message() {
+loggers::output() {
     # Suppress log messages printed directly to stdout/stderr
     :
 }
 
-loggers::log_message() {
+loggers::log() {
     # Capture logs for assertions if needed, otherwise suppress
     # echo "LOG: $1 - $2" >&2
     :
@@ -319,17 +319,17 @@ updates::process_installation() {
     shift 4
     local -a install_command_args=("$@")
 
-    loggers::log_message "DEBUG" "Mock process_installation called for $app_name (v$latest_version) with command: $install_command_func ${install_command_args[*]}"
+    loggers::log "DEBUG" "Mock process_installation called for $app_name (v$latest_version) with command: $install_command_func ${install_command_args[*]}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
-        loggers::log_message "INFO" "DRY RUN: Would install $app_name v$latest_version"
+        loggers::log "INFO" "DRY RUN: Would install $app_name v$latest_version"
         # Simulate updating installed version in dry run for verification
         "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"
         return 0
     fi
 
     # Simulate actual installation success
-    loggers::log_message "INFO" "Simulating actual installation of $app_name v$latest_version"
+    loggers::log "INFO" "Simulating actual installation of $app_name v$latest_version"
     "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"
     counters::inc_updated
     return 0
@@ -367,7 +367,7 @@ interfaces::confirm_prompt() {
 networks::download_file() {
     local url="$1"
     local dest_path="$2"
-    loggers::log_message "DEBUG" "Mock networks::download_file: Downloading $url to $dest_path"
+    loggers::log "DEBUG" "Mock networks::download_file: Downloading $url to $dest_path"
     # Simulate successful download by creating a dummy file
     echo "dummy content" > "$dest_path"
     return 0
@@ -413,7 +413,7 @@ packages::fetch_version() {
 packages::update_installed_version_json() {
     local app_key="$1"
     local version="$2"
-    loggers::log_message "DEBUG" "Mock: packages::update_installed_version_json called for $app_key with $version"
+    loggers::log "DEBUG" "Mock: packages::update_installed_version_json called for $app_key with $version"
     # In a real test, you might store this in a mock data structure
     case "$app_key" in
         "TestAppGitHub") _MOCKED_INSTALLED_VERSION_GITHUB="$version" ;;
@@ -543,24 +543,24 @@ flatpak() {
 }
 
 sudo() {
-    loggers::log_message "DEBUG" "Mock: sudo command executed: '$*'"
+    loggers::log "DEBUG" "Mock: sudo command executed: '$*'"
     return 0
 }
 
 chmod() {
-    loggers::log_message "DEBUG" "Mock: chmod command executed: '$*'"
+    loggers::log "DEBUG" "Mock: chmod command executed: '$*'"
     return 0
 }
 
 mv() {
-    loggers::log_message "DEBUG" "Mock: mv command executed: '$*'"
+    loggers::log "DEBUG" "Mock: mv command executed: '$*'"
     # Simulate move by creating a dummy file at destination
     touch "$2"
     return 0
 }
 
 rm() {
-    loggers::log_message "DEBUG" "Mock: rm command executed: '$*'"
+    loggers::log "DEBUG" "Mock: rm command executed: '$*'"
     return 0
 }
 

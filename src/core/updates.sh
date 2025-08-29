@@ -93,7 +93,7 @@ updates::register_hook() {
         "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
         "error") ERROR_HOOKS+=("$function_name") ;;
         "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;
-        *) loggers::log_message "WARN" "Unknown hook type: $hook_type" ;;
+        *) loggers::warn "Unknown hook type: $hook_type" ;;
     esac
 }
 
@@ -104,13 +104,13 @@ updates::trigger_hooks() {
 
     # Validate that the array name is provided
     if [[ -z "$hooks_array_name" ]]; then
-        loggers::log_message "WARN" "No hooks array name provided to trigger_hooks"
+        loggers::warn "No hooks array name provided to trigger_hooks"
         return 1
     fi
 
     # Check if the variable exists
-    if ! declare -p "$hooks_array_name" > /dev/null 2>&1; then
-        loggers::log_message "WARN" "Hooks array '$hooks_array_name' does not exist"
+    if ! (declare -p "$hooks_array_name" > /dev/null 2>&1); then
+        loggers::warn "Hooks array '$hooks_array_name' does not exist"
         return 1
     fi
 
@@ -127,9 +127,9 @@ updates::trigger_hooks() {
     for hook_func in "${hook_array_ref[@]}"; do
         if [[ -n "$hook_func" ]] && declare -F "$hook_func" > /dev/null; then
             "$hook_func" "$app_name" "$details_json" ||
-                loggers::log_message "WARN" "Hook function '$hook_func' failed for app '$app_name'."
+                loggers::warn "Hook function '$hook_func' failed for app '$app_name'."
         elif [[ -n "$hook_func" ]]; then
-            loggers::log_message "WARN" "Registered hook '$hook_func' is not a callable function."
+            loggers::warn "Registered hook '$hook_func' is not a callable function."
         fi
     done
 }
@@ -166,7 +166,7 @@ updates::check_application() {
     if ! updates::_validate_app_config "$app_type" "_current_app_config"; then
         interfaces::print_ui_line "  " "✗ " "Configuration error: Missing required fields." "${COLOR_RED}"
         counters::inc_failed
-        loggers::print_message "" # Blank line after each app block
+        loggers::output "" # Blank line after each app block
         return 1
     fi
 
@@ -175,7 +175,7 @@ updates::check_application() {
         updates::trigger_hooks ERROR_HOOKS "$app_display_name" "{\"phase\": \"config_validation\", \"error_type\": \"CONFIG_ERROR\", \"message\": \"Application missing 'type' field.\"}"
         interfaces::print_ui_line "  " "✗ " "Configuration error: Missing app type." "${COLOR_RED}"
         counters::inc_failed
-        loggers::print_message ""
+        loggers::output ""
         return 1
     fi
 
@@ -196,7 +196,7 @@ updates::check_application() {
     if [[ "$app_check_status" -ne 0 ]]; then
         counters::inc_failed
     fi
-    loggers::print_message "" # Blank line after each app block
+    loggers::output "" # Blank line after each app block
     return "$app_check_status"
 }
 

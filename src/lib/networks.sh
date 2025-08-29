@@ -59,7 +59,7 @@ networks::apply_rate_limit() {
 
     if ((time_diff < rate_limit_val)); then
         local sleep_duration=$((rate_limit_val - time_diff))
-        loggers::log_message "DEBUG" "Rate limiting: sleeping for ${sleep_duration}s"
+        loggers::debug "Rate limiting: sleeping for ${sleep_duration}s"
         sleep "$sleep_duration"
     fi
 
@@ -115,7 +115,7 @@ networks::fetch_cached_data() {
     # Check cache first
     local cache_duration_val="${CACHE_DURATION:-300}" # Use global CACHE_DURATION
     if [[ -f "$cache_file" ]] && [[ $(($(date +%s) - $(stat -c %Y "$cache_file"))) -lt "$cache_duration_val" ]]; then
-        loggers::log_message "DEBUG" "Using cached response for: '$url' (file: '$cache_file')"
+        loggers::debug "Using cached response for: '$url' (file: '$cache_file')"
         echo "$cache_file" # Return the path to the cached file
         return 0
     else
@@ -145,7 +145,7 @@ networks::fetch_cached_data() {
                 ;;
             "html")
                 if ! grep -q '<html' "$temp_download_file" > /dev/null 2>&1 && ! grep -q '<!DOCTYPE html>' "$temp_download_file" > /dev/null 2>&1; then
-                    loggers::log_message "WARN" "Fetched content for '$url' might not be valid HTML, but continuing."
+                    loggers::warn "Fetched content for '$url' might not be valid HTML, but continuing."
                 fi
                 ;;
         esac
@@ -277,13 +277,13 @@ networks::download_file() {
     # Checksum verification is now handled in updates::verify_downloaded_artifact
     # Keeping this commented out for future reference if needed.
     # if [[ -n "$expected_checksum" ]]; then
-    #     loggers::log_message "DEBUG" "Attempting checksum verification for '$dest_path' with expected: '$expected_checksum', algorithm: '$checksum_algorithm'"
+    #     loggers::debug "Attempting checksum verification for '$dest_path' with expected: '$expected_checksum', algorithm: '$checksum_algorithm'"
     #     if ! validators::verify_checksum "$dest_path" "$expected_checksum" "$checksum_algorithm"; then
     #         errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for downloaded file: '$dest_path'"
     #         return 1
     #     fi
     # else
-    #     loggers::log_message "DEBUG" "No expected checksum provided for '$dest_path'. Skipping verification."
+    #     loggers::debug "No expected checksum provided for '$dest_path'. Skipping verification."
     # fi
 
     return 0

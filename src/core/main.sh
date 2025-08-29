@@ -90,7 +90,7 @@ main::validate_initial_state() {
 DOC
     # Perform post-sourcing validation
     if [[ -n "${HOME_ERROR:-}" ]]; then
-        loggers::log_message "ERROR" "$HOME_ERROR"
+        loggers::error "$HOME_ERROR"
         interfaces::print_home_determination_error "$HOME_ERROR"
     fi
 
@@ -178,7 +178,7 @@ DOC
 
     # Optional: snapshot key state when verbose debug mode is enabled
     if [[ ${VERBOSE:-0} -ge 2 ]]; then
-        loggers::log_message "DEBUG" "State snapshot requested"
+        loggers::debug "State snapshot requested"
         interfaces::print_debug_state_snapshot
     fi
 
@@ -266,7 +266,7 @@ DOC
 
     if [[ ${CREATE_CONFIG:-0} -eq 1 ]]; then
         configs::create_default_files
-        loggers::print_message "Default configuration created/updated in: '$CONFIG_DIR'"
+        loggers::output "Default configuration created/updated in: '$CONFIG_DIR'"
         return 0
     fi
 
@@ -308,7 +308,7 @@ DOC
     # Optional Extension Init: Probe for specific extension readiness
     if declare -F gpg::is_ready > /dev/null 2>&1; then
         if ! gpg::is_ready; then
-            loggers::log_message "WARN" \
+            loggers::warn \
                 "GPG might prompt or fail due to uninitialized keyring for the original user." \
                 "core"
         fi

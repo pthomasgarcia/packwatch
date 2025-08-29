@@ -46,7 +46,7 @@ packages::get_installed_version_from_json() {
     fi
 
     if [[ ! -f "$versions_file" ]]; then
-        loggers::log_message "DEBUG" "Installed versions file not found: '$versions_file'. Assuming app not installed."
+        loggers::debug "Installed versions file not found: '$versions_file'. Assuming app not installed."
         echo "0.0.0"
         return 0
     fi
@@ -55,7 +55,7 @@ packages::get_installed_version_from_json() {
     version=$(systems::fetch_json "$(cat "$versions_file")" ".\"$app_key\"" "$app_key")
 
     if [[ -z "$version" ]]; then
-        loggers::log_message "DEBUG" "No installed version found for app: '$app_key'"
+        loggers::debug "No installed version found for app: '$app_key'"
         echo "0.0.0"
         return 0
     fi
@@ -76,7 +76,7 @@ packages::update_installed_version_json() {
         return 1
     fi
 
-    loggers::log_message "DEBUG" "Updating installed version for '$app_key' to '$new_version' in '$versions_file'"
+    loggers::debug "Updating installed version for '$app_key' to '$new_version' in '$versions_file'"
 
     mkdir -p "$(dirname "$versions_file")" || {
         errors::handle_error "PERMISSION_ERROR" "Failed to create directory for versions file: '$(dirname "$versions_file")'"
@@ -100,7 +100,7 @@ packages::update_installed_version_json() {
             systems::unregister_temp_file "$temp_versions_file"
             if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
                 sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2> /dev/null ||
-                    loggers::log_message "WARN" "Failed to change ownership of '$versions_file' to '$ORIGINAL_USER'."
+                    loggers::warn "Failed to change ownership of '$versions_file' to '$ORIGINAL_USER'."
             fi
             return 0
         else
@@ -119,7 +119,7 @@ packages::initialize_installed_versions_file() {
     local versions_file="$CONFIG_ROOT/installed_versions.json"
 
     if [[ ! -f "$versions_file" ]]; then
-        loggers::log_message "INFO" "Initializing installed versions file: '$versions_file'"
+        loggers::info "Initializing installed versions file: '$versions_file'"
         mkdir -p "$(dirname "$versions_file")" || {
             errors::handle_error "PERMISSION_ERROR" "Failed to create directory for versions file"
             return 1
@@ -190,7 +190,7 @@ packages::verify_deb_sanity() {
         return 1
     fi
 
-    loggers::log_message "INFO" \
+    loggers::info \
         "Sanity check passed: $deb_file is a valid .deb"
     return 0
 }
@@ -234,7 +234,7 @@ packages::install_deb_package() {
         if [[ "$app_name" == "VeraCrypt" ]] && echo "$install_output" | grep -q "VeraCrypt volumes must be dismounted"; then
             errors::handle_error "PERMISSION_ERROR" "VeraCrypt volumes must be dismounted to perform this update" "$app_name"
         else
-            loggers::log_message "INFO" "See apt output below for details:"
+            loggers::info "See apt output below for details:"
             echo "$install_output" >&2
         fi
 
@@ -242,7 +242,7 @@ packages::install_deb_package() {
     fi
 
     if ! packages::update_installed_version_json "$app_key" "$version"; then
-        loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
+        loggers::warn "Failed to update installed version JSON for '$app_name', but installation was successful."
     fi
 
     interfaces::print_ui_line "  " "✓ " "Successfully installed ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version" "${COLOR_GREEN}" >&2
@@ -324,7 +324,7 @@ packages::process_deb_package() {
     local final_deb_path="${artifact_cache_dir}/${base_filename}"
 
     if [[ ! -f "$final_deb_path" ]]; then
-        loggers::log_message "INFO" "Artifact not found in cache. Downloading..."
+        loggers::info "Artifact not found in cache. Downloading..."
         updates::on_download_start "$app_name" "unknown"
         if ! networks::download_file "$download_url" "$final_deb_path" "" "" "$allow_http"; then
             errors::handle_error "NETWORK_ERROR" "Failed to download DEB package" "$app_name"
@@ -333,7 +333,7 @@ packages::process_deb_package() {
         fi
         updates::on_download_complete "$app_name" "$final_deb_path"
     else
-        loggers::log_message "INFO" "Using cached artifact: $final_deb_path"
+        loggers::info "Using cached artifact: $final_deb_path"
     fi
 
     # Perform deb sanity check before full verification
@@ -370,13 +370,13 @@ packages::process_tgz_package() {
     local cached_artifact_path="${artifact_cache_dir}/${base_filename}"
 
     if [[ ! -f "$cached_artifact_path" ]]; then
-        loggers::log_message "INFO" "Artifact not found in cache. Downloading..."
+        loggers::info "Artifact not found in cache. Downloading..."
         if ! networks::download_file "$download_url" "$cached_artifact_path" "" "" "$allow_http" 600; then
             errors::handle_error "NETWORK_ERROR" "Failed to download TGZ archive for '$app_name'." "$app_name"
             return 1
         fi
     else
-        loggers::log_message "INFO" "Using cached artifact: $cached_artifact_path"
+        loggers::info "Using cached artifact: $cached_artifact_path"
     fi
 
     if ! verifiers::verify_artifact "$config_ref_name" "$cached_artifact_path" "$download_url" "$expected_checksum"; then

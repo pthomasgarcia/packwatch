@@ -62,7 +62,7 @@ check_veracrypt() {
     latest_version=$(versions::strip_prefix "$latest_version")
 
     # Log debug info
-    loggers::log_message "DEBUG" "VERACRYPT: installed_version='$installed_version' latest_version='$latest_version'"
+    loggers::debug "VERACRYPT: installed_version='$installed_version' latest_version='$latest_version'"
 
     # Determine status early
     local output_status

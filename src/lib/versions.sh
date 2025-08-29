@@ -114,7 +114,7 @@ versions::extract_from_json() {
 
     raw_version=$(systems::fetch_json "$json_source" "$jq_expression" "$app_name")
     if [[ $? -ne 0 || -z "$raw_version" || "$raw_version" == "null" ]]; then
-        loggers::log_message "WARN" "Failed to extract version for '$app_name' using JSON expression '$jq_expression'. Defaulting to 0.0.0."
+        loggers::warn "Failed to extract version for '$app_name' using JSON expression '$jq_expression'. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi
@@ -122,7 +122,7 @@ versions::extract_from_json() {
     normalized=$(versions::normalize "$raw_version")
 
     if ! validators::check_semver_format "$normalized"; then
-        loggers::log_message "WARN" "Invalid semver '$normalized' for '$app_name' extracted from JSON. Defaulting to 0.0.0."
+        loggers::warn "Invalid semver '$normalized' for '$app_name' extracted from JSON. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi
@@ -163,7 +163,7 @@ versions::extract_from_regex() {
 
     if [[ "$regex_pattern" == "FILENAME_REGEX" ]]; then
         if [[ -z "${VERSION_FILENAME_REGEX:-}" ]]; then
-            loggers::log_message "WARN" "VERSION_FILENAME_REGEX is unset/empty; cannot extract version for '$app_name'. Defaulting to 0.0.0."
+            loggers::warn "VERSION_FILENAME_REGEX is unset/empty; cannot extract version for '$app_name'. Defaulting to 0.0.0."
             echo "0.0.0"
             return 1
         fi
@@ -178,19 +178,19 @@ versions::extract_from_regex() {
             : # match found, proceed
             ;;
         1)
-            loggers::log_message "WARN" "Failed to extract version for '$app_name' using regex '$regex_pattern'. Defaulting to 0.0.0."
+            loggers::warn "Failed to extract version for '$app_name' using regex '$regex_pattern'. Defaulting to 0.0.0."
             echo "0.0.0"
             return 1
             ;;
         2)
-            loggers::log_message "ERROR" "Invalid regex '$regex_pattern' used for '$app_name'."
+            loggers::error "Invalid regex '$regex_pattern' used for '$app_name'."
             echo "0.0.0"
             return 1
             ;;
     esac
     if [[ -z "$raw_version" ]]; then
         # Defensive: in unlikely case of empty despite rc=0
-        loggers::log_message "WARN" "Empty version match for '$app_name' with regex '$regex_pattern'. Defaulting to 0.0.0."
+        loggers::warn "Empty version match for '$app_name' with regex '$regex_pattern'. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi
@@ -198,7 +198,7 @@ versions::extract_from_regex() {
     normalized=$(versions::normalize "$raw_version")
 
     if ! validators::check_semver_format "$normalized"; then
-        loggers::log_message "WARN" "Invalid semver '$normalized' for '$app_name' extracted by regex. Defaulting to 0.0.0."
+        loggers::warn "Invalid semver '$normalized' for '$app_name' extracted by regex. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi

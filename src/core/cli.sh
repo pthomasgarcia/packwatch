@@ -96,7 +96,7 @@ Supported Application Keys (defined in your JSON config files in '$CONFIG_DIR'):
 EOF
 
     while read -r line; do
-        loggers::print_message "    $line"
+        loggers::output "    $line"
     done < <(cli::get_available_app_keys_for_display)
 
     cat << EOF
@@ -144,7 +144,7 @@ cli::parse_arguments() {
                 ;;
             --create-config)
                 configs::create_default_files
-                loggers::print_message "Default configuration created/updated in: '$CONFIG_DIR'"
+                loggers::output "Default configuration created/updated in: '$CONFIG_DIR'"
                 exit 0
                 ;;
             --version)
@@ -187,7 +187,7 @@ cli::validate_and_filter_apps() {
         if [[ -n "${enabled_apps_assoc[$cli_app]:-}" ]]; then
             valid_cli_apps+=("$cli_app")
         else
-            loggers::log_message "WARN" \
+            loggers::warn \
                 "Application '$cli_app' specified on command line not found or not enabled in configurations. Skipping."
         fi
     done

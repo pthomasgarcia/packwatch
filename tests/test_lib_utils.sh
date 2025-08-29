@@ -5,7 +5,7 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TEST_DIR/test_helpers.sh"
 
 # Minimal stubs for dependencies
-loggers::log_message() { :; }
+loggers::log() { :; }
 errors::handle_error() {
     local type="$1" msg="$2" app="$3"
     : "$msg" "$app" # suppress unused warnings

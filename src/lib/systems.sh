@@ -132,7 +132,7 @@ systems::create_temp_file() {
 systems::delete_temp_files() {
     for f in "${TEMP_FILES[@]}"; do
         if [[ -f "$f" ]]; then
-            loggers::log_message "DEBUG" "Removing temporary file: $f"
+            loggers::debug "Removing temporary file: $f"
             rm -f "$f"
         fi
     done
@@ -182,7 +182,7 @@ systems::_clean_cache_files() {
 # Perform all cleanup actions (temp files, background pids, cache).
 # Usage: systems::perform_housekeeping
 systems::perform_housekeeping() {
-    loggers::log_message "DEBUG" "Performing application housekeeping..."
+    loggers::debug "Performing application housekeeping..."
     local lock_file="${LOCK_FILE:-}"
 
     # Clean up temporary files
@@ -196,13 +196,13 @@ systems::perform_housekeeping() {
 
     # Remove legacy cache directory if it exists
     if [[ -d "/tmp/packwatch_cache" ]]; then
-        loggers::log_message "DEBUG" "Removing legacy cache directory: /tmp/packwatch_cache"
+        loggers::debug "Removing legacy cache directory: /tmp/packwatch_cache"
         rm -rf "/tmp/packwatch_cache" || true
     fi
 
     # Clean up lock file
     if [[ -n "$lock_file" && -e "$lock_file" ]]; then
-        loggers::log_message "DEBUG" "Removing lock file: $lock_file"
+        loggers::debug "Removing lock file: $lock_file"
         rm -f -- "$lock_file" || true
     fi
     return 0
@@ -221,11 +221,11 @@ systems::reattempt_command() {
     local cmd=("$@")
 
     for ((attempt = 1; attempt <= max_attempts; attempt++)); do
-        loggers::log_message "DEBUG" "Attempt $attempt/$max_attempts: ${cmd[*]}"
+        loggers::debug "Attempt $attempt/$max_attempts: ${cmd[*]}"
         if "${cmd[@]}"; then
             return 0
         fi
-        loggers::log_message "WARN" "Command failed (attempt $attempt): ${cmd[*]}"
+        loggers::warn "Command failed (attempt $attempt): ${cmd[*]}"
         if ((attempt < max_attempts)); then
             sleep "$delay_secs"
             delay_secs=$((delay_secs * 2)) # Exponential backoff
@@ -353,7 +353,7 @@ systems::is_sudo_session_active() {
 # Calls errors::handle_error if dependencies are missing.
 # Usage: systems::check_dependencies
 systems::check_dependencies() {
-    loggers::log_message "INFO" "Performing system dependency check..."
+    loggers::info "Performing system dependency check..."
     local -a missing_cmds=()
 
     # REQUIRED_COMMANDS and INSTALL_CMD are constants from main.sh, assumed available
@@ -373,7 +373,7 @@ systems::check_dependencies() {
         return 1
     fi
 
-    loggers::log_message "INFO" "All core system dependencies found."
+    loggers::info "All core system dependencies found."
 }
 
 # ==============================================================================

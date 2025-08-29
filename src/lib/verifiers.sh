@@ -94,12 +94,12 @@ verifiers::_trigger_hooks_safe() {
     local payload="$3"
     if verifiers::_has_func updates::trigger_hooks; then
         if ! updates::trigger_hooks "$hook_name" "$app_name" "$payload"; then
-            verifiers::_has_func loggers::log_message &&
-                loggers::log_message "WARN" "Hook delivery failed for '$hook_name' (app='$app_name')."
+            verifiers::_has_func loggers::log &&
+                loggers::warn "Hook delivery failed for '$hook_name' (app='$app_name')."
         fi
     else
-        verifiers::_has_func loggers::log_message &&
-            loggers::log_message "WARN" "updates::trigger_hooks not available; hook '$hook_name' skipped."
+        verifiers::_has_func loggers::log &&
+            loggers::warn "updates::trigger_hooks not available; hook '$hook_name' skipped."
     fi
 }
 
@@ -266,8 +266,8 @@ verifiers::verify_md5_from_header() {
         cut -d= -f2 | tr -d '\r')
 
     if [[ -z "$header_md5_b64" ]]; then
-        verifiers::_has_func loggers::log_message &&
-            loggers::log_message "DEBUG" \
+        verifiers::_has_func loggers::log &&
+            loggers::debug \
                 "MD5 check skipped for '$app_name': no x-goog-hash header found for '$download_url'"
         verifiers::_emit_verify_hook "md5" 0 "<missing-header>" "<no-hash>" "md5" \
             "$app_name" "$file_path" "$download_url"
@@ -295,8 +295,8 @@ verifiers::verify_md5_from_header() {
             interfaces::print_ui_line "  " "✗ " "MD5 verification FAILED." "${COLOR_YELLOW}" # Changed to YELLOW for warning
         verifiers::_emit_verify_hook "md5" 0 "$header_md5_hex" "$local_md5" "md5" \
             "$app_name" "$file_path" "$download_url"
-        verifiers::_has_func loggers::log_message && # Changed to log_message for warning
-            loggers::log_message "WARN" \
+        verifiers::_has_func loggers::log && # Changed to log_message for warning
+            loggers::warn \
                 "Downloaded file MD5 mismatch for '$app_name'. Proceeding with installation." "$app_name" # Changed message
         return 0                                                                                          # Changed to return 0 to proceed
     fi
@@ -371,8 +371,8 @@ verifiers::resolve_expected_checksum() {
 
     # 1) Directly provided
     if [[ -n "$direct_checksum" ]]; then
-        verifiers::_has_func loggers::log_message &&
-            loggers::log_message "DEBUG" "Using directly provided checksum for '$app_name'."
+        verifiers::_has_func loggers::log &&
+            loggers::debug "Using directly provided checksum for '$app_name'."
         echo "$direct_checksum"
         return 0
     fi
@@ -478,8 +478,8 @@ verifiers::_perform_gpg_verification() {
         return 1
     fi
 
-    verifiers::_has_func loggers::log_message &&
-        loggers::log_message "DEBUG" "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
+    verifiers::_has_func loggers::log &&
+        loggers::debug "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
 
     if ! gpg::verify_detached "$downloaded_file_path" "$sigf" "$gpg_key_id" "$gpg_fingerprint" "user_keyring" ""; then
         verifiers::_has_func interfaces::print_ui_line &&
@@ -517,8 +517,8 @@ verifiers::verify_signature() {
     local sig_url_override="${cfg[sig_url]:-}"
 
     if [[ -z "$gpg_key_id" || -z "$gpg_fingerprint" ]]; then
-        verifiers::_has_func loggers::log_message &&
-            loggers::log_message "DEBUG" \
+        verifiers::_has_func loggers::log &&
+            loggers::debug \
                 "No gpg_key_id or gpg_fingerprint configured for '$app_name'. Skipping GPG verification."
         return 0
     fi
@@ -553,8 +553,8 @@ verifiers::verify_artifact() {
     local skip_checksum="${cfg[skip_checksum]:-false}"
     local skip_md5_check="${cfg[skip_md5_check]:-false}" # New configuration option
 
-    verifiers::_has_func loggers::log_message &&
-        loggers::log_message "DEBUG" "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
+    verifiers::_has_func loggers::log &&
+        loggers::debug "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
 
     # 1) Checksum (optional)
     if [[ "$skip_checksum" != "true" ]]; then

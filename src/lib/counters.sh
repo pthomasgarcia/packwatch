@@ -27,7 +27,7 @@ counters::reset() {
 counters::inc() {
     local counter_type=$1
     if [[ -z "${COUNTERS[$counter_type]:-}" ]]; then
-        loggers::log_message "ERROR" "Invalid counter type: $counter_type"
+        loggers::error "Invalid counter type: $counter_type"
         return 1
     fi
     ((COUNTERS["$counter_type"]++))
@@ -37,7 +37,7 @@ counters::inc() {
 counters::get() {
     local counter_type=$1
     if [[ -z "${COUNTERS[$counter_type]:-}" ]]; then
-        loggers::log_message "ERROR" "Invalid counter type: $counter_type"
+        loggers::error "Invalid counter type: $counter_type"
         return 1
     fi
     printf '%d' "${COUNTERS[$counter_type]}"
@@ -49,12 +49,12 @@ counters::set() {
     local value=$2
 
     if [[ -z "${COUNTERS[$counter_type]:-}" ]]; then
-        loggers::log_message "ERROR" "Invalid counter type: $counter_type"
+        loggers::error "Invalid counter type: $counter_type"
         return 1
     fi
 
     if ! [[ "$value" =~ ^[0-9]+$ ]]; then
-        loggers::log_message "ERROR" "Invalid counter value: $value (must be a non-negative integer)"
+        loggers::error "Invalid counter value: $value (must be a non-negative integer)"
         return 1
     fi
 
@@ -63,11 +63,11 @@ counters::set() {
 }
 
 counters::dump() {
-    loggers::log_message "DEBUG" "Counter state:"
-    loggers::log_message "DEBUG" "  updated:    $(counters::get updated)"
-    loggers::log_message "DEBUG" "  up_to_date: $(counters::get up_to_date)"
-    loggers::log_message "DEBUG" "  failed:     $(counters::get failed)"
-    loggers::log_message "DEBUG" "  skipped:    $(counters::get skipped)"
+    loggers::debug "Counter state:"
+    loggers::debug "  updated:    $(counters::get updated)"
+    loggers::debug "  up_to_date: $(counters::get up_to_date)"
+    loggers::debug "  failed:     $(counters::get failed)"
+    loggers::debug "  skipped:    $(counters::get skipped)"
 }
 
 # --- Convenience Functions for Common Operations ---

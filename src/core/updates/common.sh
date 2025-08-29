@@ -37,7 +37,7 @@ updates::process_installation() {
         updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name"  # Pre-install hook (deferred until user confirms)
         updates::on_install_start "$app_name"                 # Hook
         if ((${DRY_RUN:-0})); then
-            loggers::log_message "DEBUG" "  [DRY RUN] Would execute installation command: '$install_command_func ${install_command_args[*]}'."
+            loggers::debug "  [DRY RUN] Would execute installation command: '$install_command_func ${install_command_args[*]}'."
             # Do not mutate state during dry runs.
             interfaces::print_ui_line "  " "[DRY RUN] " "Installation simulated for ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_YELLOW}"
             return 0
@@ -51,7 +51,7 @@ updates::process_installation() {
 
         if "$install_command_func" "${install_command_args[@]}"; then
             if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-                loggers::log_message "WARN" "Failed to update installed version JSON for '$app_name', but installation was successful."
+                loggers::warn "Failed to update installed version JSON for '$app_name', but installation was successful."
             fi
             updates::on_install_complete "$app_name" "$latest_version" # Hook (now includes version)
             counters::inc_updated
@@ -96,7 +96,7 @@ updates::on_download_start() {
     local app_name="$1"
     local file_size="$2"                                                                            # Can be 'unknown' or actual size
     interfaces::print_ui_line "  " "→ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
-    loggers::log_message "INFO" "Starting download for $app_name (Size: $file_size)."
+    loggers::info "Starting download for $app_name (Size: $file_size)."
 }
 
 updates::on_download_progress() {
@@ -125,27 +125,27 @@ updates::on_download_complete() {
     local app_name="$1"
     local file_path="$2"
     interfaces::print_ui_line "  " "✓ " "Download for ${FORMAT_BOLD}$app_name${FORMAT_RESET} complete." "${COLOR_GREEN}" >&2 # Redirect to stderr
-    loggers::log_message "INFO" "Download complete for $app_name: $file_path"
+    loggers::info "Download complete for $app_name: $file_path"
 }
 
 updates::on_install_start() {
     local app_name="$1"
     interfaces::print_ui_line "  " "→ " "Preparing to install ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
-    loggers::log_message "INFO" "Starting installation for $app_name."
+    loggers::info "Starting installation for $app_name."
 }
 
 updates::on_install_complete() {
     local app_name="$1"
     local latest_version="$2"
     interfaces::print_ui_line "  " "✓ " "${FORMAT_BOLD}$app_name${FORMAT_RESET} installed/updated successfully (v${latest_version})." "${COLOR_GREEN}" >&2
-    loggers::log_message "INFO" "Installation complete for $app_name (version ${latest_version})."
+    loggers::info "Installation complete for $app_name (version ${latest_version})."
     notifiers::send_notification "${app_name} Updated" "Installed v${latest_version}." "normal"
 }
 
 updates::on_install_skipped() {
     local app_name="$1"
     interfaces::print_ui_line "  " "🞨 " "Installation for ${FORMAT_BOLD}$app_name${FORMAT_RESET} skipped." "${COLOR_YELLOW}" >&2 # Redirect to stderr
-    loggers::log_message "INFO" "Installation skipped for $app_name."
+    loggers::info "Installation skipped for $app_name."
 }
 
 # Determine if an update is needed by comparing versions.

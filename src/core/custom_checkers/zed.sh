@@ -56,7 +56,7 @@ check_zed() {
             responses::emit_error "NETWORK_ERROR" "Invalid or unreachable download_url in config for $name." "$name"
             return 1
         fi
-        loggers::log_message "DEBUG" "ZED: resolved config download_url -> $resolved_url"
+        loggers::debug "ZED: resolved config download_url -> $resolved_url"
         # We don't use this for installation (Flatpak), but we can surface it as an extra field.
         configured_download_url="$resolved_url"
     fi
@@ -67,7 +67,7 @@ check_zed() {
     installed_version=$(packages::fetch_version "$app_key" 2> /dev/null) || _iv_rc=$?
     if ((_iv_rc != 0)); then
         # Leave installed_version empty; downstream logic will handle it
-        loggers::log_message "DEBUG" "ZED: get_installed_version failed for app_key='$app_key' (rc=${_iv_rc}); proceeding with empty installed_version"
+        loggers::debug "ZED: get_installed_version failed for app_key='$app_key' (rc=${_iv_rc}); proceeding with empty installed_version"
         installed_version=""
     fi
 
@@ -90,7 +90,7 @@ check_zed() {
     latest_version=$(versions::strip_prefix "$latest_version")
 
     # Log debug info
-    loggers::log_message "DEBUG" "ZED: installed_version='$installed_version' latest_version='$latest_version'"
+    loggers::debug "ZED: installed_version='$installed_version' latest_version='$latest_version'"
 
     # Determine status
     local output_status

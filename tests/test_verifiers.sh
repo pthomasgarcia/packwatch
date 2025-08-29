@@ -47,7 +47,7 @@ gpg() {
 
 # Mock other dependencies
 interfaces::print_ui_line() { :; }
-loggers::log_message() { :; }
+loggers::log() { :; }
 errors::handle_error() { :; }
 updates::trigger_hooks() { :; }
 networks::download_text_to_cache() {

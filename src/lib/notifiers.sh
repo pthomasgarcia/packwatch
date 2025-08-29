@@ -39,7 +39,7 @@ notifiers::send_notification() {
         user_id=$(getent passwd "$target_user" | cut -d: -f3 2> /dev/null)
 
         if [[ -z "$user_id" ]]; then
-            loggers::log_message "WARN" "Could not determine user ID for '$target_user'. Cannot send desktop notification."
+            loggers::warn "Could not determine user ID for '$target_user'. Cannot send desktop notification."
             return
         fi
 

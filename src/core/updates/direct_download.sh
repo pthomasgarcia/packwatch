@@ -61,7 +61,7 @@ updates::check_direct_download() {
         # If we reach here, it means the artifact was downloaded and verified, but the version
         # is not newer. This implies a re-installation might be needed if the user wants to
         # ensure integrity or if the local file was corrupted/deleted.
-        loggers::log_message "INFO" "Downloaded version '$latest_version' is not newer than installed '$installed_version' for '$name'. Skipping re-installation."
+        loggers::info "Downloaded version '$latest_version' is not newer than installed '$installed_version' for '$name'. Skipping re-installation."
         interfaces::print_ui_line "  " "✓ " "Already up-to-date." "${COLOR_GREEN}"
         updates::on_install_skipped "$name" # Treat as skipped if no update needed
         counters::inc_skipped

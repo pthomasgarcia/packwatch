@@ -138,13 +138,13 @@ updates::check_github_release() {
 
     local installed_version installed_version_raw
     if ! installed_version_raw=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key" 2> /dev/null); then
-        loggers::log_message "WARN" "Failed to obtain installed version for '$name'; treating as not installed (0.0.0)."
+        loggers::warn "Failed to obtain installed version for '$name'; treating as not installed (0.0.0)."
         installed_version="0.0.0"
     else
         # Trim whitespace/newlines
         installed_version_raw=$(echo -n "$installed_version_raw" | tr -d '\r' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
         if [[ -z "$installed_version_raw" ]]; then
-            loggers::log_message "WARN" "Installed version empty for '$name'; treating as not installed (0.0.0)."
+            loggers::warn "Installed version empty for '$name'; treating as not installed (0.0.0)."
             installed_version="0.0.0"
         else
             installed_version="$installed_version_raw"

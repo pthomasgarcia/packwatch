@@ -58,7 +58,7 @@ errors::handle_error() {
     local exit_code="${ERROR_CODES[$final_error_type]:-1}"
 
     # Log the error (requires loggers.sh to be sourced)
-    loggers::log_message "ERROR" "[$final_error_type] $error_message (app: $app_name)"
+    loggers::error "[$final_error_type] $error_message (app: $app_name)"
 
     # Optionally, send notifications for certain error types (requires notifiers.sh)
     case "$final_error_type" in

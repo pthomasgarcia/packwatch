@@ -36,7 +36,7 @@ updates::process_flatpak_app() {
     fi
     interfaces::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
     sudo flatpak update --appstream -y || {
-        loggers::log_message "WARN" "Failed to update Flatpak appstream data for $app_name. Installation might proceed but information could be stale."
+        loggers::warn "Failed to update Flatpak appstream data for $app_name. Installation might proceed but information could be stale."
         interfaces::print_ui_line "  " "! " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
     }
 
@@ -77,7 +77,7 @@ updates::check_flatpak() {
         if [[ "$flatpak_search_output" =~ "$flatpak_app_id"[[:space:]]+([0-9.]+[^[:space:]]*)[[:space:]]+.* ]]; then
             latest_version=$(versions::normalize "${BASH_REMATCH[1]}")
         else
-            loggers::log_message "WARN" "Could not parse Flatpak version for '$name' from search output."
+            loggers::warn "Could not parse Flatpak version for '$name' from search output."
         fi
     else
         errors::handle_error "NETWORK_ERROR" "Failed to search Flatpak remote for '$name'." "$name"
