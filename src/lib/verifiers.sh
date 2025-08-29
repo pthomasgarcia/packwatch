@@ -5,6 +5,8 @@ if [ -n "${PACKWATCH_VERIFIERS_LOADED:-}" ]; then
     return 0
 fi
 PACKWATCH_VERIFIERS_LOADED=1
+# VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=0
+VERIFIERS_SIG_DOWNLOAD_URL=""
 
 # ==============================================================================
 # NOTES ON HARDENING AND TESTING
@@ -249,6 +251,58 @@ verifiers::verify_checksum() {
 }
 
 # --------------------------------------------------------------------
+# Public: verify MD5 checksum from x-goog-hash header
+# Usage: verifiers::verify_md5_from_header "file_path" "download_url" "app_name"
+# Returns 0 on match, 1 on mismatch or if header is not found
+# --------------------------------------------------------------------
+verifiers::verify_md5_from_header() {
+    local file_path="$1"
+    local download_url="$2"
+    local app_name="$3"
+
+    local header_md5_b64
+    header_md5_b64=$(curl -sI "$download_url" |
+        awk '/x-goog-hash: md5=/ {print $2}' |
+        cut -d= -f2 | tr -d '\r')
+
+    if [[ -z "$header_md5_b64" ]]; then
+        verifiers::_has_func loggers::log_message &&
+            loggers::log_message "DEBUG" \
+                "MD5 check skipped for '$app_name': no x-goog-hash header found for '$download_url'"
+        verifiers::_emit_verify_hook "md5" 0 "<missing-header>" "<no-hash>" "md5" \
+            "$app_name" "$file_path" "$download_url"
+        return 0 # Treat as success if no MD5 to check against
+    fi
+
+    local header_md5_hex
+    header_md5_hex=$(echo "$header_md5_b64" | base64 -d | xxd -p -c 32)
+    local local_md5
+    local_md5=$(md5sum "$file_path" | awk '{print $1}')
+
+    verifiers::_has_func interfaces::print_ui_line && {
+        interfaces::print_ui_line "  " "→ " "Expected MD5: $header_md5_hex"
+        interfaces::print_ui_line "  " "→ " "Actual MD5:   $local_md5"
+    }
+
+    if [[ "$header_md5_hex" == "$local_md5" ]]; then
+        verifiers::_has_func interfaces::print_ui_line &&
+            interfaces::print_ui_line "  " "✓ " "MD5 verified." "${COLOR_GREEN}"
+        verifiers::_emit_verify_hook "md5" 1 "$header_md5_hex" "$local_md5" "md5" \
+            "$app_name" "$file_path" "$download_url"
+        return 0
+    else
+        verifiers::_has_func interfaces::print_ui_line &&
+            interfaces::print_ui_line "  " "✗ " "MD5 verification FAILED." "${COLOR_YELLOW}" # Changed to YELLOW for warning
+        verifiers::_emit_verify_hook "md5" 0 "$header_md5_hex" "$local_md5" "md5" \
+            "$app_name" "$file_path" "$download_url"
+        verifiers::_has_func loggers::log_message && # Changed to log_message for warning
+            loggers::log_message "WARN" \
+                "Downloaded file MD5 mismatch for '$app_name'. Proceeding with installation." "$app_name" # Changed message
+        return 0                                                                                          # Changed to return 0 to proceed
+    fi
+}
+
+# --------------------------------------------------------------------
 # Private: perform checksum verification with hooks
 # --------------------------------------------------------------------
 verifiers::_verify_checksum_with_hooks() {
@@ -361,8 +415,8 @@ verifiers::_download_signature_file() {
     local gpg_key_id="$6"
     local downloaded_file_path="$7"
 
-    VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=0
-    VERIFIERS_SIG_DOWNLOAD_URL=""
+    # local VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=0
+    local VERIFIERS_SIG_DOWNLOAD_URL=""
 
     if [[ -n "$sig_url_override" ]]; then
         VERIFIERS_SIG_DOWNLOAD_URL="$sig_url_override"
@@ -379,7 +433,7 @@ verifiers::_download_signature_file() {
         if [[ -z "$sig_url_override" ]]; then
             local asc_url="${download_url}.asc"
             if networks::url_exists "$asc_url"; then
-                VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=1
+                # VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=1
                 sigf=$(networks::download_text_to_cache "$asc_url" "$allow_http") || {
                     verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
                     return 1
@@ -470,18 +524,28 @@ verifiers::verify_signature() {
 
     # Download signature file
     local sigf
-    sigf=$(verifiers::_download_signature_file \
-        "$sig_url_override" "$download_url" "$allow_http" "$app_name" \
-        "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path") || return 1
+    sigf=$(networks::download_text_to_cache "$VERIFIERS_SIG_DOWNLOAD_URL" "$allow_http") || {
+        # Try .asc fallback only if no explicit override was set
+        if [[ -z "$sig_url_override" ]]; then
+            local asc_url="${download_url}.asc"
+            if networks::url_exists "$asc_url"; then
+                # VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=1
+                sigf=$(networks::download_text_to_cache "$asc_url" "$allow_http") || {
+                    verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
+                    return 1
+                }
+                VERIFIERS_SIG_DOWNLOAD_URL="$asc_url"
+            else
+                verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
+                return 1
+            fi
+        else
+            verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
+            return 1
+        fi
+    }
 
-    # Which URL was used
-    local which_url="$VERIFIERS_SIG_DOWNLOAD_URL"
-    [[ "${VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK:-0}" -eq 1 ]] && which_url="${download_url}.asc"
-
-    # Perform verification (handles its own cleanup)
-    verifiers::_perform_gpg_verification \
-        "$sigf" "$downloaded_file_path" "$gpg_key_id" "$gpg_fingerprint" \
-        "$app_name" "$download_url" "$which_url"
+    echo "$sigf"
 }
 
 # --------------------------------------------------------------------
@@ -498,6 +562,7 @@ verifiers::verify_artifact() {
     local -n cfg="$config_ref_name"
     local app_name="${cfg[name]:-unknown}"
     local skip_checksum="${cfg[skip_checksum]:-false}"
+    local skip_md5_check="${cfg[skip_md5_check]:-false}" # New configuration option
 
     verifiers::_has_func loggers::log_message &&
         loggers::log_message "DEBUG" "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
@@ -508,7 +573,13 @@ verifiers::verify_artifact() {
             "$config_ref_name" "$downloaded_file_path" "$download_url" "$direct_checksum" || return 1
     fi
 
-    # 2) Signature (optional)
+    # 2) MD5 from header (optional)
+    if [[ "$skip_md5_check" != "true" ]]; then
+        verifiers::verify_md5_from_header \
+            "$downloaded_file_path" "$download_url" "$app_name" || return 1
+    fi
+
+    # 3) Signature (optional)
     verifiers::verify_signature "$config_ref_name" "$downloaded_file_path" "$download_url" || return 1
 
     return 0

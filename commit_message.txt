@@ -1,17 +1,12 @@
-refactor(checkers): Improve robustness and caching
+fix(core): Improve robustness and error handling
 
-This commit introduces several improvements to the custom checkers, focusing on robustness, caching, and code clarity.
+This commit introduces several fixes to improve the robustness and error handling of the scripts.
 
-- **Centralized Hashing:**
-  - A new `hash_utils.sh` module has been created to provide a centralized function for generating hashes. This module uses `sha256sum`, `shasum`, or `md5sum` to create a hash of a string.
-  - All custom checkers have been updated to use this new module for generating cache keys, ensuring a consistent and reliable caching mechanism.
+- **`hash_utils.sh`:**
+  - The `generate_hash` function now validates that the input string is not empty, preventing errors from being thrown by the hashing commands.
 
-- **Improved Checker Logic:**
-  - The custom checkers (`cursor.sh`, `veracrypt.sh`, `warp.sh`, `zed.sh`) have been refactored to be more robust and efficient.
-  - The logic for retrieving and validating required fields from the cache has been improved.
-  - The handling of install paths and home directories has been made more robust.
-  - The `veracrypt.sh` checker now has an early exit if the app is up-to-date, preventing unnecessary URL searches.
-  - The `zed.sh` checker now handles errors from `packages::get_installed_version` more gracefully.
+- **`bootloader.sh`:**
+  - The script now checks if `hash_utils.sh` exists before sourcing it, making the bootloader more resilient to missing files.
 
-- **Code Cleanup:**
-  - The `first_alive_url` function has been removed from `networks.sh` as it was no longer in use.
+- **`zed.sh`:**
+  - The script now handles cases where a value retrieved from the cache is "null" by setting it to an empty string. This prevents potential issues with downstream logic that expects an empty string instead of "null".

@@ -6,6 +6,7 @@
     "name": "Warp",
     "type": "custom",
     "package_name": "warp-terminal",
+    "download_dir": "$HOME/.cache/packwatch/artifacts/Warp",
     "custom_checker_script": "warp.sh",
     "custom_checker_func": "check_warp"
   }

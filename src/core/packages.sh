@@ -169,6 +169,31 @@ packages::extract_deb_version() {
     echo "${version:-0.0.0}"
 }
 
+# --------------------------------------------------------------------
+# Public: perform basic sanity check on a Debian package file.
+# Usage: packages::verify_deb_sanity "/tmp/file.deb" "AppName"
+# Returns 0 on success, 1 on failure.
+# --------------------------------------------------------------------
+packages::verify_deb_sanity() {
+    local deb_file="$1"
+    local app_name="$2"
+
+    if [[ ! -f "$deb_file" ]]; then
+        errors::handle_error "VALIDATION_ERROR" "DEB file not found for sanity check: '$deb_file'" "$app_name"
+        return 1
+    fi
+
+    if ! dpkg-deb --info "$deb_file" &> /dev/null; then
+        errors::handle_error "VALIDATION_ERROR" \
+            "Downloaded file is not a valid Debian package: '$deb_file'" "$app_name"
+        return 1
+    fi
+
+    loggers::log_message "INFO" \
+        "Sanity check passed: $deb_file is a valid .deb"
+    return 0
+}
+
 # Install a Debian package.
 # Usage: packages::install_deb_package "/tmp/file.deb" "AppName" "1.2.3" "AppKey"
 packages::install_deb_package() {
@@ -182,10 +207,11 @@ packages::install_deb_package() {
         return 1
     fi
 
-    if [[ ! -f "$deb_file" ]]; then
-        errors::handle_error "VALIDATION_ERROR" "DEB file not found: '$deb_file'" "$app_name"
-        return 1
-    fi
+    # The file existence check is now handled by packages::verify_deb_sanity
+    # if [[ ! -f "$deb_file" ]]; then
+    #     errors::handle_error "VALIDATION_ERROR" "DEB file not found: '$deb_file'" "$app_name"
+    #     return 1
+    # fi
 
     interfaces::print_ui_line "  " "→ " "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." >&2
 
@@ -302,6 +328,11 @@ packages::process_deb_package() {
         updates::on_download_complete "$app_name" "$final_deb_path"
     else
         loggers::log_message "INFO" "Using cached artifact: $final_deb_path"
+    fi
+
+    # Perform deb sanity check before full verification
+    if ! packages::verify_deb_sanity "$final_deb_path" "$app_name"; then
+        return 1
     fi
 
     if ! verifiers::verify_artifact "$config_ref_name" "$final_deb_path" "$download_url" "$expected_checksum"; then
