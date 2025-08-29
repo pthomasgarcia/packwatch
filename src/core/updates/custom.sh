@@ -57,9 +57,9 @@ updates::handle_custom_check() {
     fi
 
     # Export functions/vars used by custom checkers
-    export -f loggers::log_message interfaces::print_ui_line systems::get_json_value systems::require_json_value \
+    export -f loggers::log_message interfaces::print_ui_line systems::fetch_json systems::require_json_value \
         systems::create_temp_file systems::unregister_temp_file systems::sanitize_filename systems::reattempt_command \
-        errors::handle_error validators::check_url_format packages::get_installed_version versions::is_newer
+        errors::handle_error validators::check_url_format packages::fetch_version versions::is_newer
     export UPDATES_DOWNLOAD_FILE_IMPL UPDATES_GET_JSON_VALUE_IMPL UPDATES_PROMPT_CONFIRM_IMPL \
         UPDATES_GET_INSTALLED_VERSION_IMPL UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL \
         UPDATES_GET_LATEST_RELEASE_INFO_IMPL UPDATES_EXTRACT_DEB_VERSION_IMPL UPDATES_FLATPAK_SEARCH_IMPL

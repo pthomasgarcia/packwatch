@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# MODULE: json_response.sh
+# MODULE: responses.sh
 # ==============================================================================
 # Responsibilities:
 #   - Uniform JSON emission for errors and successes.
@@ -14,8 +14,8 @@
 # ==============================================================================
 
 # Uniform error JSON emission with centralized logging/notification.
-# Usage: json_response::emit_error <ERROR_TYPE> <MESSAGE> [APP_NAME] [CUSTOM_ERROR_TYPE]
-json_response::emit_error() {
+# Usage: responses::emit_error <ERROR_TYPE> <MESSAGE> [APP_NAME] [CUSTOM_ERROR_TYPE]
+responses::emit_error() {
     local error_type="$1"
     local error_message="$2"
     local app_name="${3:-unknown}"
@@ -35,15 +35,15 @@ json_response::emit_error() {
         '{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 }
 # Determine the status of an application update.
-# Usage: json_response::determine_status "1.0.0" "1.0.1"
-json_response::determine_status() {
+# Usage: responses::determine_status "1.0.0" "1.0.1"
+responses::determine_status() {
     local installed_version="$1"
     local latest_version="$2"
 
     local normalized_installed_version
-    normalized_installed_version=$(versions::strip_version_prefix "$installed_version")
+    normalized_installed_version=$(versions::strip_prefix "$installed_version")
     local normalized_latest_version
-    normalized_latest_version=$(versions::strip_version_prefix "$latest_version")
+    normalized_latest_version=$(versions::strip_prefix "$latest_version")
 
     if ! updates::is_needed "$normalized_installed_version" "$normalized_latest_version"; then
         echo "no_update"
@@ -53,9 +53,9 @@ json_response::determine_status() {
 }
 
 # Uniform success JSON emission.
-# Usage: json_response::emit_success <STATUS> <LATEST_VERSION> <INSTALL_TYPE> <SOURCE> [key value]...
+# Usage: responses::emit_success <STATUS> <LATEST_VERSION> <INSTALL_TYPE> <SOURCE> [key value]...
 # Always includes: status, latest_version, install_type, source, error_type:"NONE"
-json_response::emit_success() {
+responses::emit_success() {
     local status="$1"
     local latest="$2"
     local install_type="$3"

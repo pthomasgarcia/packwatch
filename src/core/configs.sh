@@ -88,16 +88,16 @@ configs::load_network_settings() {
         else
             local v
 
-            v=$(systems::get_json_value "$settings_content" '.cache_dir' "Network Cache Directory") && {
+            v=$(systems::fetch_json "$settings_content" '.cache_dir' "Network Cache Directory") && {
                 [[ -n "$v" && "$v" != "null" ]] && CACHE_DIR="$v"
             }
 
-            v=$(systems::get_json_value "$settings_content" '.cache_duration' "Network Cache Duration") && {
+            v=$(systems::fetch_json "$settings_content" '.cache_duration' "Network Cache Duration") && {
                 [[ -n "$v" && "$v" != "null" ]] && CACHE_DURATION="$v"
             }
 
             local network_config_json
-            network_config_json=$(systems::get_json_value "$settings_content" '.network_config' "Network Configuration Block") || {
+            network_config_json=$(systems::fetch_json "$settings_content" '.network_config' "Network Configuration Block") || {
                 loggers::log_message "WARN" "Missing 'network_config' block in network settings. Using defaults for NETWORK_CONFIG."
                 network_config_json=
             }
@@ -197,7 +197,7 @@ configs::get_validated_apps_json() {
             local file_content
             file_content=$(< "$file")
             local enabled_status_check
-            enabled_status_check=$(systems::get_json_value "$file_content" '.enabled' "$(basename "$file")")
+            enabled_status_check=$(systems::fetch_json "$file_content" '.enabled' "$(basename "$file")")
             if [[ "$enabled_status_check" == "true" ]]; then
                 merged_json_array=$(echo "$merged_json_array" | jq --argjson item "$file_content" '. + [$item]')
                 ((validated_and_enabled_files++))
@@ -388,7 +388,7 @@ configs::create_default_files() {
             "type": "custom",
             "install_path": "$HOME/Applications/cursor",
             "custom_checker_script": "cursor.sh",
-            "custom_checker_func": "check_cursor"
+            "custom_checker_func": "cursor::check"
         }
     },
     "Zed": {

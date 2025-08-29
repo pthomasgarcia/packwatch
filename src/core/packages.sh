@@ -10,7 +10,7 @@
 #     source "$CORE_DIR/packages.sh"
 #
 #   Then use:
-#     packages::get_installed_version "AppKey"
+#     packages::fetch_version "AppKey"
 #     packages::update_installed_version_json "AppKey" "1.2.3"
 #     packages::install_deb_package "/tmp/file.deb" "AppName" "1.2.3" "AppKey"
 #
@@ -52,7 +52,7 @@ packages::get_installed_version_from_json() {
     fi
 
     local version
-    version=$(systems::get_json_value "$(cat "$versions_file")" ".\"$app_key\"" "$app_key")
+    version=$(systems::fetch_json "$(cat "$versions_file")" ".\"$app_key\"" "$app_key")
 
     if [[ -z "$version" ]]; then
         loggers::log_message "DEBUG" "No installed version found for app: '$app_key'"
@@ -134,8 +134,8 @@ packages::initialize_installed_versions_file() {
 }
 
 # Get the installed version of an application from centralized JSON.
-# Usage: packages::get_installed_version "AppKey"
-packages::get_installed_version() {
+# Usage: packages::fetch_version "AppKey"
+packages::fetch_version() {
     local app_key="$1"
     packages::get_installed_version_from_json "$app_key"
 }

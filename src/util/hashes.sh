@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# MODULE: util/hash_utils.sh
+# MODULE: util/hashes.sh
 # ==============================================================================
 # Responsibilities:
 #   - Provides utility functions for generating hashes.
@@ -12,11 +12,11 @@
 #   $1 - The string to hash.
 # Returns:
 #   The generated hash string.
-hash_utils::generate_hash() {
+hashes::generate() {
     local input_string="$1"
     # Validate required argument: must be set and non-empty
     if [[ -z "${input_string+x}" || -z "$input_string" ]]; then
-        echo "hash_utils::generate_hash: input_string is required" >&2
+        echo "hashes::generate: input_string is required" >&2
         return 1
     fi
     local _hash

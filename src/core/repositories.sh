@@ -47,7 +47,7 @@ repositories::parse_version_from_release() {
     local app_name="$2"
 
     local raw_tag_name
-    raw_tag_name=$(systems::get_json_value "$release_json_path" '.tag_name' "$app_name")
+    raw_tag_name=$(systems::fetch_json "$release_json_path" '.tag_name' "$app_name")
     if [[ -z "$raw_tag_name" ]]; then
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"parse_version\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to get raw tag name.\"}"
         return 1

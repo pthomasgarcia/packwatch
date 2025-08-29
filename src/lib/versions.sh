@@ -112,7 +112,7 @@ versions::extract_from_json() {
     local app_name="$3"
     local raw_version
 
-    raw_version=$(systems::get_json_value "$json_source" "$jq_expression" "$app_name")
+    raw_version=$(systems::fetch_json "$json_source" "$jq_expression" "$app_name")
     if [[ $? -ne 0 || -z "$raw_version" || "$raw_version" == "null" ]]; then
         loggers::log_message "WARN" "Failed to extract version for '$app_name' using JSON expression '$jq_expression'. Defaulting to 0.0.0."
         echo "0.0.0"
@@ -134,7 +134,7 @@ versions::extract_from_json() {
 # Normalize common version prefixes to compare versions reliably.
 # Handles leading whitespace, path-like prefixes (e.g., refs/tags/),
 # and textual prefixes like v, version, ver, release, stable.
-versions::strip_version_prefix() {
+versions::strip_prefix() {
     local version="$1"
 
     # Trim leading/trailing whitespace

@@ -25,7 +25,7 @@ source "$CORE_DIR/../lib/notifiers.sh"
 source "$CORE_DIR/../lib/gpg.sh"
 source "$CORE_DIR/../lib/string_utils.sh"
 source "$CORE_DIR/../lib/systems.sh"
-source "$CORE_DIR/../lib/json_response.sh"
+source "$CORE_DIR/../lib/responses.sh"
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).

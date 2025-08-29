@@ -23,7 +23,7 @@ source "$CORE_DIR/globals.sh"
 source "$CORE_DIR/../lib/systems.sh"
 source "$CORE_DIR/../lib/loggers.sh"
 source "$CORE_DIR/../lib/errors.sh"
-HASH_UTILS_PATH="$CORE_DIR/../util/hash_utils.sh"
+HASH_UTILS_PATH="$CORE_DIR/../util/hashes.sh"
 if [ -f "$HASH_UTILS_PATH" ]; then
     # shellcheck source=/dev/null
     source "$HASH_UTILS_PATH"

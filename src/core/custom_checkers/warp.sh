@@ -6,7 +6,7 @@
 #   - Custom logic to check for updates for Warp.
 #
 # Dependencies:
-#   - json_response.sh
+#   - responses.sh
 #   - networks.sh
 #   - versions.sh
 #   - errors.sh
@@ -21,18 +21,18 @@ check_warp() {
     # Generate cache key and cache all fields at once
     local cache_key
     local _hash
-    _hash="$(hash_utils::generate_hash "$app_config_json")"
+    _hash="$(hashes::generate "$app_config_json")"
     cache_key="warp_${_hash}"
-    systems::cache_json_fields "$app_config_json" "$cache_key"
+    systems::cache_json "$app_config_json" "$cache_key"
 
     # Retrieve required fields
     local name app_key download_dir
-    name=$(systems::get_cached_json_value "$cache_key" "name")
-    app_key=$(systems::get_cached_json_value "$cache_key" "app_key")
-    download_dir=$(systems::get_cached_json_value "$cache_key" "download_dir")
+    name=$(systems::fetch_cached_json "$cache_key" "name")
+    app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
+    download_dir=$(systems::fetch_cached_json "$cache_key" "download_dir")
 
     if [[ -z "$name" || -z "$app_key" ]]; then
-        json_response::emit_error "CONFIG_ERROR" \
+        responses::emit_error "CONFIG_ERROR" \
             "Missing required fields: name/app_key." "${name:-warp}"
         return 1
     fi
@@ -44,13 +44,13 @@ check_warp() {
 
     # Get installed version
     local installed_version
-    installed_version=$(packages::get_installed_version "$app_key")
+    installed_version=$(packages::fetch_version "$app_key")
 
     # 🔑 Resolve the real .deb URL
     local url="https://app.warp.dev/download?package=deb"
     local actual_deb_url
     if ! actual_deb_url=$(networks::get_effective_url "$url"); then
-        json_response::emit_error "NETWORK_ERROR" \
+        responses::emit_error "NETWORK_ERROR" \
             "Failed to resolve download URL for $name." "$name"
         return 1
     fi
@@ -66,31 +66,31 @@ check_warp() {
         '[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?')
 
     local latest_version
-    latest_version=$(versions::strip_version_prefix "$latest_version_raw")
+    latest_version=$(versions::strip_prefix "$latest_version_raw")
 
     if [[ -z "$latest_version" ]]; then
-        json_response::emit_error "PARSING_ERROR" \
+        responses::emit_error "PARSING_ERROR" \
             "Failed to extract version from resolved filename for $name." "$name"
         return 1
     fi
 
     # Normalize installed version (Warp-specific: strip trailing ".stable" etc.)
-    installed_version=$(versions::strip_version_prefix "$installed_version")
+    installed_version=$(versions::strip_prefix "$installed_version")
 
     # Determine status
     local output_status
-    output_status=$(json_response::determine_status \
+    output_status=$(responses::determine_status \
         "$installed_version" "$latest_version")
 
     # Early exit if up-to-date
     if [[ "$output_status" == "UP_TO_DATE" ]]; then
-        json_response::emit_success "$output_status" "$latest_version" \
+        responses::emit_success "$output_status" "$latest_version" \
             "deb" "Official API"
         return 0
     fi
 
     # Emit success with the real URL + filename
-    json_response::emit_success "$output_status" "$latest_version" \
+    responses::emit_success "$output_status" "$latest_version" \
         "deb" "Official API" \
         download_url "$actual_deb_url" \
         filename "$filename"
@@ -122,7 +122,7 @@ check_warp() {
 
         # Perform MD5 verification using the generalized verifiers::verify_artifact
         if ! verifiers::verify_artifact "$temp_app_config_ref" "$downloaded_file" "$actual_deb_url"; then
-            json_response::emit_error "VALIDATION_ERROR" \
+            responses::emit_error "VALIDATION_ERROR" \
                 "MD5 verification failed for $name." "$name"
             return 1
         fi

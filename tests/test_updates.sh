@@ -46,9 +46,9 @@ APP_TYPE_VALIDATIONS["custom"]="name,custom_checker_script,custom_checker_func"
 
 # 9. Dependency Injection for Testing - also explicitly define here if needed for tests
 UPDATES_DOWNLOAD_FILE_IMPL="${UPDATES_DOWNLOAD_FILE_IMPL:-networks::download_file}"
-UPDATES_GET_JSON_VALUE_IMPL="${UPDATES_GET_JSON_VALUE_IMPL:-systems::get_json_value}"
+UPDATES_GET_JSON_VALUE_IMPL="${UPDATES_GET_JSON_VALUE_IMPL:-systems::fetch_json}"
 UPDATES_PROMPT_CONFIRM_IMPL="${UPDATES_PROMPT_CONFIRM_IMPL:-interfaces::confirm_prompt}"
-UPDATES_GET_INSTALLED_VERSION_IMPL="${UPDATES_GET_INSTALLED_VERSION_IMPL:-packages::get_installed_version}"
+UPDATES_GET_INSTALLED_VERSION_IMPL="${UPDATES_GET_INSTALLED_VERSION_IMPL:-packages::fetch_version}"
 UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL="${UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL:-packages::update_installed_version_json}"
 UPDATES_GET_LATEST_RELEASE_INFO_IMPL="${UPDATES_GET_LATEST_RELEASE_INFO_IMPL:-repositories::get_latest_release_info}"
 UPDATES_EXTRACT_DEB_VERSION_IMPL="${UPDATES_EXTRACT_DEB_VERSION_IMPL:-packages::extract_deb_version}"
@@ -397,7 +397,7 @@ systems::unregister_temp_file() {
 }
 
 # Mock other external dependencies
-packages::get_installed_version() {
+packages::fetch_version() {
     local app_key="$1"
     case "$app_key" in
         "TestAppGitHub") echo "$_TEST_INSTALLED_VERSION_GITHUB" ;;

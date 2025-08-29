@@ -20,7 +20,7 @@ networks::fetch_cached_data() { return 1; } # Simulate a cache miss/failure
 
 # Source the new library files
 # shellcheck source=/dev/null
-source "$TEST_DIR/../src/lib/json_response.sh"
+source "$TEST_DIR/../src/lib/responses.sh"
 # shellcheck source=/dev/null
 source "$TEST_DIR/../src/lib/networks.sh"
 

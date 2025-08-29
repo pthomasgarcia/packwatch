@@ -290,7 +290,7 @@ networks::download_file() {
 }
 
 # Resolve + validate with fast paths; fall back to networks::get_effective_url if needed.
-networks::resolve_and_validate_url() {
+networks::validate_url() {
     local raw="$1"
 
     # Preliminary validation on raw and decoded
@@ -344,11 +344,11 @@ networks::fetch_cached_or_error() {
     local fail_msg="${4:-Failed to fetch $type from $url}"
     local path
     if ! path=$(networks::fetch_cached_data "$url" "$type"); then
-        # Use json_response::emit_error for consistency with custom checkers
+        # Use responses::emit_error for consistency with custom checkers
         # This creates a dependency from networks.sh back to checker_utils.sh, which is not ideal.
         # Ideally, emit_error would be in a more generic error handling module.
         # For now, we'll keep the dependency for functional correctness.
-        json_response::emit_error "NETWORK_ERROR" "$fail_msg" "$app" > /dev/null
+        responses::emit_error "NETWORK_ERROR" "$fail_msg" "$app" > /dev/null
         return 1
     fi
     printf '%s' "$path"
@@ -361,8 +361,8 @@ networks::load_cached_content_or_error() {
     local app="$2"
     local fail_msg="${3:-Cached file missing or unreadable: $path}"
     if [[ ! -f "$path" ]]; then
-        # Use json_response::emit_error for consistency with custom checkers
-        json_response::emit_error "CACHE_ERROR" "$fail_msg" "$app" > /dev/null
+        # Use responses::emit_error for consistency with custom checkers
+        responses::emit_error "CACHE_ERROR" "$fail_msg" "$app" > /dev/null
         return 1
     fi
     cat "$path"

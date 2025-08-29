@@ -24,7 +24,7 @@
 #   - globals.sh
 #   - interfaces.sh
 #   - loggers.sh
-#   - json_response.sh
+#   - responses.sh
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -41,7 +41,7 @@ declare -a BACKGROUND_PIDS=()
 declare -gA _jq_cache=() # Global cache for parsed JSON
 
 # Parse entire JSON once and cache results
-systems::cache_json_fields() {
+systems::cache_json() {
     local json_data="$1"
     local cache_key="$2" # Unique identifier for this JSON
 
@@ -62,7 +62,7 @@ systems::cache_json_fields() {
 }
 
 # Get cached JSON value
-systems::get_cached_json_value() {
+systems::fetch_cached_json() {
     local cache_key="$1"
     local field="$2"
     echo "${_jq_cache["${cache_key}_${field}"]:-}"
@@ -247,17 +247,17 @@ systems::cli_with_retry_or_error() {
     if [[ -n "${DEBUG:-}" && "${DEBUG}" != "0" ]]; then
         # Debug mode: preserve stderr from underlying command for diagnostics
         if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@"); then
-            # Use json_response::emit_error for consistency with custom checkers
-            # This creates a dependency from systems.sh back to json_response.sh, which is not ideal.
+            # Use responses::emit_error for consistency with custom checkers
+            # This creates a dependency from systems.sh back to responses.sh, which is not ideal.
             # Ideally, emit_error would be in a more generic error handling module.
             # For now, we'll keep the dependency for functional correctness.
-            json_response::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
+            responses::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
             return 1
         fi
     else
         # Normal mode: suppress underlying command stderr; still surface structured JSON on failure
         if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2> /dev/null); then
-            json_response::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
+            responses::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
             return 1
         fi
     fi
@@ -269,8 +269,8 @@ systems::cli_with_retry_or_error() {
 # ------------------------------------------------------------------------------
 
 # Extract a value from a JSON string using jq.
-# Usage: systems::get_json_value "$json" ".field" "app_name"
-systems::get_json_value() {
+# Usage: systems::fetch_json "$json" ".field" "app_name"
+systems::fetch_json() {
     local json_source="$1"
     local jq_expression="$2"
     local app_name="${3:-unknown}"
@@ -295,7 +295,7 @@ systems::get_json_value() {
 
         # Cache all fields if not already done
         if [[ -z "${_jq_cache["$cache_key"]+isset}" ]]; then
-            systems::cache_json_fields "$json_source" "$cache_key"
+            systems::cache_json "$json_source" "$cache_key"
         fi
 
         # Return cached value
@@ -317,7 +317,7 @@ systems::require_json_value() {
     local app_name="${4:-unknown}"
     local value=""
 
-    value=$(systems::get_json_value "$json_data" "$jq_expression" "$app_name")
+    value=$(systems::fetch_json "$json_data" "$jq_expression" "$app_name")
     local get_json_status=$?
 
     if [[ "$get_json_status" -ne 0 ]]; then
