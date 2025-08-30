@@ -139,7 +139,11 @@ updates::handle_custom_check() {
                 fi
 
                 # Process DEB via packages module
-                packages::process_deb_package \
+                updates::process_installation \
+                    "$app_display_name" \
+                    "$app_key" \
+                    "$latest_version" \
+                    "packages::process_deb_package" \
                     "$config_array_name" \
                     "${app_config_ref[deb_filename_template]:-}" \
                     "$latest_version" \

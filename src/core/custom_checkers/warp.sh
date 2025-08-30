@@ -15,21 +15,48 @@
 #   - validators.sh
 # ==============================================================================
 
-check_warp() {
-    local app_config_json="$1" # JSON string
+_warp::get_latest_version_from_url() {
+    local actual_deb_url="$1"
+    local filename
+    filename=$(basename "$actual_deb_url")
+    echo "$filename" | grep -oP '[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?'
+}
 
-    # Generate cache key and cache all fields at once
+_warp::perform_md5_check() {
+    local name="$1"
+    local downloaded_file="$2"
+    local actual_deb_url="$3"
+
+    if [[ -f "$downloaded_file" ]]; then
+        # shellcheck disable=SC2034
+        local -A temp_app_config=(
+            ["name"]="$name"
+            ["skip_checksum"]="true"
+            ["skip_md5_check"]="false"
+        )
+        local temp_app_config_ref="temp_app_config"
+
+        if ! verifiers::verify_artifact "$temp_app_config_ref" "$downloaded_file" "$actual_deb_url"; then
+            responses::emit_error "VALIDATION_ERROR" \
+                "MD5 verification failed for $name." "$name"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+check_warp() {
+    local app_config_json="$1"
+
     local cache_key
-    local _hash
-    _hash="$(hashes::generate "$app_config_json")"
-    cache_key="warp_${_hash}"
+    cache_key="warp_$(hashes::generate "$app_config_json")"
     systems::cache_json "$app_config_json" "$cache_key"
 
-    # Retrieve required fields
-    local name app_key download_dir
+    local name app_key download_dir download_url_base
     name=$(systems::fetch_cached_json "$cache_key" "name")
     app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
     download_dir=$(systems::fetch_cached_json "$cache_key" "download_dir")
+    download_url_base=$(systems::fetch_cached_json "$cache_key" "download_url_base")
 
     if [[ -z "$name" || -z "$app_key" ]]; then
         responses::emit_error "CONFIG_ERROR" \
@@ -37,17 +64,14 @@ check_warp() {
         return 1
     fi
 
-    # Fallback if download_dir not set in JSON
     if [[ -z "$download_dir" ]]; then
         download_dir="${HOME}/.cache/packwatch/artifacts/${name}"
     fi
 
-    # Get installed version
     local installed_version
     installed_version=$(packages::fetch_version "$app_key")
 
-    # 🔑 Resolve the real .deb URL
-    local url="https://app.warp.dev/download?package=deb"
+    local url="$download_url_base"
     local actual_deb_url
     if ! actual_deb_url=$(networks::get_effective_url "$url"); then
         responses::emit_error "NETWORK_ERROR" \
@@ -55,15 +79,8 @@ check_warp() {
         return 1
     fi
 
-    # Extract filename from the resolved URL
-    local filename
-    filename=$(basename "$actual_deb_url")
-
-    # Extract latest version directly from the filename
-    # More flexible regex: allows YYYY.MM.DD(.HH.MM)?(.stable)?(.N)?(_N)?
     local latest_version_raw
-    latest_version_raw=$(echo "$filename" | grep -oP \
-        '[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?')
+    latest_version_raw=$(_warp::get_latest_version_from_url "$actual_deb_url")
 
     local latest_version
     latest_version=$(versions::strip_prefix "$latest_version_raw")
@@ -74,7 +91,6 @@ check_warp() {
         return 1
     fi
 
-    # Normalize installed version (Warp-specific: strip trailing ".stable" etc.)
     installed_version=$(versions::strip_prefix "$installed_version")
 
     # Determine status
@@ -93,39 +109,20 @@ check_warp() {
     responses::emit_success "$output_status" "$latest_version" \
         "deb" "Official API" \
         download_url "$actual_deb_url" \
-        filename "$filename"
+        filename "$(basename "$actual_deb_url")" \
+        install_type "deb"
 
-    # -------------------------------------------------------------------------
-    # 🛡️ MD5 check: only run if a new download will happen
-    # -------------------------------------------------------------------------
-
-    # Build versioned subdir for cache: vYYYY.MM.DD
     local version_prefix
-    version_prefix=$(echo "$latest_version" | cut -d'.' -f1-3) # e.g. 2025.08.27
+    version_prefix=$(echo "$latest_version" | cut -d'.' -f1-3)
     local versioned_dir="v${version_prefix}"
 
-    # Ensure cache directory exists
     mkdir -p "$download_dir/$versioned_dir"
-    local downloaded_file="${download_dir}/${versioned_dir}/${filename}"
+    local downloaded_file
+    downloaded_file="${download_dir}/${versioned_dir}/$(basename "$actual_deb_url")"
 
-    if [[ -f "$downloaded_file" ]]; then
-        # Prepare a temporary config for verifiers::verify_artifact for MD5 check
-        # We explicitly skip checksum as Warp does not publish them.
-        # shellcheck disable=SC2034
-        local -A temp_app_config=(
-            ["name"]="$name"
-            ["skip_checksum"]="true"
-            ["skip_md5_check"]="false" # Ensure MD5 check is performed
-        )
-        # Use a nameref for the temporary config
-        local temp_app_config_ref="temp_app_config"
-
-        # Perform MD5 verification using the generalized verifiers::verify_artifact
-        if ! verifiers::verify_artifact "$temp_app_config_ref" "$downloaded_file" "$actual_deb_url"; then
-            responses::emit_error "VALIDATION_ERROR" \
-                "MD5 verification failed for $name." "$name"
-            return 1
-        fi
+    _warp::perform_md5_check "$name" "$downloaded_file" "$actual_deb_url"
+    if ! _warp::perform_md5_check "$name" "$downloaded_file" "$actual_deb_url"; then
+        return 1
     fi
 
     return 0

@@ -15,63 +15,16 @@
 #   - validators.sh
 # ==============================================================================
 
-check_veracrypt() {
-    local app_config_json="$1"
+_veracrypt::get_latest_version_from_page() {
+    local page_content="$1"
+    echo "$page_content" | grep -oE 'VeraCrypt [0-9]+\.[0-9]+\.[0-9]+' | head -n1 | cut -d' ' -f2
+}
 
-    # Cache config JSON
-    local cache_key
-    cache_key="veracrypt_$(hashes::generate "$app_config_json")"
-    systems::cache_json "$app_config_json" "$cache_key"
+_veracrypt::get_download_url_from_page() {
+    local page_content="$1"
+    local latest_version="$2"
+    local name="$3"
 
-    # Retrieve required fields
-    local name app_key gpg_key_id gpg_fingerprint
-    name=$(systems::fetch_cached_json "$cache_key" "name")
-    app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
-    gpg_key_id=$(systems::fetch_cached_json "$cache_key" "gpg_key_id")
-    gpg_fingerprint=$(systems::fetch_cached_json "$cache_key" "gpg_fingerprint")
-
-    if [[ -z "$name" || -z "$app_key" ]]; then
-        responses::emit_error "CONFIG_ERROR" "Missing required fields: name/app_key." "${name:-veracrypt}"
-        return 1
-    fi
-
-    # Installed version
-    local installed_version
-    installed_version=$(packages::fetch_version "$app_key")
-
-    # Fetch download page
-    local url="https://veracrypt.io/en/Downloads.html"
-    local page_content
-    if ! page_content=$(networks::fetch_and_load "$url" "html" "$name" "Failed to fetch download page for $name."); then
-        return 1
-    fi
-
-    # Extract latest version
-    local latest_version
-    latest_version=$(echo "$page_content" | grep -oE 'VeraCrypt [0-9]+\.[0-9]+\.[0-9]+' | head -n1 | cut -d' ' -f2)
-    if [[ -z "$latest_version" ]]; then
-        responses::emit_error "PARSING_ERROR" "Failed to detect latest version for $name." "$name"
-        return 1
-    fi
-
-    # Normalize versions
-    installed_version=$(versions::strip_prefix "$installed_version")
-    latest_version=$(versions::strip_prefix "$latest_version")
-
-    loggers::debug "VERACRYPT: installed_version='$installed_version' latest_version='$latest_version'"
-
-    # Determine status
-    local output_status
-    output_status=$(responses::determine_status "$installed_version" "$latest_version")
-
-    if [[ "$output_status" == "UP_TO_DATE" ]]; then
-        responses::emit_success "$output_status" "$latest_version" "deb" "Official Download Page" \
-            gpg_key_id "$gpg_key_id" \
-            gpg_fingerprint "$gpg_fingerprint"
-        return 0
-    fi
-
-    # Search for download URL
     local ubuntu_release
     ubuntu_release=$(lsb_release -rs 2> /dev/null || echo "")
 
@@ -87,7 +40,6 @@ check_veracrypt() {
         fi
     fi
 
-    # Fallback: try generic .deb if Ubuntu-specific not found
     if [[ -z "$download_url_final" ]]; then
         download_url_final=$(echo "$page_content" |
             grep -Eo "https://[^\"]*veracrypt-${latest_version}.*amd64\\.deb" | head -n1)
@@ -101,11 +53,79 @@ check_veracrypt() {
         return 1
     fi
 
-    # Normalize Launchpad URLs
     if [[ "$download_url_final" =~ launchpadlibrarian.net ]]; then
         local base_name
         base_name=$(basename "$download_url_final")
         download_url_final="https://launchpad.net/veracrypt/trunk/${latest_version}/+download/${base_name}"
+    fi
+
+    echo "$download_url_final"
+}
+
+check_veracrypt() {
+    local app_config_json="$1"
+
+    # Cache config JSON
+    local cache_key
+    cache_key="veracrypt_$(hashes::generate "$app_config_json")"
+    systems::cache_json "$app_config_json" "$cache_key"
+
+    # Retrieve required fields
+    local name app_key gpg_key_id gpg_fingerprint download_url_base
+    name=$(systems::fetch_cached_json "$cache_key" "name")
+    app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
+    gpg_key_id=$(systems::fetch_cached_json "$cache_key" "gpg_key_id")
+    gpg_fingerprint=$(systems::fetch_cached_json "$cache_key" "gpg_fingerprint")
+    download_url_base=$(systems::fetch_cached_json "$cache_key" "download_url_base")
+
+    if [[ -z "$name" || -z "$app_key" ]]; then
+        responses::emit_error "CONFIG_ERROR" "Missing required fields: name/app_key." "${name:-veracrypt}"
+        return 1
+    fi
+
+    # Installed version
+    local installed_version
+    installed_version=$(packages::fetch_version "$app_key")
+
+    # Fetch download page
+    local url="$download_url_base"
+    local page_content
+    if ! page_content=$(networks::fetch_and_load "$url" "html" "$name" "Failed to fetch download page for $name."); then
+        return 1
+    fi
+
+    # Extract latest version
+    local latest_version
+    latest_version=$(_veracrypt::get_latest_version_from_page "$page_content")
+    if [[ -z "$latest_version" ]]; then
+        responses::emit_error "PARSING_ERROR" "Failed to detect latest version for $name." "$name"
+        return 1
+    fi
+
+    # Normalize versions
+    installed_version=$(versions::strip_prefix "$installed_version")
+    latest_version=$(versions::strip_prefix "$latest_version")
+
+    loggers::debug "VERACRYPT: installed_version='$installed_version' latest_version='$latest_version'"
+
+    # Determine status
+    # Determine status
+    local output_status
+    output_status=$(responses::determine_status "$installed_version" "$latest_version")
+
+    if [[ "$output_status" == "UP_TO_DATE" ]]; then
+        responses::emit_success "$output_status" "$latest_version" "deb" "Official Download Page" \
+            gpg_key_id "$gpg_key_id" \
+            gpg_fingerprint "$gpg_fingerprint"
+        return 0
+    fi
+
+    # Search for download URL
+    local download_url_final
+    download_url_final=$(_veracrypt::get_download_url_from_page "$page_content" "$latest_version" "$name")
+    if [[ -z "$download_url_final" ]]; then
+        # Error message already emitted by _veracrypt::get_download_url_from_page
+        return 1
     fi
 
     local sig_url="${download_url_final}.sig"
@@ -114,7 +134,8 @@ check_veracrypt() {
         download_url "$download_url_final" \
         gpg_key_id "$gpg_key_id" \
         gpg_fingerprint "$gpg_fingerprint" \
-        sig_url "$sig_url"
+        sig_url "$sig_url" \
+        install_type "deb"
 
     return 0
 }

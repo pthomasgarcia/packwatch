@@ -241,12 +241,6 @@ packages::install_deb_package() {
         return 1
     fi
 
-    if ! packages::update_installed_version_json "$app_key" "$version"; then
-        loggers::warn "Failed to update installed version JSON for '$app_name', but installation was successful."
-    fi
-
-    interfaces::print_ui_line "  " "✓ " "Successfully installed ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version" "${COLOR_GREEN}" >&2
-    notifiers::send_notification "$app_name Updated" "Successfully installed v$version" "normal"
     return 0
 }
 # Install a TGZ archive.
