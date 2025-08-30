@@ -10,7 +10,7 @@
 #     source "$CORE_DIR/networks.sh"
 #
 #   Then use:
-#     networks::download_file "url" "/tmp/file" "checksum" "sha256"
+#     networks::download_file "url" "/tmp/file"
 #     networks::fetch_cached_data "url" "json"
 #
 # Dependencies:
@@ -23,16 +23,14 @@
 
 # ------------------------------------------------------------------------------
 # SECTION: Globals for Networking
+# ------------------------------------------------------------------------------
 # Ensure LAST_API_CALL is initialized to avoid arithmetic errors
 LAST_API_CALL=0
-# ------------------------------------------------------------------------------
 
 # These variables are now loaded from configs.sh
 # CACHE_DIR
 # CACHE_DURATION
 # NETWORK_CONFIG (associative array)
-# LAST_API_CALL (managed internally by networks.sh)
-# API_RATE_LIMIT (managed internally by networks.sh)
 
 # ------------------------------------------------------------------------------
 # SECTION: URL Decoding
@@ -121,7 +119,6 @@ networks::fetch_cached_data() {
     else
         networks::apply_rate_limit
 
-        temp_download_file=$(systems::create_temp_file "fetch_response")
         if ! temp_download_file=$(systems::create_temp_file "fetch_response"); then return 1; fi
 
         local -a curl_args
@@ -161,27 +158,33 @@ networks::fetch_cached_data() {
         return 0
     fi
 }
+
+# Enforce HTTPS unless explicitly allowed.
 networks::require_https_or_fail() {
-    local url="$1" allow_http="${2:-0}"
+    local url="$1" allow_http="${2:-false}"
     if [[ "$allow_http" != "true" ]] && ! validators::check_https_url "$url"; then
         errors::handle_error "NETWORK_ERROR" "Refusing insecure URL: '$url'"
         return 1
     fi
 }
 
+# Download text content to a temporary file and return its path.
 networks::download_text_to_cache() {
     local url="$1"
-    networks::require_https_or_fail "$url" "${ALLOW_INSECURE_HTTP:-0}" || return 1
+    networks::require_https_or_fail "$url" "${ALLOW_INSECURE_HTTP:-false}" || return 1
+
     local tmp
     tmp=$(systems::create_temp_file "sidecar") || return 1
-    local -a args
-    mapfile -t args < <(networks::build_curl_args "$tmp" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-4}")
-    if ! systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl "${args[@]}" "$url"; then
-        errors::handle_error "NETWORK_ERROR" "Failed to download: $url"
+
+    # Reuse download_file logic but suppress its UI output for silent operation
+    if ! networks::download_file "$url" "$tmp" "" "" "${ALLOW_INSECURE_HTTP:-false}" > /dev/null 2>&1; then
+        # Error is already handled by download_file, just need to clean up and fail
+        systems::unregister_temp_file "$tmp"
         return 1
     fi
     echo "$tmp"
 }
+
 # Get the effective URL after redirects.
 # Usage: networks::get_effective_url "url"
 networks::get_effective_url() {
@@ -230,6 +233,7 @@ networks::fast_url_exists() {
     code=$(networks::fast_head_status "$url")
     [[ -n "$code" && "$code" -ge 200 && "$code" -lt 400 ]]
 }
+
 # Follow redirects quickly and return the effective URL (limited time/redirs)
 # Uses PW_CONNECT_TIMEOUT and PW_RESOLVE_MAX_TIME from globals.sh
 networks::fast_resolve_url() {
@@ -242,15 +246,17 @@ networks::fast_resolve_url() {
         -o /dev/null -w '%{url_effective}' "$url" 2> /dev/null || true
 }
 
+# ------------------------------------------------------------------------------
+# SECTION: File Downloading
+# ------------------------------------------------------------------------------
+
 # Download a file from a given URL.
-# Usage: networks::download_file "url" "/tmp/file" "checksum" "sha256"
+# Usage: networks::download_file "url" "/tmp/file"
 networks::download_file() {
     local url="$1"
     local dest_path="$2"
-    # Checksum parameters are no longer used here; verification is centralized.
-    # local expected_checksum="$3"
-    # local checksum_algorithm="${4:-sha256}"
-    local allow_http="${5:-0}" # New parameter for allowing HTTP
+    # Checksum parameters are handled by the calling function (e.g., updates module)
+    local allow_http="${5:-false}" # New parameter for allowing HTTP
 
     networks::require_https_or_fail "$url" "$allow_http" || return 1
 
@@ -273,18 +279,6 @@ networks::download_file() {
         errors::handle_error "NETWORK_ERROR" "Failed to download '$url' after multiple attempts."
         return 1
     fi
-
-    # Checksum verification is now handled in updates::verify_downloaded_artifact
-    # Keeping this commented out for future reference if needed.
-    # if [[ -n "$expected_checksum" ]]; then
-    #     loggers::debug "Attempting checksum verification for '$dest_path' with expected: '$expected_checksum', algorithm: '$checksum_algorithm'"
-    #     if ! validators::verify_checksum "$dest_path" "$expected_checksum" "$checksum_algorithm"; then
-    #         errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for downloaded file: '$dest_path'"
-    #         return 1
-    #     fi
-    # else
-    #     loggers::debug "No expected checksum provided for '$dest_path'. Skipping verification."
-    # fi
 
     return 0
 }

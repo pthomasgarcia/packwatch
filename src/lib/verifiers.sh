@@ -415,26 +415,34 @@ verifiers::_download_signature_file() {
     local gpg_key_id="$6"
     local downloaded_file_path="$7"
 
-    # local VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=0
-    local VERIFIERS_SIG_DOWNLOAD_URL=""
-
     if [[ -n "$sig_url_override" ]]; then
         VERIFIERS_SIG_DOWNLOAD_URL="$sig_url_override"
     else
         VERIFIERS_SIG_DOWNLOAD_URL="${download_url}.sig"
     fi
 
+    # Define where the signature will be cached permanently
+    local artifact_dir
+    artifact_dir=$(dirname "$downloaded_file_path")
+    local sig_cache_path
+    sig_cache_path="$artifact_dir/$(basename "$downloaded_file_path").sig"
+
+    # If cached signature exists, reuse it and exit
+    if [[ -f "$sig_cache_path" ]]; then
+        loggers::debug "Using cached signature file: $sig_cache_path"
+        echo "$sig_cache_path"
+        return 0
+    fi
+
     verifiers::_has_func interfaces::print_ui_line &&
         interfaces::print_ui_line "  " "→ " "Downloading signature for verification..."
-    local sigf=""
-    # Trap-based cleanup is handled by caller after verification; we pass back path.
-    sigf=$(networks::download_text_to_cache "$VERIFIERS_SIG_DOWNLOAD_URL" "$allow_http") || {
+    local temp_sig_file=""
+    temp_sig_file=$(networks::download_text_to_cache "$VERIFIERS_SIG_DOWNLOAD_URL" "$allow_http") || {
         # Try .asc fallback only if no explicit override was set
         if [[ -z "$sig_url_override" ]]; then
             local asc_url="${download_url}.asc"
             if networks::url_exists "$asc_url"; then
-                # VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=1
-                sigf=$(networks::download_text_to_cache "$asc_url" "$allow_http") || {
+                temp_sig_file=$(networks::download_text_to_cache "$asc_url" "$allow_http") || {
                     verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
                     return 1
                 }
@@ -449,7 +457,11 @@ verifiers::_download_signature_file() {
         fi
     }
 
-    echo "$sigf"
+    # Copy the downloaded temp signature file to the permanent cache location
+    cp "$temp_sig_file" "$sig_cache_path"
+    verifiers::_safe_unregister "$temp_sig_file" # Clean up the temp file
+
+    echo "$sig_cache_path" # Return the path to the permanently cached signature
 }
 
 # --------------------------------------------------------------------
@@ -464,37 +476,35 @@ verifiers::_perform_gpg_verification() {
     local download_url="$6"
     local sig_download_url="$7"
 
-    # Ensure temp signature file is cleaned even on early returns
-    trap 'verifiers::_safe_unregister "'"$sigf"'"' RETURN EXIT
-
-    # Hard fail if the function is still missing
     if ! verifiers::_has_func gpg::verify_detached; then
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✗ " "Missing GPG helpers." "${COLOR_RED}"
-        verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 0 "$gpg_fingerprint" "<no-helper>" "${VERIFIER_ALGO_PGP}" \
-            "$app_name" "$downloaded_file_path" "$download_url" "$gpg_key_id" "$gpg_fingerprint"
-        verifiers::_has_func errors::handle_error &&
-            errors::handle_error "GPG_ERROR" "Missing gpg functions (gpg.sh not sourced)." "$app_name"
+        interfaces::print_ui_line "  " "✗ " "Missing GPG helpers." "${COLOR_RED}"
+        errors::handle_error "GPG_ERROR" "Missing gpg functions (gpg.sh not sourced)." "$app_name"
         return 1
     fi
 
-    verifiers::_has_func loggers::log &&
-        loggers::debug "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
+    loggers::debug "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
 
-    if ! gpg::verify_detached "$downloaded_file_path" "$sigf" "$gpg_key_id" "$gpg_fingerprint" "user_keyring" ""; then
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✗ " "Signature verification FAILED." "${COLOR_RED}"
-        verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 0 "$gpg_fingerprint" "<no-hash>" "${VERIFIER_ALGO_PGP}" \
-            "$app_name" "$downloaded_file_path" "$download_url" "$gpg_key_id" "$gpg_fingerprint"
-        verifiers::_has_func errors::handle_error &&
-            errors::handle_error "GPG_ERROR" "GPG signature verification failed for '$app_name'." "$app_name"
+    # Run gpg with status output
+    local status_output
+    if ! status_output=$(GNUPGHOME="$HOME/.gnupg" gpg --status-fd=1 --verify "$sigf" "$downloaded_file_path" 2>&1); then
+        interfaces::print_ui_line "  " "✗ " "Signature verification FAILED." "${COLOR_RED}"
+        errors::handle_error "GPG_ERROR" "GPG signature verification failed for '$app_name'." "$app_name"
         return 1
     fi
 
-    verifiers::_has_func interfaces::print_ui_line &&
+    # Extract actual fingerprint from VALIDSIG line
+    local actual_signature
+    actual_signature=$(echo "$status_output" | awk '/^\[GNUPG:\] VALIDSIG/ {print $3; exit}')
+
+    verifiers::_has_func interfaces::print_ui_line && {
+        interfaces::print_ui_line "  " "→ " "Expected GPG fingerprint: $gpg_fingerprint"
+        interfaces::print_ui_line "  " "→ " "Actual GPG fingerprint:   ${actual_signature:-<not-found>}"
         interfaces::print_ui_line "  " "✓ " "Signature verified." "${COLOR_GREEN}"
-    verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 1 "$gpg_fingerprint" "<no-hash>" "${VERIFIER_ALGO_PGP}" \
+    }
+
+    verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 1 "$gpg_fingerprint" "${actual_signature:-<not-found>}" "${VERIFIER_ALGO_PGP}" \
         "$app_name" "$downloaded_file_path" "$sig_download_url" "$gpg_key_id" "$gpg_fingerprint"
+
     return 0
 }
 
