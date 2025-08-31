@@ -101,12 +101,11 @@ updates::_install_appimage_file_command() {
                 chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null ||
                     loggers::warn "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER' (running as root)."
             else
-                if command -v sudo > /dev/null 2>&1; then
-                    if ! sudo -n chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null; then
-                        loggers::warn "Skipping ownership change for '$install_target_full_path' (sudo failed or password required)."
-                    fi
-                else
-                    loggers::warn "Skipping ownership change for '$install_target_full_path' (sudo not available)."
+                if ! systems::ensure_sudo_privileges "$app_name"; then
+                    return 1
+                fi
+                if ! sudo -n chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null; then
+                    loggers::warn "Skipping ownership change for '$install_target_full_path' (sudo failed or password required)."
                 fi
             fi
         fi

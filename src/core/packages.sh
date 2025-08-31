@@ -222,8 +222,7 @@ packages::install_deb_package() {
         return 0
     fi
 
-    if ! command -v sudo &> /dev/null; then
-        errors::handle_error "DEPENDENCY_ERROR" "sudo command not found. Installation requires sudo privileges." "$app_name"
+    if ! systems::ensure_sudo_privileges "$app_name"; then
         return 1
     fi
 
@@ -273,8 +272,7 @@ packages::install_tgz_package() {
         return 1
     fi
 
-    if ! command -v sudo &> /dev/null; then
-        errors::handle_error "DEPENDENCY_ERROR" "sudo command not found. Installation requires sudo privileges." "$app_name"
+    if ! systems::ensure_sudo_privileges "$app_name"; then
         return 1
     fi
 

@@ -43,12 +43,6 @@ updates::process_installation() {
             return 0
         fi
 
-        # Check for active sudo session before a sudo command (match by basename to allow full paths/wrappers)
-        local _install_cmd_basename="${install_command_func##*/}"
-        if [[ "$_install_cmd_basename" == "sudo" ]] && systems::is_sudo_session_active; then
-            interfaces::print_ui_line "  " "→ " "An active sudo session was found. Installing without a password prompt."
-        fi
-
         if "$install_command_func" "${install_command_args[@]}"; then
             if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
                 loggers::warn "Failed to update installed version JSON for '$app_name', but installation was successful."

@@ -25,7 +25,30 @@ updates::process_flatpak_app() {
         interfaces::print_ui_line "  " "✗ " "Flatpak not installed. Cannot update ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_RED}"
         return 1
     fi
-    if ! flatpak remotes | awk '{print $1}' | grep -xq flathub; then
+
+    # Use the generic process_installation function, passing the new helper for installation
+    updates::process_installation \
+        "$app_name" \
+        "$app_key" \
+        "$latest_version" \
+        "updates::_perform_flatpak_installation" \
+        "$app_name" \
+        "$flatpak_app_id"
+}
+
+# Helper function to perform the actual Flatpak installation, including sudo setup.
+# Usage: updates::_perform_flatpak_installation "app_name" "flatpak_app_id"
+# shellcheck disable=SC2317
+updates::_perform_flatpak_installation() {
+    local app_name="$1"
+    local flatpak_app_id="$2"
+
+    if ! systems::ensure_sudo_privileges "$app_name"; then
+        return 1
+    fi
+
+    # Ensure Flathub remote exists
+    if ! flatpak remotes --columns=name | grep -qx flathub; then
         interfaces::print_ui_line "  " "→ " "Adding Flathub remote..."
         sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || {
             errors::handle_error "INSTALLATION_ERROR" "Failed to add Flathub remote. Cannot update $app_name." "$app_name"
@@ -34,24 +57,23 @@ updates::process_flatpak_app() {
             return 1
         }
     fi
+
+    # Update appstream data
     interfaces::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
     sudo flatpak update --appstream -y || {
         loggers::warn "Failed to update Flatpak appstream data for $app_name. Installation might proceed but information could be stale."
-        interfaces::print_ui_line "  " "! " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
+        interfaces::print_ui_line "  " "⚠ " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
     }
 
-    # Use the generic process_installation function
-    updates::process_installation \
-        "$app_name" \
-        "$app_key" \
-        "$latest_version" \
-        "sudo" \
-        "flatpak" \
-        "install" \
-        "--or-update" \
-        "-y" \
-        "flathub" \
-        "$flatpak_app_id"
+    # Perform installation or update in a single sudo session
+    if ! sudo bash -c "
+        flatpak install --or-update -y flathub '$flatpak_app_id'
+    "; then
+        errors::handle_error "INSTALLATION_ERROR" "Failed to install Flatpak app $app_name." "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to install Flatpak app.\"}"
+        interfaces::print_ui_line "  " "✗ " "Failed to install Flatpak app." "${COLOR_RED}"
+        return 1
+    fi
 }
 
 # Updates module; checks for updates for a Flatpak application.
@@ -74,7 +96,7 @@ updates::check_flatpak() {
     local latest_version="0.0.0"
     local flatpak_search_output
     if flatpak_search_output=$("$UPDATES_FLATPAK_SEARCH_IMPL" --columns=application,version,summary "$flatpak_app_id" 2> /dev/null); then # DI applied
-        if [[ "$flatpak_search_output" =~ "$flatpak_app_id"[[:space:]]+([0-9.]+[^[:space:]]*)[[:space:]]+.* ]]; then
+        if [[ "$flatpak_search_output" =~ "$flatpak_app_id"[[:space:]]+([^[:space:]]+) ]]; then
             latest_version=$(versions::normalize "${BASH_REMATCH[1]}")
         else
             loggers::warn "Could not parse Flatpak version for '$name' from search output."

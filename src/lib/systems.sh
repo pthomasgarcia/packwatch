@@ -346,6 +346,31 @@ systems::is_sudo_session_active() {
 }
 
 # ------------------------------------------------------------------------------
+# SECTION: Sudo Credential Management
+# ------------------------------------------------------------------------------
+
+# Ensures sudo privileges are available, prompting the user if necessary.
+# Prints a message if an active sudo session is found.
+# Usage: systems::ensure_sudo_privileges "app_name"
+systems::ensure_sudo_privileges() {
+    local app_name="${1:-application}"
+
+    if systems::is_sudo_session_active; then
+        interfaces::print_ui_line "  " "→ " "An active sudo session was found. Installing without a password prompt."
+        return 0
+    else
+        interfaces::print_ui_line "  " "→ " "Requesting sudo privileges for $app_name..."
+        # Attempt to refresh the sudo timestamp, prompting for password if needed.
+        # This command is often used for its side effect of prompting for credentials.
+        if ! sudo -v; then
+            errors::handle_error "PERMISSION_ERROR" "Sudo privileges are required but could not be obtained for '$app_name'. Please ensure you have sudo installed and configured correctly." "$app_name"
+            return 1
+        fi
+        return 0
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # SECTION: System Dependency Check
 # ------------------------------------------------------------------------------
 
