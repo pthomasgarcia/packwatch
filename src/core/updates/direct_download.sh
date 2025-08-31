@@ -50,8 +50,7 @@ updates::check_direct_download() {
     fi
 
     # Standardized summary output
-    interfaces::print_ui_line "  " "Installed: " "$installed_version"
-    interfaces::print_ui_line "  " "Source:    " "Direct Download"
+    updates::print_version_info "$installed_version" "Direct Download" "$latest_version"
 
     local needs_update=0
     if updates::is_needed "$installed_version" "$latest_version"; then

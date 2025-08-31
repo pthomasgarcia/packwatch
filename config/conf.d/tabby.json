@@ -7,6 +7,7 @@
     "package_name": "tabby-terminal",
     "repo_owner": "Eugeny",
     "repo_name": "tabby",
-    "filename_pattern_template": "tabby-%s-linux-x64.deb"
+    "filename_pattern_template": "tabby-%s-linux-x64.deb",
+    "checksum_from_github_release_digest": true
   }
 }

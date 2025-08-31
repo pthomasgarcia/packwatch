@@ -90,9 +90,7 @@ systems::sanitize_filename() {
     # Collapse multiple consecutive dots to a single dot to avoid spoofing like 'tar..gz'
     filename=$(echo -n "$filename" | sed -E 's/\.{2,}/./g')
     # Remove leading dots entirely (avoid hidden files or relative path implications)
-    filename=$(echo -n "$filename" | sed -E 's/^\.+//')
-    # Trim any leading dashes produced by stripping leading dots
-    filename=$(echo -n "$filename" | sed -E 's/^-+//')
+    filename=$(echo -n "$filename" | sed -E 's/^[.-]+//') # Remove leading dots or dashes
     # Fallback if empty after sanitization
     if [[ -z "$filename" ]]; then
         filename="unnamed"
@@ -321,11 +319,13 @@ systems::require_json_value() {
     local get_json_status=$?
 
     if [[ "$get_json_status" -ne 0 ]]; then
+        # systems::fetch_json already handled the error message
         return 1
     fi
 
     if [[ -z "$value" ]]; then
         errors::handle_error "VALIDATION_ERROR" "Required field '$field_name' is missing or empty in JSON for '$app_name'. JQ expression: $jq_expression" "$app_name"
+        # Explicitly return 1 to ensure the function fails
         return 1
     fi
 

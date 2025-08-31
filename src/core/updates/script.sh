@@ -134,9 +134,7 @@ updates::check_script() {
     local latest_version
     latest_version=$(updates::_fetch_version_from_url "$version_url" "$version_regex" "$name")
 
-    interfaces::print_ui_line "  " "Installed: " "$installed_version"
-    interfaces::print_ui_line "  " "Source:    " "$source"
-    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
+    updates::print_version_info "$installed_version" "$source" "$latest_version"
 
     if updates::is_needed "$installed_version" "$latest_version"; then
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"

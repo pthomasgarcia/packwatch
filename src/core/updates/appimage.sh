@@ -200,9 +200,7 @@ updates::check_appimage() {
     fi
 
     # Standardized summary output
-    interfaces::print_ui_line "  " "Installed: " "$installed_version"
-    interfaces::print_ui_line "  " "Source:    " "$source"
-    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
+    updates::print_version_info "$installed_version" "$source" "$latest_version"
 
     if updates::is_needed "$installed_version" "$latest_version"; then
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"

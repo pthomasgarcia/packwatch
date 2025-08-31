@@ -151,6 +151,18 @@ updates::is_needed() {
 }
 
 # Handles the common "up to date" status display and counter increment.
+# Prints standardized version information.
+# Usage: updates::print_version_info "installed_version" "source" "latest_version"
+updates::print_version_info() {
+    local installed_version="$1"
+    local source="$2"
+    local latest_version="$3"
+
+    interfaces::print_ui_line "  " "Installed: " "$installed_version"
+    interfaces::print_ui_line "  " "Source:    " "$source"
+    interfaces::print_ui_line "  " "Latest:    " "$latest_version"
+}
+
 updates::handle_up_to_date() {
     interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
     counters::inc_up_to_date

@@ -114,11 +114,7 @@ updates::handle_custom_check() {
     error_message=$(echo "$custom_checker_output" | jq -r '.error_message // empty')
     error_type_from_checker=$(echo "$custom_checker_output" | jq -r '.error_type // "CUSTOM_CHECKER_ERROR"')
 
-    interfaces::print_ui_line "  " "Installed: " "$installed_version"
-    if [[ "$status" != "error" ]]; then
-        interfaces::print_ui_line "  " "Source:    " "$source"
-        interfaces::print_ui_line "  " "Latest:    " "$latest_version"
-    fi
+    updates::print_version_info "$installed_version" "$source" "$latest_version"
 
     if [[ "$status" == "success" ]] && updates::is_needed "$installed_version" "$latest_version"; then
         local install_type
