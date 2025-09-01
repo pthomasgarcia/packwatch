@@ -26,10 +26,12 @@ cursor::check() {
     # Retrieve all required fields from cache
     local name install_path_config app_key
     name=$(systems::fetch_cached_json "$cache_key" "name")
-    install_path_config=$(systems::fetch_cached_json "$cache_key" "install_path")
+    install_path_config=$(systems::fetch_cached_json "$cache_key" \
+        "install_path")
     app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
     if [[ -z "$name" || -z "$app_key" ]]; then
-        responses::emit_error "PARSING_ERROR" "Missing 'name' or 'app_key' in config JSON." "${name:-cursor}"
+        responses::emit_error "PARSING_ERROR" \
+            "Missing 'name' or 'app_key' in config JSON." "${name:-cursor}"
         return 1
     fi
     # Resolve install path
@@ -43,7 +45,8 @@ cursor::check() {
     # Default to home if empty and ensure directory exists
     [[ -z "$install_base_dir" ]] && install_base_dir="$original_home"
     mkdir -p -- "$install_base_dir" || {
-        responses::emit_error "FILESYSTEM_ERROR" "Unable to create install directory '$install_base_dir'." "$name"
+        responses::emit_error "FILESYSTEM_ERROR" \
+            "Unable to create install directory '$install_base_dir'." "$name"
         return 1
     }
     local appimage_file_path="${install_base_dir%/}/${appimage_filename_final}"
@@ -54,7 +57,8 @@ cursor::check() {
     # Fetch API JSON
     local api_endpoint="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
     local api_json_path
-    if ! api_json_path=$(networks::fetch_cached_or_error "$api_endpoint" "json" "$name" "Failed to fetch Cursor API JSON for $name."); then
+    if ! api_json_path=$(networks::fetch_cached_or_error "$api_endpoint" \
+        "json" "$name" "Failed to fetch Cursor API JSON for $name."); then
         return 1
     fi
 
@@ -80,7 +84,9 @@ cursor::check() {
             missing_joined="unknown"
         fi
 
-        responses::emit_error "PARSING_ERROR" "Missing required field(s) [${missing_joined}] for $name (empty or absent in API JSON)." "$name"
+        responses::emit_error "PARSING_ERROR" \
+            "Missing required field(s) [${missing_joined}] for $name \
+(empty or absent in API JSON)." "$name"
         return 1
     fi
     # Log debug info
@@ -89,21 +95,23 @@ cursor::check() {
     # Validate download URL
     local resolved_url=""
     if ! resolved_url=$(networks::validate_url "$actual_download_url"); then
-        responses::emit_error "NETWORK_ERROR" "Invalid or unresolved download URL for $name (url=$actual_download_url)." "$name"
+        responses::emit_error "NETWORK_ERROR" \
+            "Invalid or unresolved download URL for $name \
+(url=$actual_download_url)." "$name"
         return 1
     fi
 
     # Log debug info
-    loggers::debug "CURSOR: installed_version='$installed_version' latest_version='$latest_version' url='$resolved_url'"
+    loggers::debug "CURSOR: installed_version='$installed_version' \
+latest_version='$latest_version' url='$resolved_url'"
 
     # Determine status and emit response
     local output_status
     output_status=$(responses::determine_status "$installed_version" "$latest_version")
 
-    responses::emit_success "$output_status" "$latest_version" "appimage" "Official API (JSON)" \
-        download_url "$resolved_url" \
-        install_target_path "$appimage_file_path" \
-        app_key "$app_key"
+    responses::emit_success "$output_status" "$latest_version" "appimage" \
+        "Official API (JSON)" download_url "$resolved_url" \
+        install_target_path "$appimage_file_path" app_key "$app_key"
 
     return 0
 }

@@ -9,7 +9,8 @@
 #   - None
 # ==============================================================================
 
-# Extract the value of a "Key: Value" line from given text; echoes the trimmed value.
+# Extract the value of a "Key: Value" line from given text; echoes the
+# trimmed value.
 # Usage: string_utils::extract_colon_value "<TEXT>" "<KEY_REGEX>"
 string_utils::extract_colon_value() {
     local text="$1" key_re="$2"

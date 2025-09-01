@@ -3,7 +3,8 @@
 # MODULE: systems.sh
 # ==============================================================================
 # Responsibilities:
-#   - System-level helpers (temp files, cleanup, background processes, file sanitization, etc.)
+#   - System-level helpers (temp files, cleanup, background processes,
+#     file sanitization, etc.)
 #   - System dependency validation
 #   - Command retry and CLI error handling
 #
@@ -31,14 +32,9 @@
 # SECTION: Globals for Temp File and Background Process Tracking
 # ------------------------------------------------------------------------------
 
-declare -a TEMP_FILES=()
-declare -a BACKGROUND_PIDS=()
-
 # ------------------------------------------------------------------------------
 # SECTION: JSON Parsing Cache
 # ------------------------------------------------------------------------------
-
-declare -gA _jq_cache=() # Global cache for parsed JSON
 
 # Parse entire JSON once and cache results
 systems::cache_json() {
@@ -55,7 +51,8 @@ systems::cache_json() {
     # Parse all fields at once and store in cache
     while IFS=$'\t' read -r key value; do
         _jq_cache["${cache_key}_${key}"]="$value"
-    done < <(echo "$json_data" | jq -r 'to_entries[] | "\(.key)\t\(.value)"' 2> /dev/null)
+    done < <(echo "$json_data" | jq -r \
+        'to_entries[] | "\(.key)\t\(.value)"' 2> /dev/null)
 
     # Store original JSON for fallback
     _jq_cache["$cache_key"]="$json_data"
@@ -71,7 +68,6 @@ systems::fetch_cached_json() {
 # Clear JSON cache
 systems::clear_json_cache() {
     unset _jq_cache
-    declare -gA _jq_cache=()
 }
 
 # ------------------------------------------------------------------------------
@@ -82,15 +78,19 @@ systems::clear_json_cache() {
 # Usage: systems::sanitize_filename "filename"
 systems::sanitize_filename() {
     local filename="$1"
-    # Replace any path separators or backslashes with dashes first to prevent traversal
+    # Replace any path separators or backslashes with dashes first to
+    # prevent traversal
     filename=${filename//\//-}
     filename=${filename//\\/-}
     # Allow only [A-Za-z0-9._-]; replace others with '-'
     filename=$(echo -n "$filename" | sed -E 's/[^A-Za-z0-9._-]+/-/g')
-    # Collapse multiple consecutive dots to a single dot to avoid spoofing like 'tar..gz'
+    # Collapse multiple consecutive dots to a single dot to avoid spoofing
+    # like 'tar..gz'
     filename=$(echo -n "$filename" | sed -E 's/\.{2,}/./g')
-    # Remove leading dots entirely (avoid hidden files or relative path implications)
-    filename=$(echo -n "$filename" | sed -E 's/^[.-]+//') # Remove leading dots or dashes
+    # Remove leading dots entirely (avoid hidden files or relative path
+    # implications)
+    filename=$(echo -n "$filename" | sed -E 's/^[.-]+//') # Remove leading
+    # dots or dashes
     # Fallback if empty after sanitization
     if [[ -z "$filename" ]]; then
         filename="unnamed"
@@ -108,7 +108,8 @@ systems::create_temp_file() {
     local template="$1"
     template=$(systems::sanitize_filename "$template")
 
-    # Use a user-specific cache directory to avoid sudo requirements for temp files.
+    # Use a user-specific cache directory to avoid sudo requirements for
+    # temp files.
     local temp_dir="${HOME}/.cache/packwatch/tmp"
     mkdir -p "$temp_dir" || {
         errors::handle_error "PERMISSION_ERROR" "Failed to create temporary directory: $temp_dir"
@@ -117,7 +118,9 @@ systems::create_temp_file() {
 
     local temp_file
     temp_file=$(mktemp "${temp_dir}/${template}.XXXXXX") || {
-        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: $template in $temp_dir"
+        errors::handle_error "VALIDATION_ERROR" \
+            "Failed to create temporary file with template: $template in \
+$temp_dir"
         return 1
     }
     TEMP_FILES+=("$temp_file")
@@ -170,7 +173,8 @@ systems::_clean_background_processes() {
 # Clean up old cache files (older than 60 minutes).
 # Usage: systems::_clean_cache_files
 systems::_clean_cache_files() {
-    [[ -d "$CACHE_DIR" ]] && find "$CACHE_DIR" -type f -mmin +60 -delete 2> /dev/null
+    [[ -d "$CACHE_DIR" ]] && find "$CACHE_DIR" -type f -mmin +60 -delete \
+        2> /dev/null
 }
 
 # ------------------------------------------------------------------------------
@@ -181,7 +185,7 @@ systems::_clean_cache_files() {
 # Usage: systems::perform_housekeeping
 systems::perform_housekeeping() {
     loggers::debug "Performing application housekeeping..."
-    local lock_file="${LOCK_FILE:-}"
+    local lock_file="${LOCK_FILE:-}" # LOCK_FILE is now a global variable
 
     # Clean up temporary files
     systems::delete_temp_files
@@ -189,7 +193,8 @@ systems::perform_housekeeping() {
     # Clean up background processes
     systems::_clean_background_processes
 
-    # Clean up old cache files (if desired on exit, though often a scheduled task)
+    # Clean up old cache files (if desired on exit, though often a
+    # scheduled task)
     # systems::_clean_cache_files # Decide if this should run on every exit
 
     # Remove legacy cache directory if it exists
@@ -246,15 +251,18 @@ systems::cli_with_retry_or_error() {
         # Debug mode: preserve stderr from underlying command for diagnostics
         if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@"); then
             # Use responses::emit_error for consistency with custom checkers
-            # This creates a dependency from systems.sh back to responses.sh, which is not ideal.
-            # Ideally, emit_error would be in a more generic error handling module.
+            # This creates a dependency from systems.sh back to responses.sh,
+            # which is not ideal.
+            # Ideally, emit_error would be in a more generic error handling
+            # module.
             # For now, we'll keep the dependency for functional correctness.
             responses::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
             return 1
         fi
     else
         # Normal mode: suppress underlying command stderr; still surface structured JSON on failure
-        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" "$@" 2> /dev/null); then
+        if ! output=$(systems::reattempt_command "$retries" "$sleep_secs" \
+            "$@" 2> /dev/null); then
             responses::emit_error "COMMAND_ERROR" "$fail_msg" "$app" >&2
             return 1
         fi
@@ -324,7 +332,9 @@ systems::require_json_value() {
     fi
 
     if [[ -z "$value" ]]; then
-        errors::handle_error "VALIDATION_ERROR" "Required field '$field_name' is missing or empty in JSON for '$app_name'. JQ expression: $jq_expression" "$app_name"
+        errors::handle_error "VALIDATION_ERROR" \
+            "Required field '$field_name' is missing or empty in JSON for \
+'$app_name'. JQ expression: $jq_expression" "$app_name"
         # Explicitly return 1 to ensure the function fails
         return 1
     fi
@@ -356,14 +366,20 @@ systems::ensure_sudo_privileges() {
     local app_name="${1:-application}"
 
     if systems::is_sudo_session_active; then
-        interfaces::print_ui_line "  " "→ " "An active sudo session was found. Installing without a password prompt."
+        interfaces::print_ui_line "  " "→ " \
+            "An active sudo session was found. Installing without a password \
+prompt."
         return 0
     else
-        interfaces::print_ui_line "  " "→ " "Requesting sudo privileges for $app_name..."
+        interfaces::print_ui_line "  " "→ " \
+            "Requesting sudo privileges for $app_name..."
         # Attempt to refresh the sudo timestamp, prompting for password if needed.
         # This command is often used for its side effect of prompting for credentials.
         if ! sudo -v; then
-            errors::handle_error "PERMISSION_ERROR" "Sudo privileges are required but could not be obtained for '$app_name'. Please ensure you have sudo installed and configured correctly." "$app_name"
+            errors::handle_error "PERMISSION_ERROR" \
+                "Sudo privileges are required but could not be obtained for \
+'$app_name'. Please ensure you have sudo installed and configured correctly." \
+                "$app_name"
             return 1
         fi
         return 0
@@ -381,7 +397,8 @@ systems::check_dependencies() {
     loggers::info "Performing system dependency check..."
     local -a missing_cmds=()
 
-    # REQUIRED_COMMANDS and INSTALL_CMD are constants from main.sh, assumed available
+    # REQUIRED_COMMANDS and INSTALL_CMD are constants from main.sh,
+    # assumed available
     # because main.sh sources globals.sh and then lib modules.
 
     for cmd in "${REQUIRED_COMMANDS[@]}"; do
@@ -394,7 +411,8 @@ systems::check_dependencies() {
         # Print installation help message BEFORE exiting
         interfaces::print_installation_help # Ensure this function is called
         errors::handle_error "DEPENDENCY_ERROR" \
-            "Missing required core commands: ${missing_cmds[*]}. Please install them." "core"
+            "Missing required core commands: ${missing_cmds[*]}. Please \
+install them." "core"
         return 1
     fi
 

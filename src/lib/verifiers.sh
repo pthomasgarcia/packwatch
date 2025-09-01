@@ -5,8 +5,6 @@ if [ -n "${PACKWATCH_VERIFIERS_LOADED:-}" ]; then
     return 0
 fi
 PACKWATCH_VERIFIERS_LOADED=1
-# VERIFIERS_SIG_DOWNLOAD_USED_FALLBACK=0
-VERIFIERS_SIG_DOWNLOAD_URL=""
 
 # ==============================================================================
 # NOTES ON HARDENING AND TESTING
@@ -16,10 +14,12 @@ VERIFIERS_SIG_DOWNLOAD_URL=""
 # Key improvements include:
 #   - Idempotent guards to prevent issues from multiple sourcing.
 #   - Strict dependency checks at load time with clear error messages.
-#   - Lowercasing without Bash 4-specific syntax (compatible with macOS Bash 3).
+#   - Lowercasing without Bash 4-specific syntax (compatible with macOS
+#     Bash 3).
 #   - Optional strict checksum enforcement via cfg[require_checksum]=true.
 #   - Safer temp-file cleanup using traps + safe unregister helper.
-#   - More robust checksum extraction supporting SHA-256 and SHA-512 (and generic).
+#   - More robust checksum extraction supporting SHA-256 and SHA-512 (and
+#     generic).
 #   - Hook delivery failures are logged.
 #   - GPG verification uses temporary, isolated keyrings.
 #
@@ -40,12 +40,6 @@ VERIFIERS_SIG_DOWNLOAD_URL=""
 # - updates.sh (for updates::trigger_hooks)
 
 # Constants
-readonly VERIFIER_TYPE_CHECKSUM="checksum"
-readonly VERIFIER_TYPE_SIGNATURE="signature"
-readonly VERIFIER_ALGO_SHA256="sha256"
-readonly VERIFIER_ALGO_SHA512="sha512"
-readonly VERIFIER_ALGO_PGP="pgp"
-readonly VERIFIER_HOOK_PHASE="verify"
 
 # --------------------------------------------------------------------
 # Private: basic utilities
@@ -64,7 +58,8 @@ verifiers::_has_func() {
 # Safe unregister wrapper
 verifiers::_safe_unregister() {
     local f="$1"
-    if [[ -n "$f" && -e "$f" ]] && verifiers::_has_func systems::unregister_temp_file; then
+    if [[ -n "$f" && -e "$f" ]] &&
+        verifiers::_has_func systems::unregister_temp_file; then
         systems::unregister_temp_file "$f"
     fi
 }
@@ -77,7 +72,8 @@ verifiers::_require_cmds() {
         if ! command -v "$c" > /dev/null 2>&1; then
             missing=1
             if verifiers::_has_func errors::handle_error; then
-                errors::handle_error "MISSING_DEP" "Required command '$c' not found in PATH." "verifiers"
+                errors::handle_error "MISSING_DEP" \
+                    "Required command '$c' not found in PATH." "verifiers"
             else
                 echo "ERROR: required command '$c' not found" >&2
             fi
@@ -95,11 +91,13 @@ verifiers::_trigger_hooks_safe() {
     if verifiers::_has_func updates::trigger_hooks; then
         if ! updates::trigger_hooks "$hook_name" "$app_name" "$payload"; then
             verifiers::_has_func loggers::log &&
-                loggers::warn "Hook delivery failed for '$hook_name' (app='$app_name')."
+                loggers::warn "Hook delivery failed for '$hook_name' \
+(app='$app_name')."
         fi
     else
         verifiers::_has_func loggers::log &&
-            loggers::warn "updates::trigger_hooks not available; hook '$hook_name' skipped."
+            loggers::warn "updates::trigger_hooks not available; hook \
+'$hook_name' skipped."
     fi
 }
 
@@ -172,9 +170,9 @@ verifiers::_emit_verify_hook() {
     local fingerprint="${10-}"
 
     local details
-    details=$(verifiers::_create_hook_payload \
-        "$kind" "$success_flag" "$expected" "$actual" "$algo" \
-        "$app_name" "$file_path" "$download_url" "$key_id" "$fingerprint")
+    details=$(verifiers::_create_hook_payload "$kind" "$success_flag" \
+        "$expected" "$actual" "$algo" "$app_name" "$file_path" \
+        "$download_url" "$key_id" "$fingerprint")
 
     verifiers::_trigger_hooks_safe POST_VERIFY_HOOKS "$app_name" "$details"
 }
@@ -190,11 +188,15 @@ verifiers::_handle_sig_download_failure() {
     local downloaded_file_path="$5"
 
     verifiers::_has_func interfaces::print_ui_line &&
-        interfaces::print_ui_line "  " "✗ " "Signature download failed." "${COLOR_RED}"
-    verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 0 "$gpg_fingerprint" "<download-error>" "${VERIFIER_ALGO_PGP}" \
-        "$app_name" "$downloaded_file_path" "$sig_url" "$gpg_key_id" "$gpg_fingerprint"
+        interfaces::print_ui_line "  " "✗ " "Signature download failed." \
+            "${COLOR_RED}"
+    verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 0 \
+        "$gpg_fingerprint" "<download-error>" "${VERIFIER_ALGO_PGP}" \
+        "$app_name" "$downloaded_file_path" "$sig_url" "$gpg_key_id" \
+        "$gpg_fingerprint"
     if verifiers::_has_func errors::handle_error; then
-        errors::handle_error "NETWORK_ERROR" "Failed to download signature file from '$sig_url'." "$app_name"
+        errors::handle_error "NETWORK_ERROR" \
+            "Failed to download signature file from '$sig_url'." "$app_name"
     fi
 }
 
@@ -235,17 +237,20 @@ verifiers::verify_checksum() {
     actual="$(verifiers::compute_checksum "$file_path" "$algo_lc")"
 
     verifiers::_has_func interfaces::print_ui_line && {
-        interfaces::print_ui_line "  " "→ " "Expected checksum (${algo_lc}): $expected"
+        interfaces::print_ui_line "  " "→ " \
+            "Expected checksum (${algo_lc}): $expected"
         interfaces::print_ui_line "  " "→ " "Actual checksum:   $actual"
     }
 
     if [[ "$expected" == "$actual" ]]; then
         verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✓ " "Checksum verified." "${COLOR_GREEN}"
+            interfaces::print_ui_line "  " "✓ " "Checksum verified." \
+                "${COLOR_GREEN}"
         return 0
     else
         verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✗ " "Checksum verification FAILED." "${COLOR_RED}"
+            interfaces::print_ui_line "  " "✗ " \
+                "Checksum verification FAILED." "${COLOR_RED}"
         return 1
     fi
 }
@@ -267,10 +272,10 @@ verifiers::verify_md5_from_header() {
 
     if [[ -z "$header_md5_b64" ]]; then
         verifiers::_has_func loggers::log &&
-            loggers::debug \
-                "MD5 check skipped for '$app_name': no x-goog-hash header found for '$download_url'"
-        verifiers::_emit_verify_hook "md5" 0 "<missing-header>" "<no-hash>" "md5" \
-            "$app_name" "$file_path" "$download_url"
+            loggers::debug "MD5 check skipped for '$app_name': no \
+x-goog-hash header found for '$download_url'"
+        verifiers::_emit_verify_hook "md5" 0 "<missing-header>" "<no-hash>" \
+            "md5" "$app_name" "$file_path" "$download_url"
         return 0 # Treat as success if no MD5 to check against
     fi
 
@@ -286,19 +291,22 @@ verifiers::verify_md5_from_header() {
 
     if [[ "$header_md5_hex" == "$local_md5" ]]; then
         verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✓ " "MD5 verified." "${COLOR_GREEN}"
-        verifiers::_emit_verify_hook "md5" 1 "$header_md5_hex" "$local_md5" "md5" \
-            "$app_name" "$file_path" "$download_url"
+            interfaces::print_ui_line "  " "✓ " "MD5 verified." \
+                "${COLOR_GREEN}"
+        verifiers::_emit_verify_hook "md5" 1 "$header_md5_hex" "$local_md5" \
+            "md5" "$app_name" "$file_path" "$download_url"
         return 0
     else
         verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✗ " "MD5 verification FAILED." "${COLOR_YELLOW}" # Changed to YELLOW for warning
-        verifiers::_emit_verify_hook "md5" 0 "$header_md5_hex" "$local_md5" "md5" \
-            "$app_name" "$file_path" "$download_url"
+            interfaces::print_ui_line "  " "✗ " "MD5 verification FAILED." \
+                "${COLOR_YELLOW}" # Changed to YELLOW for warning
+        verifiers::_emit_verify_hook "md5" 0 "$header_md5_hex" "$local_md5" \
+            "md5" "$app_name" "$file_path" "$download_url"
         verifiers::_has_func loggers::log && # Changed to log_message for warning
             loggers::warn \
-                "Downloaded file MD5 mismatch for '$app_name'. Proceeding with installation." "$app_name" # Changed message
-        return 0                                                                                          # Changed to return 0 to proceed
+                "Downloaded file MD5 mismatch for '$app_name'. Proceeding with \
+installation." "$app_name" # Changed message
+        return 0           # Changed to return 0 to proceed
     fi
 }
 
@@ -318,8 +326,10 @@ verifiers::_verify_checksum_with_hooks() {
     local require_checksum="${cfg[require_checksum]:-false}"
 
     local expected
-    expected=$(verifiers::resolve_expected_checksum "$config_ref_name" "$downloaded_file_path" "$download_url" "$direct_checksum") || {
-        verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 0 "<resolve-error>" "<no-hash>" "$checksum_algorithm" \
+    expected=$(verifiers::resolve_expected_checksum "$config_ref_name" \
+        "$downloaded_file_path" "$download_url" "$direct_checksum") || {
+        verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 0 \
+            "<resolve-error>" "<no-hash>" "$checksum_algorithm" \
             "$app_name" "$downloaded_file_path" "$download_url"
         return 1
     }
@@ -327,11 +337,14 @@ verifiers::_verify_checksum_with_hooks() {
     if [[ -z "$expected" ]]; then
         if [[ "$require_checksum" == "true" ]]; then
             verifiers::_has_func interfaces::print_ui_line &&
-                interfaces::print_ui_line "  " "✗ " "Checksum required but not available." "${COLOR_RED}"
-            verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 0 "<missing>" "<no-hash>" "$checksum_algorithm" \
+                interfaces::print_ui_line "  " "✗ " "Checksum required but not \
+available." "${COLOR_RED}"
+            verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 0 \
+                "<missing>" "<no-hash>" "$checksum_algorithm" \
                 "$app_name" "$downloaded_file_path" "$download_url"
             verifiers::_has_func errors::handle_error &&
-                errors::handle_error "VALIDATION_ERROR" "Checksum missing and required for '$app_name'." "$app_name"
+                errors::handle_error "VALIDATION_ERROR" "Checksum missing and \
+required for '$app_name'." "$app_name"
             return 1
         fi
         # No checksum configured; treat as no-op success
@@ -339,14 +352,17 @@ verifiers::_verify_checksum_with_hooks() {
     fi
 
     if verifiers::verify_checksum "$downloaded_file_path" "$expected" "$checksum_algorithm"; then
-        verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 1 "$expected" "<matching>" "$checksum_algorithm" \
+        verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 1 \
+            "$expected" "<matching>" "$checksum_algorithm" \
             "$app_name" "$downloaded_file_path" "$download_url"
         return 0
     else
-        verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 0 "$expected" "<mismatch>" "$checksum_algorithm" \
+        verifiers::_emit_verify_hook "${VERIFIER_TYPE_CHECKSUM}" 0 \
+            "$expected" "<mismatch>" "$checksum_algorithm" \
             "$app_name" "$downloaded_file_path" "$download_url"
         verifiers::_has_func errors::handle_error &&
-            errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
+            errors::handle_error "VALIDATION_ERROR" "Checksum verification \
+failed for '$app_name'." "$app_name"
         return 1
     fi
 }
@@ -372,7 +388,8 @@ verifiers::resolve_expected_checksum() {
     # 1) Directly provided
     if [[ -n "$direct_checksum" ]]; then
         verifiers::_has_func loggers::log &&
-            loggers::debug "Using directly provided checksum for '$app_name'."
+            loggers::debug "Using directly provided checksum for \
+'$app_name'."
         echo "$direct_checksum"
         return 0
     fi
@@ -381,7 +398,8 @@ verifiers::resolve_expected_checksum() {
     local checksum_url="${cfg[checksum_url]:-}"
     if [[ -n "$checksum_url" ]]; then
         verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "→ " "Downloading checksum for verification..."
+            interfaces::print_ui_line "  " "→ " "Downloading checksum for \
+verification..."
         local csf=""
         # Ensure cleanup even on early return
         {
@@ -435,24 +453,35 @@ verifiers::_download_signature_file() {
     fi
 
     verifiers::_has_func interfaces::print_ui_line &&
-        interfaces::print_ui_line "  " "→ " "Downloading signature for verification..."
+        interfaces::print_ui_line "  " "→ " "Downloading signature for \
+verification..."
     local temp_sig_file=""
     temp_sig_file=$(networks::download_text_to_cache "$VERIFIERS_SIG_DOWNLOAD_URL" "$allow_http") || {
         # Try .asc fallback only if no explicit override was set
         if [[ -z "$sig_url_override" ]]; then
             local asc_url="${download_url}.asc"
             if networks::url_exists "$asc_url"; then
-                temp_sig_file=$(networks::download_text_to_cache "$asc_url" "$allow_http") || {
-                    verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
+                temp_sig_file=$(networks::download_text_to_cache "$asc_url" \
+                    "$allow_http") || {
+                    verifiers::_handle_sig_download_failure \
+                        "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" \
+                        "$gpg_fingerprint" "$gpg_key_id" \
+                        "$downloaded_file_path"
                     return 1
                 }
                 VERIFIERS_SIG_DOWNLOAD_URL="$asc_url"
             else
-                verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
+                verifiers::_handle_sig_download_failure \
+                    "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" \
+                    "$gpg_fingerprint" "$gpg_key_id" \
+                    "$downloaded_file_path"
                 return 1
             fi
         else
-            verifiers::_handle_sig_download_failure "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"
+            verifiers::_handle_sig_download_failure \
+                "$VERIFIERS_SIG_DOWNLOAD_URL" "$app_name" \
+                "$gpg_fingerprint" "$gpg_key_id" \
+                "$downloaded_file_path"
             return 1
         fi
     }
@@ -477,18 +506,24 @@ verifiers::_perform_gpg_verification() {
     local sig_download_url="$7"
 
     if ! verifiers::_has_func gpg::verify_detached; then
-        interfaces::print_ui_line "  " "✗ " "Missing GPG helpers." "${COLOR_RED}"
-        errors::handle_error "GPG_ERROR" "Missing gpg functions (gpg.sh not sourced)." "$app_name"
+        interfaces::print_ui_line "  " "✗ " "Missing GPG helpers." \
+            "${COLOR_RED}"
+        errors::handle_error "GPG_ERROR" "Missing gpg functions (gpg.sh not \
+sourced)." "$app_name"
         return 1
     fi
 
-    loggers::debug "Performing GPG signature verification for '$app_name'. Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
+    loggers::debug "Performing GPG signature verification for '$app_name'. \
+Key ID: '$gpg_key_id', Fingerprint: '$gpg_fingerprint'"
 
     # Run gpg with status output
     local status_output
-    if ! status_output=$(GNUPGHOME="$HOME/.gnupg" gpg --status-fd=1 --verify "$sigf" "$downloaded_file_path" 2>&1); then
-        interfaces::print_ui_line "  " "✗ " "Signature verification FAILED." "${COLOR_RED}"
-        errors::handle_error "GPG_ERROR" "GPG signature verification failed for '$app_name'." "$app_name"
+    if ! status_output=$(GNUPGHOME="$HOME/.gnupg" gpg --status-fd=1 \
+        --verify "$sigf" "$downloaded_file_path" 2>&1); then
+        interfaces::print_ui_line "  " "✗ " "Signature verification FAILED." \
+            "${COLOR_RED}"
+        errors::handle_error "GPG_ERROR" "GPG signature verification failed \
+for '$app_name'." "$app_name"
         return 1
     fi
 
@@ -497,13 +532,18 @@ verifiers::_perform_gpg_verification() {
     actual_signature=$(echo "$status_output" | awk '/^\[GNUPG:\] VALIDSIG/ {print $3; exit}')
 
     verifiers::_has_func interfaces::print_ui_line && {
-        interfaces::print_ui_line "  " "→ " "Expected GPG fingerprint: $gpg_fingerprint"
-        interfaces::print_ui_line "  " "→ " "Actual GPG fingerprint:   ${actual_signature:-<not-found>}"
-        interfaces::print_ui_line "  " "✓ " "Signature verified." "${COLOR_GREEN}"
+        interfaces::print_ui_line "  " "→ " "Expected GPG fingerprint: \
+$gpg_fingerprint"
+        interfaces::print_ui_line "  " "→ " "Actual GPG fingerprint:   \
+${actual_signature:-<not-found>}"
+        interfaces::print_ui_line "  " "✓ " "Signature verified." \
+            "${COLOR_GREEN}"
     }
 
-    verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 1 "$gpg_fingerprint" "${actual_signature:-<not-found>}" "${VERIFIER_ALGO_PGP}" \
-        "$app_name" "$downloaded_file_path" "$sig_download_url" "$gpg_key_id" "$gpg_fingerprint"
+    verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 1 \
+        "$gpg_fingerprint" "${actual_signature:-<not-found>}" \
+        "${VERIFIER_ALGO_PGP}" "$app_name" "$downloaded_file_path" \
+        "$sig_download_url" "$gpg_key_id" "$gpg_fingerprint"
 
     return 0
 }
@@ -529,7 +569,8 @@ verifiers::verify_signature() {
     if [[ -z "$gpg_key_id" || -z "$gpg_fingerprint" ]]; then
         verifiers::_has_func loggers::log &&
             loggers::debug \
-                "No gpg_key_id or gpg_fingerprint configured for '$app_name'. Skipping GPG verification."
+                "No gpg_key_id or gpg_fingerprint configured for '$app_name'. \
+Skipping GPG verification."
         return 0
     fi
 
@@ -537,7 +578,8 @@ verifiers::verify_signature() {
     local sigf
     if ! sigf=$(verifiers::_download_signature_file \
         "$sig_url_override" "$download_url" "$allow_http" \
-        "$app_name" "$gpg_fingerprint" "$gpg_key_id" "$downloaded_file_path"); then
+        "$app_name" "$gpg_fingerprint" "$gpg_key_id" \
+        "$downloaded_file_path"); then
         return 1
     fi
 
@@ -564,12 +606,14 @@ verifiers::verify_artifact() {
     local skip_md5_check="${cfg[skip_md5_check]:-false}" # New configuration option
 
     verifiers::_has_func loggers::log &&
-        loggers::debug "Verifying downloaded artifact for '$app_name': '$downloaded_file_path'"
+        loggers::debug "Verifying downloaded artifact for '$app_name': \
+'$downloaded_file_path'"
 
     # 1) Checksum (optional)
     if [[ "$skip_checksum" != "true" ]]; then
         verifiers::_verify_checksum_with_hooks \
-            "$config_ref_name" "$downloaded_file_path" "$download_url" "$direct_checksum" || return 1
+            "$config_ref_name" "$downloaded_file_path" "$download_url" \
+            "$direct_checksum" || return 1
     fi
 
     # 2) MD5 from header (optional)
@@ -579,7 +623,8 @@ verifiers::verify_artifact() {
     fi
 
     # 3) Signature (optional)
-    verifiers::verify_signature "$config_ref_name" "$downloaded_file_path" "$download_url" || return 1
+    verifiers::verify_signature "$config_ref_name" "$downloaded_file_path" \
+        "$download_url" || return 1
 
     return 0
 }
@@ -604,8 +649,10 @@ verifiers::compare_files_checksum() {
 # --------------------------------------------------------------------
 # Public: extract checksum from a file
 # Usage: verifiers::extract_checksum_from_file "checksum_file" "target_name"
-# Extracts the first checksum from a checksum file or the line containing target_name.
-# Supports SHA-256 (64 hex) and SHA-512 (128 hex), and will fall back to the first hex digest in the file.
+# Extracts the first checksum from a checksum file or the line containing
+# target_name.
+# Supports SHA-256 (64 hex) and SHA-512 (128 hex), and will fall back to
+# the first hex digest in the file.
 # --------------------------------------------------------------------
 verifiers::extract_checksum_from_file() {
     local checksum_file="$1"
@@ -619,16 +666,22 @@ verifiers::extract_checksum_from_file() {
     local line=""
     if [[ -n "$target_name" ]]; then
         # Prefer a line matching target name with a 64 or 128 hex digest
-        line=$(grep -E "^[0-9A-Fa-f]{64}\s+(\*|)?${escaped_name}(\s+.*)?$" "$checksum_file" | head -n1)
-        [[ -z "$line" ]] && line=$(grep -E "^[0-9A-Fa-f]{128}\s+(\*|)?${escaped_name}(\s+.*)?$" "$checksum_file" | head -n1)
-        # Some formats are "<hash>  <filename>" but filename may include path; match end-of-line if simple match fails
+        line=$(grep -E "^[0-9A-Fa-f]{64}\s+(\*|)?${escaped_name}(\s+.*)?$" \
+            "$checksum_file" | head -n1)
+        [[ -z "$line" ]] && line=$(grep -E \
+            "^[0-9A-Fa-f]{128}\s+(\*|)?${escaped_name}(\s+.*)?$" \
+            "$checksum_file" | head -n1)
+        # Some formats are "<hash>  <filename>" but filename may include
+        # path; match end-of-line if simple match fails
         if [[ -z "$line" ]]; then
-            line=$(grep -E "^[0-9A-Fa-f]{64,128}\b" "$checksum_file" | grep -E "${escaped_name}" | head -n1)
+            line=$(grep -E "^[0-9A-Fa-f]{64,128}\b" "$checksum_file" |
+                grep -E "${escaped_name}" | head -n1)
         fi
     fi
 
     # Fallback: first line that looks like a hex digest
-    line=${line:-$(grep -E "^[0-9A-Fa-f]{64,128}\b" "$checksum_file" | head -n1)}
+    line=${line:-$(grep -E "^[0-9A-Fa-f]{64,128}\b" "$checksum_file" |
+        head -n1)}
     [[ -z "$line" ]] && line=$(head -n1 "$checksum_file")
 
     awk '{print $1}' <<< "$line"

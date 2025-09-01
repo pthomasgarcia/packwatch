@@ -35,19 +35,24 @@ loggers::log() {
 
     case "$level" in
         ERROR | CRITICAL)
-            printf '[%s] [PID:%s] [%b%s%b] %s\n' "$timestamp" "$pid" "$COLOR_RED" "$level" "$FORMAT_RESET" "$message" >&2
+            printf '[%s] [PID:%s] [%b%s%b] %s\n' "$timestamp" "$pid" \
+                "$COLOR_RED" "$level" "$FORMAT_RESET" "$message" >&2
             ;;
         WARN)
-            printf '[%s] [PID:%s] [%b%s%b] %s\n' "$timestamp" "$pid" "$COLOR_YELLOW" "$level" "$FORMAT_RESET" "$message" >&2
+            printf '[%s] [PID:%s] [%b%s%b] %s\n' "$timestamp" "$pid" \
+                "$COLOR_YELLOW" "$level" "$FORMAT_RESET" "$message" >&2
             ;;
         INFO)
-            printf '[%s] [PID:%s] [INFO] %s\n' "$timestamp" "$pid" "$message" >&2
+            printf '[%s] [PID:%s] [INFO] %s\n' "$timestamp" "$pid" \
+                "$message" >&2
             ;;
         DEBUG)
-            [[ ${VERBOSE:-0} -eq 1 ]] && printf '[%s] [PID:%s] [DEBUG] %s\n' "$timestamp" "$pid" "$message" >&2
+            [[ ${VERBOSE:-0} -eq 1 ]] && printf '[%s] [PID:%s] [DEBUG] %s\n' \
+                "$timestamp" "$pid" "$message" >&2
             ;;
         *)
-            printf '[%s] [PID:%s] [INFO] %s\n' "$timestamp" "$pid" "$message" >&2
+            printf '[%s] [PID:%s] [INFO] %s\n' "$timestamp" "$pid" \
+                "$message" >&2
             ;;
     esac
 }

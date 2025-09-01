@@ -14,8 +14,10 @@ PACKWATCH_BOOTLOADER_LOADED=1
 # Note: CORE_DIR must be set by main.sh before sourcing this file.
 
 # Strict sourcing order:
-# 1. globals.sh: Defines core constants, global variables, and initial state (like exit codes).
-# 2. systems.sh: Provides low-level system helpers (temp files, dependency checks, cleanup traps).
+# 1. globals.sh: Defines core constants, global variables, and initial
+# state (like exit codes).
+# 2. systems.sh: Provides low-level system helpers (temp files,
+# dependency checks, cleanup traps).
 # 3. loggers.sh: Enables basic logging to stderr/stdout.
 # 4. errors.sh: Provides centralized error handling, relying on loggers.sh.
 
@@ -23,7 +25,6 @@ source "$CORE_DIR/globals.sh"
 source "$CORE_DIR/../lib/systems.sh"
 source "$CORE_DIR/../lib/loggers.sh"
 source "$CORE_DIR/../lib/errors.sh"
-HASH_UTILS_PATH="$CORE_DIR/../util/hashes.sh"
 if [ -f "$HASH_UTILS_PATH" ]; then
     # shellcheck source=/dev/null
     source "$HASH_UTILS_PATH"

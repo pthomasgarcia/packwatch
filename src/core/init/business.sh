@@ -7,7 +7,8 @@ fi
 PACKWATCH_BUSINESS_LOADED=1
 
 # Packwatch Phase 3b: Business
-# Purpose: Load the central module that defines the application's core business logic,
+# Purpose: Load the central module that defines the application's
+# core business logic,
 # orchestrating the update checking and installation workflows.
 
 # Required: All modules from Phase 0 (bootloader), Phase 1 (interface),

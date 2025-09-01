@@ -22,9 +22,6 @@
 #   - loggers.sh
 # ==============================================================================
 
-# Private module state - CLI arguments
-declare -g -a _CLI_APP_KEYS=()
-
 # Public accessor function
 cli::get_app_keys() {
     printf '%s\n' "${_CLI_APP_KEYS[@]}"
@@ -57,7 +54,8 @@ cli::get_available_app_keys_for_display() {
     for file_path in "${config_files[@]}"; do
         # Use jq to safely extract app_key and name. Fallback to filename if needed.
         local app_info
-        app_info=$(jq -r '{key: .app_key, name: .application.name} | "\(.key)---_---\(.name)"' "$file_path" 2> /dev/null)
+        app_info=$(jq -r '{key: .app_key, name: .application.name} | \
+            "\(.key)---_---\(.name)"' "$file_path" 2> /dev/null)
         if [[ -n "$app_info" ]]; then
             local key="${app_info%%---_---*}"
             local name="${app_info#*---_---}"
@@ -89,7 +87,7 @@ Options:
 
 Examples:
     $SCRIPT_NAME                    # Check all default configured apps
-    $SCRIPT_NAME Ghostty Tabby      # Check specific apps only (using their KEYs)
+    $SCRIPT_NAME Ghostty Tabby # Check specific apps only (using their KEYs)
     $SCRIPT_NAME -v -n              # Verbose dry-run mode
 
 Supported Application Keys (defined in your JSON config files in '$CONFIG_DIR'):
@@ -107,7 +105,8 @@ JSON configuration files in the above directory. Use the --create-config
 option to generate default files.
 
 Cache directory: '$CACHE_DIR'
-Dependencies: sudo apt install -y wget curl gpg jq libnotify-bin dpkg coreutils lsb-release getent
+Dependencies: sudo apt install -y wget curl gpg jq libnotify-bin dpkg \
+coreutils lsb-release getent
 For VeraCrypt: Manually verify and import its GPG key.
 For Flatpak apps: Install Flatpak - refer to https://flatpak.org/setup/.
 EOF
@@ -136,7 +135,9 @@ cli::parse_arguments() {
                 ;;
             --cache-duration)
                 if [[ -z "$2" ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
-                    errors::handle_error "CLI_ERROR" "Option --cache-duration requires a positive integer." "cli"
+                    errors::handle_error "CLI_ERROR" \
+                        "Option --cache-duration requires a positive integer." \
+                        "cli"
                     return 1
                 fi
                 export CACHE_DURATION="$2"
@@ -144,7 +145,8 @@ cli::parse_arguments() {
                 ;;
             --create-config)
                 configs::create_default_files
-                loggers::output "Default configuration created/updated in: '$CONFIG_DIR'"
+                loggers::output "Default configuration created/updated in: \
+'$CONFIG_DIR'"
                 exit 0
                 ;;
             --version)
@@ -187,8 +189,8 @@ cli::validate_and_filter_apps() {
         if [[ -n "${enabled_apps_assoc[$cli_app]:-}" ]]; then
             valid_cli_apps+=("$cli_app")
         else
-            loggers::warn \
-                "Application '$cli_app' specified on command line not found or not enabled in configurations. Skipping."
+            loggers::warn "Application '$cli_app' specified on command line \
+not found or not enabled in configurations. Skipping."
         fi
     done
     printf '%s\n' "${valid_cli_apps[@]}" # Print valid apps, one per line
@@ -197,7 +199,8 @@ cli::validate_and_filter_apps() {
 # Determine the final list of applications to check.
 # This defaults to all enabled apps unless specific keys are provided via CLI.
 # Usage: cli::determine_apps_to_check apps_array_name
-#   apps_array_name          - Name of the array in the caller's scope that will store the final list of apps
+#   apps_array_name - Name of the array in the caller's scope that will
+#   store the final list of apps
 cli::determine_apps_to_check() {
     local -n apps_ref=$1 # Nameref to the array in the caller's scope
 
@@ -215,7 +218,8 @@ cli::determine_apps_to_check() {
         # If no valid apps after filtering, handle error
         if [[ ${#apps_ref[@]} -eq 0 ]]; then
             errors::handle_error "CLI_ERROR" \
-                "No valid application keys specified on command line found in enabled configurations. Exiting." "cli"
+                "No valid application keys specified on command line found in \
+enabled configurations. Exiting." "cli"
             return 1
         fi
     fi

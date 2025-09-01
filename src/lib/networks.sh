@@ -25,7 +25,6 @@
 # SECTION: Globals for Networking
 # ------------------------------------------------------------------------------
 # Ensure LAST_API_CALL is initialized to avoid arithmetic errors
-LAST_API_CALL=0
 
 # These variables are now loaded from configs.sh
 # CACHE_DIR
@@ -53,7 +52,8 @@ networks::apply_rate_limit() {
     local current_time
     current_time=$(date +%s)
     local time_diff=$((current_time - LAST_API_CALL))
-    local rate_limit_val="${NETWORK_CONFIG[RATE_LIMIT]:-1}" # Default to 1 if not set
+    local rate_limit_val="${NETWORK_CONFIG[RATE_LIMIT]:-1}"
+    # Default to 1 if not set
 
     if ((time_diff < rate_limit_val)); then
         local sleep_duration=$((rate_limit_val - time_diff))
@@ -106,12 +106,14 @@ networks::fetch_cached_data() {
     local temp_download_file
 
     mkdir -p "${HOME}/.cache/packwatch/cache" || {
-        errors::handle_error "PERMISSION_ERROR" "Failed to create cache directory: '${HOME}/.cache/packwatch/cache'"
+        errors::handle_error "PERMISSION_ERROR" \
+            "Failed to create cache directory: '${HOME}/.cache/packwatch/cache'"
         return 1
     }
 
     # Check cache first
-    local cache_duration_val="${CACHE_DURATION:-300}" # Use global CACHE_DURATION
+    local cache_duration_val="${CACHE_DURATION:-300}"
+    # Use global CACHE_DURATION
     if [[ -f "$cache_file" ]] && [[ $(($(date +%s) - $(stat -c %Y "$cache_file"))) -lt "$cache_duration_val" ]]; then
         loggers::debug "Using cached response for: '$url' (file: '$cache_file')"
         echo "$cache_file" # Return the path to the cached file
@@ -122,12 +124,15 @@ networks::fetch_cached_data() {
         if ! temp_download_file=$(systems::create_temp_file "fetch_response"); then return 1; fi
 
         local -a curl_args
-        mapfile -t curl_args < <(networks::build_curl_args "$temp_download_file" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-4}") # Use configurable timeout multiplier
+        mapfile -t curl_args < <(networks::build_curl_args \
+            "$temp_download_file" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-4}")
+        # Use configurable timeout multiplier
 
         local max_retries_val="${NETWORK_CONFIG[MAX_RETRIES]:-3}"
         local retry_delay_val="${NETWORK_CONFIG[RETRY_DELAY]:-5}"
         if ! systems::reattempt_command "$max_retries_val" "$retry_delay_val" curl "${curl_args[@]}" "$url"; then
-            errors::handle_error "NETWORK_ERROR" "Failed to download '$url' after multiple attempts."
+            errors::handle_error "NETWORK_ERROR" \
+                "Failed to download '$url' after multiple attempts."
             systems::unregister_temp_file "$temp_download_file" # Clean up failed download
             return 1
         fi
@@ -135,20 +140,26 @@ networks::fetch_cached_data() {
         case "$expected_type" in
             "json")
                 if ! jq . "$temp_download_file" > /dev/null 2>&1; then
-                    errors::handle_error "VALIDATION_ERROR" "Fetched content for '$url' is not valid JSON."
+                    errors::handle_error "VALIDATION_ERROR" \
+                        "Fetched content for '$url' is not valid JSON."
                     systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
                     return 1
                 fi
                 ;;
             "html")
-                if ! grep -q '<html' "$temp_download_file" > /dev/null 2>&1 && ! grep -q '<!DOCTYPE html>' "$temp_download_file" > /dev/null 2>&1; then
-                    loggers::warn "Fetched content for '$url' might not be valid HTML, but continuing."
+                if ! grep -q '<html' "$temp_download_file" > /dev/null 2>&1 &&
+                    ! grep -q '<!DOCTYPE html>' "$temp_download_file" > \
+                        /dev/null 2>&1; then
+                    loggers::warn "Fetched content for '$url' might not be \
+valid HTML, but continuing."
                 fi
                 ;;
         esac
 
         mv -f "$temp_download_file" "$cache_file" || {
-            errors::handle_error "PERMISSION_ERROR" "Failed to move temporary file '$temp_download_file' to cache '$cache_file' for '$url'"
+            errors::handle_error "PERMISSION_ERROR" \
+                "Failed to move temporary file '$temp_download_file' to cache \
+'$cache_file' for '$url'"
             systems::unregister_temp_file "$temp_download_file" # Clean up if move fails
             return 1
         }
@@ -194,19 +205,23 @@ networks::get_effective_url() {
     networks::apply_rate_limit
 
     # Use curl to get the effective URL after redirects, discarding content
-    if ! curl_output=$(systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl -s -L \
+    if ! curl_output=$(systems::reattempt_command \
+        "${NETWORK_CONFIG[MAX_RETRIES]:-3}" \
+        "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl -s -L \
         -H "User-Agent: $(networks::_user_agent)" \
         -o /dev/null \
         -w "%{url_effective}\n" \
         "$url"); then
-        errors::handle_error "NETWORK_ERROR" "Failed to get effective URL for '$url'."
+        errors::handle_error "NETWORK_ERROR" \
+            "Failed to get effective URL for '$url'."
         return 1
     fi
 
     local effective_url
     effective_url=$(echo "$curl_output" | tr -d '\r')
     if [[ -z "$effective_url" ]]; then
-        errors::handle_error "NETWORK_ERROR" "Failed to get effective URL for '$url'."
+        errors::handle_error "NETWORK_ERROR" \
+            "Failed to get effective URL for '$url'."
         return 1
     fi
 
@@ -218,8 +233,8 @@ networks::get_effective_url() {
 # Uses PW_CONNECT_TIMEOUT and PW_MAX_TIME from globals.sh
 networks::fast_head_status() {
     local url="$1"
-    local ct="${PW_CONNECT_TIMEOUT:-1}"
-    local mt="${PW_MAX_TIME:-3}"
+    local ct="${PW_CONNECT_TIMEOUT}" # Now a global
+    local mt="${PW_MAX_TIME}"        # Now a global
     curl -sS -o /dev/null -I \
         --connect-timeout "$ct" --max-time "$mt" \
         -w '%{http_code}' "$url" 2> /dev/null || true
@@ -238,8 +253,8 @@ networks::fast_url_exists() {
 # Uses PW_CONNECT_TIMEOUT and PW_RESOLVE_MAX_TIME from globals.sh
 networks::fast_resolve_url() {
     local url="$1"
-    local ct="${PW_CONNECT_TIMEOUT:-1}"
-    local rt="${PW_RESOLVE_MAX_TIME:-4}"
+    local ct="${PW_CONNECT_TIMEOUT}"  # Now a global
+    local rt="${PW_RESOLVE_MAX_TIME}" # Now a global
     # Use HEAD with -L and capture final effective URL
     curl -sS -I -L --max-redirs 5 \
         --connect-timeout "$ct" --max-time "$rt" \
@@ -260,23 +275,29 @@ networks::download_file() {
 
     networks::require_https_or_fail "$url" "$allow_http" || return 1
 
-    interfaces::print_ui_line "  " "→ " "Downloading $(basename "$dest_path")..." >&2 # Redirect to stderr
+    interfaces::print_ui_line "  " "→ " \
+        "Downloading $(basename "$dest_path")..." >&2 # Redirect to stderr
 
     if [[ ${DRY_RUN:-0} -eq 1 ]]; then
-        interfaces::print_ui_line "    " "[DRY RUN] " "Would download: '$url'" "${COLOR_YELLOW}" >&2 # Redirect to stderr
+        interfaces::print_ui_line "    " "[DRY RUN] " \
+            "Would download: '$url'" "${COLOR_YELLOW}" >&2 # Redirect to stderr
         return 0
     fi
 
     if [[ -z "$url" ]]; then
-        errors::handle_error "NETWORK_ERROR" "Download URL is empty for destination: '$dest_path'."
+        errors::handle_error "NETWORK_ERROR" \
+            "Download URL is empty for destination: '$dest_path'."
         return 1
     fi
 
     local -a curl_args
-    mapfile -t curl_args < <(networks::build_curl_args "$dest_path" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-10}") # Use configurable timeout multiplier
+    mapfile -t curl_args < <(networks::build_curl_args "$dest_path" \
+        "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-10}")
+    # Use configurable timeout multiplier
 
     if ! systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl "${curl_args[@]}" "$url"; then
-        errors::handle_error "NETWORK_ERROR" "Failed to download '$url' after multiple attempts."
+        errors::handle_error "NETWORK_ERROR" \
+            "Failed to download '$url' after multiple attempts."
         return 1
     fi
 
@@ -339,8 +360,10 @@ networks::fetch_cached_or_error() {
     local path
     if ! path=$(networks::fetch_cached_data "$url" "$type"); then
         # Use responses::emit_error for consistency with custom checkers
-        # This creates a dependency from networks.sh back to checker_utils.sh, which is not ideal.
-        # Ideally, emit_error would be in a more generic error handling module.
+        # This creates a dependency from networks.sh back to checker_utils.sh,
+        # which is not ideal.
+        # Ideally, emit_error would be in a more generic error handling
+        # module.
         # For now, we'll keep the dependency for functional correctness.
         responses::emit_error "NETWORK_ERROR" "$fail_msg" "$app" > /dev/null
         return 1

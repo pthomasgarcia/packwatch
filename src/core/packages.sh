@@ -46,7 +46,8 @@ packages::get_installed_version_from_json() {
     fi
 
     if [[ ! -f "$versions_file" ]]; then
-        loggers::debug "Installed versions file not found: '$versions_file'. Assuming app not installed."
+        loggers::debug "Installed versions file not found: '$versions_file'. \
+Assuming app not installed."
         echo "0.0.0"
         return 0
     fi
@@ -79,13 +80,16 @@ packages::update_installed_version_json() {
     loggers::debug "Updating installed version for '$app_key' to '$new_version' in '$versions_file'"
 
     mkdir -p "$(dirname "$versions_file")" || {
-        errors::handle_error "PERMISSION_ERROR" "Failed to create directory for versions file: '$(dirname "$versions_file")'"
+        errors::handle_error "PERMISSION_ERROR" \
+            "Failed to create directory for versions file: \
+'$(dirname "$versions_file")'"
         return 1
     }
 
     if [[ ! -f "$versions_file" ]]; then
         echo '{}' > "$versions_file" || {
-            errors::handle_error "PERMISSION_ERROR" "Failed to initialize versions file: '$versions_file'"
+            errors::handle_error "PERMISSION_ERROR" \
+                "Failed to initialize versions file: '$versions_file'"
             return 1
         }
     fi
@@ -100,15 +104,20 @@ packages::update_installed_version_json() {
             systems::unregister_temp_file "$temp_versions_file"
             if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
                 sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2> /dev/null ||
-                    loggers::warn "Failed to change ownership of '$versions_file' to '$ORIGINAL_USER'."
+                    loggers::warn "Failed to change ownership of '$versions_file' \
+to '$ORIGINAL_USER'."
             fi
             return 0
         else
-            errors::handle_error "PERMISSION_ERROR" "Failed to move updated versions file from '$temp_versions_file' to '$versions_file'"
+            errors::handle_error "PERMISSION_ERROR" \
+                "Failed to move updated versions file from \
+'$temp_versions_file' to '$versions_file'"
             return 1
         fi
     else
-        errors::handle_error "VALIDATION_ERROR" "Failed to update JSON for app '$app_key' with version '$new_version'"
+        errors::handle_error "VALIDATION_ERROR" \
+            "Failed to update JSON for app '$app_key' with version \
+'$new_version'"
         return 1
     fi
 }
@@ -121,12 +130,14 @@ packages::initialize_installed_versions_file() {
     if [[ ! -f "$versions_file" ]]; then
         loggers::info "Initializing installed versions file: '$versions_file'"
         mkdir -p "$(dirname "$versions_file")" || {
-            errors::handle_error "PERMISSION_ERROR" "Failed to create directory for versions file"
+            errors::handle_error "PERMISSION_ERROR" \
+                "Failed to create directory for versions file"
             return 1
         }
 
         echo '{}' > "$versions_file" || {
-            errors::handle_error "PERMISSION_ERROR" "Failed to create versions file: '$versions_file'"
+            errors::handle_error "PERMISSION_ERROR" \
+                "Failed to create versions file: '$versions_file'"
             return 1
         }
     fi
@@ -154,7 +165,8 @@ packages::extract_deb_version() {
     deb_basename="$(basename "$deb_file")"
 
     if [[ ! -f "$deb_file" ]]; then
-        errors::handle_error "VALIDATION_ERROR" "DEB file not found: '$deb_file'"
+        errors::handle_error "VALIDATION_ERROR" \
+            "DEB file not found: '$deb_file'"
         return 1
     fi
 
@@ -163,7 +175,8 @@ packages::extract_deb_version() {
     # Fallback: attempt to parse version from filename using canonical sentinel pattern
     if [[ -z "$version" ]]; then
         # versions::extract_from_regex expects (text_data, pattern-key/sentinel, app_name)
-        # Passing literal "FILENAME_REGEX" triggers substitution with $VERSION_FILENAME_REGEX internally.
+        # Passing literal "FILENAME_REGEX" triggers substitution with
+        # $VERSION_FILENAME_REGEX internally.
         version=$(versions::extract_from_regex "$deb_basename" "FILENAME_REGEX" "$deb_basename")
     fi
 
@@ -180,13 +193,15 @@ packages::verify_deb_sanity() {
     local app_name="$2"
 
     if [[ ! -f "$deb_file" ]]; then
-        errors::handle_error "VALIDATION_ERROR" "DEB file not found for sanity check: '$deb_file'" "$app_name"
+        errors::handle_error "VALIDATION_ERROR" \
+            "DEB file not found for sanity check: '$deb_file'" "$app_name"
         return 1
     fi
 
     if ! dpkg-deb --info "$deb_file" &> /dev/null; then
         errors::handle_error "VALIDATION_ERROR" \
-            "Downloaded file is not a valid Debian package: '$deb_file'" "$app_name"
+            "Downloaded file is not a valid Debian package: '$deb_file'" \
+            "$app_name"
         return 1
     fi
 
@@ -204,7 +219,8 @@ packages::install_deb_package() {
     local app_key="$4"
 
     if [[ -z "$deb_file" ]] || [[ -z "$app_name" ]] || [[ -z "$version" ]] || [[ -z "$app_key" ]]; then
-        errors::handle_error "VALIDATION_ERROR" "Missing required parameters for DEB installation"
+        errors::handle_error "VALIDATION_ERROR" \
+            "Missing required parameters for DEB installation"
         return 1
     fi
 
@@ -214,10 +230,13 @@ packages::install_deb_package() {
     #     return 1
     # fi
 
-    interfaces::print_ui_line "  " "→ " "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." >&2
+    interfaces::print_ui_line "  " "→ " \
+        "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." \
+        >&2
 
     if [[ ${DRY_RUN:-0} -eq 1 ]]; then
-        interfaces::print_ui_line "    " "[DRY RUN] " "Would install v$version from: '$deb_file'" "${COLOR_YELLOW}" >&2
+        interfaces::print_ui_line "    " "[DRY RUN] " \
+            "Would install v$version from: '$deb_file'" "${COLOR_YELLOW}" >&2
         packages::update_installed_version_json "$app_key" "$version"
         return 0
     fi
@@ -230,8 +249,12 @@ packages::install_deb_package() {
     if ! install_output=$(sudo apt install -y "$deb_file" 2>&1); then
         errors::handle_error "INSTALLATION_ERROR" "Package installation failed for '$app_name'."
 
-        if [[ "$app_name" == "VeraCrypt" ]] && echo "$install_output" | grep -q "VeraCrypt volumes must be dismounted"; then
-            errors::handle_error "PERMISSION_ERROR" "VeraCrypt volumes must be dismounted to perform this update" "$app_name"
+        if [[ "$app_name" == "VeraCrypt" ]] &&
+            echo "$install_output" | grep -q \
+                "VeraCrypt volumes must be dismounted"; then
+            errors::handle_error "PERMISSION_ERROR" \
+                "VeraCrypt volumes must be dismounted to perform this update" \
+                "$app_name"
         else
             loggers::info "See apt output below for details:"
             echo "$install_output" >&2
@@ -251,7 +274,9 @@ packages::install_tgz_package() {
     local app_key="$4"
     local binary_name="$5"
 
-    interfaces::print_ui_line "  " "→ " "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." >&2
+    interfaces::print_ui_line "  " "→ " \
+        "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." \
+        >&2
 
     local install_dir="/usr/local/bin"
     local temp_extract_dir
@@ -260,7 +285,8 @@ packages::install_tgz_package() {
     trap '[[ -d "$temp_extract_dir" ]] && rm -rf "$temp_extract_dir"' RETURN EXIT
 
     if ! tar -xzf "$tgz_file" -C "$temp_extract_dir"; then
-        errors::handle_error "INSTALLATION_ERROR" "Failed to extract TGZ archive for '$app_name'." "$app_name"
+        errors::handle_error "INSTALLATION_ERROR" \
+            "Failed to extract TGZ archive for '$app_name'." "$app_name"
         return 1
     fi
 
@@ -268,7 +294,9 @@ packages::install_tgz_package() {
     # Find only the first matching file to avoid mv ambiguity
     binary_path=$(find "$temp_extract_dir" -type f -name "$binary_name" -print -quit)
     if [[ -z "$binary_path" ]]; then
-        errors::handle_error "INSTALLATION_ERROR" "Could not find executable '$binary_name' in extracted archive for '$app_name'." "$app_name"
+        errors::handle_error "INSTALLATION_ERROR" \
+            "Could not find executable '$binary_name' in extracted archive \
+for '$app_name'." "$app_name"
         return 1
     fi
 
@@ -277,12 +305,14 @@ packages::install_tgz_package() {
     fi
 
     if ! sudo mv "$binary_path" "${install_dir}/${binary_name}"; then
-        errors::handle_error "INSTALLATION_ERROR" "Failed to move binary for '$app_name'." "$app_name"
+        errors::handle_error "INSTALLATION_ERROR" \
+            "Failed to move binary for '$app_name'." "$app_name"
         return 1
     fi
 
     if ! sudo chmod +x "${install_dir}/${binary_name}"; then
-        errors::handle_error "PERMISSION_ERROR" "Failed to make binary executable for '$app_name'." "$app_name"
+        errors::handle_error "PERMISSION_ERROR" \
+            "Failed to make binary executable for '$app_name'." "$app_name"
         return 1
     fi
 
@@ -318,9 +348,13 @@ packages::process_deb_package() {
     if [[ ! -f "$final_deb_path" ]]; then
         loggers::info "Artifact not found in cache. Downloading..."
         updates::on_download_start "$app_name" "unknown"
-        if ! networks::download_file "$download_url" "$final_deb_path" "" "" "$allow_http"; then
-            errors::handle_error "NETWORK_ERROR" "Failed to download DEB package" "$app_name"
-            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download DEB package.\"}"
+        if ! networks::download_file "$download_url" "$final_deb_path" "" \
+            "" "$allow_http"; then
+            errors::handle_error "NETWORK_ERROR" \
+                "Failed to download DEB package" "$app_name"
+            updates::trigger_hooks ERROR_HOOKS "$app_name" \
+                "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \
+\"message\": \"Failed to download DEB package.\"}"
             return 1
         fi
         updates::on_download_complete "$app_name" "$final_deb_path"
@@ -333,8 +367,11 @@ packages::process_deb_package() {
         return 1
     fi
 
-    if ! verifiers::verify_artifact "$config_ref_name" "$final_deb_path" "$download_url" "$expected_checksum"; then
-        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded DEB package: '$app_name'." "$app_name"
+    if ! verifiers::verify_artifact "$config_ref_name" "$final_deb_path" \
+        "$download_url" "$expected_checksum"; then
+        errors::handle_error "VALIDATION_ERROR" \
+            "Verification failed for downloaded DEB package: '$app_name'." \
+            "$app_name"
         return 1
     fi
 
@@ -363,16 +400,20 @@ packages::process_tgz_package() {
 
     if [[ ! -f "$cached_artifact_path" ]]; then
         loggers::info "Artifact not found in cache. Downloading..."
-        if ! networks::download_file "$download_url" "$cached_artifact_path" "" "" "$allow_http" 600; then
-            errors::handle_error "NETWORK_ERROR" "Failed to download TGZ archive for '$app_name'." "$app_name"
+        if ! networks::download_file "$download_url" "$cached_artifact_path" \
+            "" "" "$allow_http" 600; then
+            errors::handle_error "NETWORK_ERROR" \
+                "Failed to download TGZ archive for '$app_name'." "$app_name"
             return 1
         fi
     else
         loggers::info "Using cached artifact: $cached_artifact_path"
     fi
 
-    if ! verifiers::verify_artifact "$config_ref_name" "$cached_artifact_path" "$download_url" "$expected_checksum"; then
-        errors::handle_error "VALIDATION_ERROR" "Checksum verification failed for '$app_name'." "$app_name"
+    if ! verifiers::verify_artifact "$config_ref_name" "$cached_artifact_path" \
+        "$download_url" "$expected_checksum"; then
+        errors::handle_error "VALIDATION_ERROR" \
+            "Checksum verification failed for '$app_name'." "$app_name"
         return 1
     fi
 

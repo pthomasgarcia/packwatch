@@ -31,7 +31,8 @@
 #   3 if error
 versions::compare_strings() {
     if [[ $# -ne 2 ]]; then
-        errors::handle_error "VALIDATION_ERROR" "versions::compare_strings requires two arguments."
+        errors::handle_error "VALIDATION_ERROR" \
+            "versions::compare_strings requires two arguments."
         return 3
     fi
 
@@ -96,7 +97,8 @@ versions::normalize() {
     version=$(echo "$version" |
         sed -E 's/-([aA]lpha|[bB]eta|[rR][cC])[.-]?([0-9]*)/~\L\1\E\2/')
 
-    # Remove build metadata (after '+') as it's not typically used for comparison
+    # Remove build metadata (after '+') as it's not typically used for
+    # comparison
     version=$(echo "$version" | sed -E 's/\+.*$//')
 
     # Trim whitespace
@@ -114,7 +116,8 @@ versions::extract_from_json() {
 
     raw_version=$(systems::fetch_json "$json_source" "$jq_expression" "$app_name")
     if [[ $? -ne 0 || -z "$raw_version" || "$raw_version" == "null" ]]; then
-        loggers::warn "Failed to extract version for '$app_name' using JSON expression '$jq_expression'. Defaulting to 0.0.0."
+        loggers::warn "Failed to extract version for '$app_name' using JSON \
+expression '$jq_expression'. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi
@@ -122,7 +125,8 @@ versions::extract_from_json() {
     normalized=$(versions::normalize "$raw_version")
 
     if ! validators::check_semver_format "$normalized"; then
-        loggers::warn "Invalid semver '$normalized' for '$app_name' extracted from JSON. Defaulting to 0.0.0."
+        loggers::warn "Invalid semver '$normalized' for '$app_name' \
+extracted from JSON. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi
@@ -152,8 +156,10 @@ versions::strip_prefix() {
 
 # Extract a version string from raw text using a regex pattern.
 # Usage: versions::extract_from_regex "$text_data" "v([0-9.]+)" "AppName"
-# Special sentinel: if regex_pattern is the literal string "FILENAME_REGEX" it will
-# be replaced internally with the value of $VERSION_FILENAME_REGEX (see globals.sh)
+# Special sentinel: if regex_pattern is the literal string "FILENAME_REGEX"
+# it will
+# be replaced internally with the value of $VERSION_FILENAME_REGEX (see
+# globals.sh)
 # so callers can avoid duplicating that canonical pattern.
 # Returns the normalized version string or "0.0.0" on failure.
 versions::extract_from_regex() {
@@ -163,7 +169,8 @@ versions::extract_from_regex() {
 
     if [[ "$regex_pattern" == "FILENAME_REGEX" ]]; then
         if [[ -z "${VERSION_FILENAME_REGEX:-}" ]]; then
-            loggers::warn "VERSION_FILENAME_REGEX is unset/empty; cannot extract version for '$app_name'. Defaulting to 0.0.0."
+            loggers::warn "VERSION_FILENAME_REGEX is unset/empty; cannot \
+extract version for '$app_name'. Defaulting to 0.0.0."
             echo "0.0.0"
             return 1
         fi
@@ -178,19 +185,22 @@ versions::extract_from_regex() {
             : # match found, proceed
             ;;
         1)
-            loggers::warn "Failed to extract version for '$app_name' using regex '$regex_pattern'. Defaulting to 0.0.0."
+            loggers::warn "Failed to extract version for '$app_name' using \
+regex '$regex_pattern'. Defaulting to 0.0.0."
             echo "0.0.0"
             return 1
             ;;
         2)
-            loggers::error "Invalid regex '$regex_pattern' used for '$app_name'."
+            loggers::error "Invalid regex '$regex_pattern' used for \
+'$app_name'."
             echo "0.0.0"
             return 1
             ;;
     esac
     if [[ -z "$raw_version" ]]; then
         # Defensive: in unlikely case of empty despite rc=0
-        loggers::warn "Empty version match for '$app_name' with regex '$regex_pattern'. Defaulting to 0.0.0."
+        loggers::warn "Empty version match for '$app_name' with regex \
+'$regex_pattern'. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi
@@ -198,7 +208,8 @@ versions::extract_from_regex() {
     normalized=$(versions::normalize "$raw_version")
 
     if ! validators::check_semver_format "$normalized"; then
-        loggers::warn "Invalid semver '$normalized' for '$app_name' extracted by regex. Defaulting to 0.0.0."
+        loggers::warn "Invalid semver '$normalized' for '$app_name' \
+extracted by regex. Defaulting to 0.0.0."
         echo "0.0.0"
         return 1
     fi

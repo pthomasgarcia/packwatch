@@ -33,13 +33,15 @@ notifiers::send_notification() {
     # Only send notification if notify-send is available
     if command -v notify-send &> /dev/null; then
         # If running under sudo, send as the original user
-        # If running under sudo, send as the original user. Otherwise, send as the current user.
+        # If running under sudo, send as the original user. Otherwise, send
+        # as the current user.
         local target_user="${SUDO_USER:-$USER}"
         local user_id
         user_id=$(getent passwd "$target_user" | cut -d: -f3 2> /dev/null)
 
         if [[ -z "$user_id" ]]; then
-            loggers::warn "Could not determine user ID for '$target_user'. Cannot send desktop notification."
+            loggers::warn "Could not determine user ID for '$target_user'. \
+Cannot send desktop notification."
             return
         fi
 

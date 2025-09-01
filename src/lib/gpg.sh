@@ -40,13 +40,15 @@ _gpg_prepare_temp_keyring_with_key() {
             fi
             ;;
         keyserver)
-            if ! gpg --homedir "$tmp" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$key_id" > /dev/null 2>&1; then
+            if ! gpg --homedir "$tmp" --keyserver hkps://keyserver.ubuntu.com \
+                --recv-keys "$key_id" > /dev/null 2>&1; then
                 rm -rf "$tmp"
                 return 1
             fi
             ;;
         wkd)
-            if ! GNUPGHOME="$tmp" gpg --auto-key-locate clear,wkd --locate-keys "$key_id" > /dev/null 2>&1; then
+            if ! GNUPGHOME="$tmp" gpg --auto-key-locate clear,wkd \
+                --locate-keys "$key_id" > /dev/null 2>&1; then
                 rm -rf "$tmp"
                 return 1
             fi
@@ -66,18 +68,21 @@ _gpg_prepare_temp_keyring_with_key() {
 
 # Verify a detached signature against a file
 gpg::verify_detached() {
-    local file="$1" sig="$2" key_id="$3" expected_fp="$4" source="${5:-user_keyring}" key_url="${6:-}"
+    local file="$1" sig="$2" key_id="$3" expected_fp="$4" \
+        source="${5:-user_keyring}" key_url="${6:-}"
     local home
     home=$(_gpg_prepare_temp_keyring_with_key "$source" "$key_id" "$key_url") || return 1
 
     # Extract actual fingerprint
     local actual_fp
-    actual_fp=$(GNUPGHOME="$home" gpg --fingerprint --with-colons "$key_id" 2> /dev/null | awk -F: '/^fpr:/ {print $10}' | head -n1)
+    actual_fp=$(GNUPGHOME="$home" gpg --fingerprint --with-colons "$key_id" \
+        2> /dev/null | awk -F: '/^fpr:/ {print $10}' | head -n1)
 
     local nx="${expected_fp//[[:space:]]/}" na="${actual_fp//[[:space:]]/}"
     if [[ -z "$na" || "$na" != "$nx" ]]; then
         _gpg_cleanup_home "$home"
-        errors::handle_error "GPG_ERROR" "Fingerprint mismatch. Expected $expected_fp, got ${actual_fp:-<none>}"
+        errors::handle_error "GPG_ERROR" "Fingerprint mismatch. Expected \
+$expected_fp, got ${actual_fp:-<none>}"
         return 1
     fi
 

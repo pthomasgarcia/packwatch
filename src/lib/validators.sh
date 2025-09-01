@@ -64,7 +64,8 @@ validators::check_file_path() {
 # Usage: validators::check_executable_file "/usr/bin/foo"
 validators::check_executable_file() {
     local file_path="$1"
-    [[ -f "$file_path" ]] && [[ -x "$file_path" ]] && validators::check_file_path "$file_path"
+    [[ -f "$file_path" ]] && [[ -x "$file_path" ]] &&
+        validators::check_file_path "$file_path"
 }
 
 # ------------------------------------------------------------------------------

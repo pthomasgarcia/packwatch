@@ -8,14 +8,6 @@
 #   - loggers.sh
 # ==============================================================================
 
-# --- Counter Definitions ---
-declare -Ag COUNTERS=(
-    ["updated"]=0
-    ["up_to_date"]=0
-    ["failed"]=0
-    ["skipped"]=0
-)
-
 # --- Counter Management Functions ---
 counters::reset() {
     COUNTERS["updated"]=0
@@ -54,7 +46,8 @@ counters::set() {
     fi
 
     if ! [[ "$value" =~ ^[0-9]+$ ]]; then
-        loggers::error "Invalid counter value: $value (must be a non-negative integer)"
+        loggers::error "Invalid counter value: $value (must be a non-negative \
+integer)"
         return 1
     fi
 

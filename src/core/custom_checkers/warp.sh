@@ -19,7 +19,8 @@ _warp::get_latest_version_from_url() {
     local actual_deb_url="$1"
     local filename
     filename=$(basename "$actual_deb_url")
-    echo "$filename" | grep -oP '[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?'
+    echo "$filename" | grep -oP \
+        '[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?'
 }
 
 _warp::perform_md5_check() {
@@ -36,7 +37,8 @@ _warp::perform_md5_check() {
         )
         local temp_app_config_ref="temp_app_config"
 
-        if ! verifiers::verify_artifact "$temp_app_config_ref" "$downloaded_file" "$actual_deb_url"; then
+        if ! verifiers::verify_artifact "$temp_app_config_ref" \
+            "$downloaded_file" "$actual_deb_url"; then
             responses::emit_error "VALIDATION_ERROR" \
                 "MD5 verification failed for $name." "$name"
             return 1
@@ -95,22 +97,20 @@ check_warp() {
 
     # Determine status
     local output_status
-    output_status=$(responses::determine_status \
-        "$installed_version" "$latest_version")
+    output_status=$(responses::determine_status "$installed_version" \
+        "$latest_version")
 
     # Early exit if up-to-date
     if [[ "$output_status" == "UP_TO_DATE" ]]; then
-        responses::emit_success "$output_status" "$latest_version" \
-            "deb" "Official API"
+        responses::emit_success "$output_status" "$latest_version" "deb" \
+            "Official API"
         return 0
     fi
 
     # Emit success with the real URL + filename
-    responses::emit_success "$output_status" "$latest_version" \
-        "deb" "Official API" \
-        download_url "$actual_deb_url" \
-        filename "$(basename "$actual_deb_url")" \
-        install_type "deb"
+    responses::emit_success "$output_status" "$latest_version" "deb" \
+        "Official API" download_url "$actual_deb_url" \
+        filename "$(basename "$actual_deb_url")" install_type "deb"
 
     local version_prefix
     version_prefix=$(echo "$latest_version" | cut -d'.' -f1-3)
@@ -121,7 +121,8 @@ check_warp() {
     downloaded_file="${download_dir}/${versioned_dir}/$(basename "$actual_deb_url")"
 
     _warp::perform_md5_check "$name" "$downloaded_file" "$actual_deb_url"
-    if ! _warp::perform_md5_check "$name" "$downloaded_file" "$actual_deb_url"; then
+    if ! _warp::perform_md5_check "$name" "$downloaded_file" \
+        "$actual_deb_url"; then
         return 1
     fi
 
