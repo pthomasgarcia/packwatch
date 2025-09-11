@@ -22,11 +22,11 @@ updates::_fetch_github_version() {
         return 1
     fi
 
-    # Extract the latest release object as a JSON STRING
+    # Extract the latest *stable* release object as a JSON STRING
     local latest_release_json
-    if ! latest_release_json=$("$UPDATES_GET_JSON_VALUE_IMPL" "$api_response_file" '.[0]' "$app_name"); then
-        errors::handle_error "PARSING_ERROR" "Failed to parse latest release information." "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to parse latest release information.\"}"
+    if ! latest_release_json=$(jq -c '[.[] | select(.prerelease == false)][0]' "$api_response_file"); then
+        errors::handle_error "PARSING_ERROR" "Failed to parse latest stable release information." "$app_name"
+        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"PARSING_ERROR\", \"message\": \"Failed to parse latest stable release information.\"}"
         return 1
     fi
 
@@ -196,6 +196,21 @@ updates::check_github_release() {
                 "$expected_checksum" \
                 "$name"
         elif [[ "$download_filename" == *.tgz ]]; then
+            local binary_name="${app_config_ref[binary_name]:-$(echo "$app_key" | tr '[:upper:]' '[:lower:]')}"
+            updates::process_installation \
+                "$name" \
+                "$app_key" \
+                "$latest_version" \
+                "packages::process_tgz_package" \
+                "$config_ref_name" \
+                "$filename_pattern_template" \
+                "$latest_version" \
+                "$download_url" \
+                "$expected_checksum" \
+                "$name" \
+                "$app_key" \
+                "$binary_name"
+        elif [[ "$download_filename" == *.tar.gz ]]; then
             local binary_name="${app_config_ref[binary_name]:-$(echo "$app_key" | tr '[:upper:]' '[:lower:]')}"
             updates::process_installation \
                 "$name" \

@@ -266,23 +266,27 @@ packages::install_deb_package() {
     return 0
 }
 # Install a TGZ archive.
-# Usage: packages::install_tgz_package "/path/to/file.tgz" "AppName" "1.2.3" "AppKey" "binary_name"
+# Usage: packages::install_tgz_package "/path/to/file.tgz" "AppName" "1.2.3" "AppKey" "binary_name" "install_strategy"
 packages::install_tgz_package() {
     local tgz_file="$1"
     local app_name="$2"
     local version="$3"
     local app_key="$4"
     local binary_name="$5"
+    local install_strategy="$6" # New parameter for installation strategy
 
     interfaces::print_ui_line "  " "→ " \
         "Attempting to install ${FORMAT_BOLD}$app_name${FORMAT_RESET} v$version..." \
         >&2
 
-    local install_dir="/usr/local/bin"
-    local temp_extract_dir
-    temp_extract_dir=$(mktemp -d -p "${HOME}/.cache/packwatch/tmp")
+    local install_dir="/usr/local" # Base install directory
+    local temp_extract_dir="" # Initialize to empty string
+    if ! temp_extract_dir=$(mktemp -d -p "${HOME}/.cache/packwatch/tmp"); then
+        errors::handle_error "SYSTEM_ERROR" "Failed to create temporary directory for '$app_name'." "$app_name"
+        return 1
+    fi
     # Ensure cleanup on any return path (trap executes inline command)
-    trap '[[ -d "$temp_extract_dir" ]] && rm -rf "$temp_extract_dir"' RETURN EXIT
+    trap "[[ -d \"$temp_extract_dir\" ]] && rm -rf \"$temp_extract_dir\"" RETURN EXIT
 
     if ! tar -xzf "$tgz_file" -C "$temp_extract_dir"; then
         errors::handle_error "INSTALLATION_ERROR" \
@@ -290,31 +294,66 @@ packages::install_tgz_package() {
         return 1
     fi
 
-    local binary_path
-    # Find only the first matching file to avoid mv ambiguity
-    binary_path=$(find "$temp_extract_dir" -type f -name "$binary_name" -print -quit)
-    if [[ -z "$binary_path" ]]; then
-        errors::handle_error "INSTALLATION_ERROR" \
-            "Could not find executable '$binary_name' in extracted archive \
-for '$app_name'." "$app_name"
-        return 1
-    fi
-
     if ! systems::ensure_sudo_privileges "$app_name"; then
         return 1
     fi
 
-    if ! sudo mv "$binary_path" "${install_dir}/${binary_name}"; then
-        errors::handle_error "INSTALLATION_ERROR" \
-            "Failed to move binary for '$app_name'." "$app_name"
-        return 1
-    fi
+    case "$install_strategy" in
+        "move_binary")
+            local binary_path
+            # Find only the first matching file to avoid mv ambiguity
+            binary_path=$(find "$temp_extract_dir" -type f -name "$binary_name" -print -quit)
+            if [[ -z "$binary_path" ]]; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Could not find executable '$binary_name' in extracted archive \
+for '$app_name'." "$app_name"
+                return 1
+            fi
 
-    if ! sudo chmod +x "${install_dir}/${binary_name}"; then
-        errors::handle_error "PERMISSION_ERROR" \
-            "Failed to make binary executable for '$app_name'." "$app_name"
-        return 1
-    fi
+            if ! sudo mv "$binary_path" "${install_dir}/bin/${binary_name}"; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Failed to move binary for '$app_name'." "$app_name"
+                return 1
+            fi
+
+            if ! sudo chmod +x "${install_dir}/bin/${binary_name}"; then
+                errors::handle_error "PERMISSION_ERROR" \
+                    "Failed to make binary executable for '$app_name'." "$app_name"
+                return 1
+            fi
+            ;;
+        "copy_root_contents")
+            local extracted_root_dir
+            # Find the top-level directory created by tar (e.g., nvim-linux-x86_64)
+            extracted_root_dir=$(find "$temp_extract_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)
+            if [[ -z "$extracted_root_dir" ]]; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Could not find extracted root directory in '$temp_extract_dir' for '$app_name'." "$app_name"
+                return 1
+            fi
+
+            # Copy the contents of the extracted directory to /usr/local/
+            if ! sudo cp -r "${extracted_root_dir}/"* "${install_dir}/"; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Failed to copy extracted files to '${install_dir}' for '$app_name'." "$app_name"
+                return 1
+            fi
+
+            # Ensure the main binary is executable (assuming it's in /usr/local/bin)
+            if [[ -n "$binary_name" ]] && [[ -f "${install_dir}/bin/${binary_name}" ]]; then
+                if ! sudo chmod +x "${install_dir}/bin/${binary_name}"; then
+                    errors::handle_error "PERMISSION_ERROR" \
+                        "Failed to make binary executable for '$app_name'." "$app_name"
+                    return 1
+                fi
+            fi
+            ;;
+        *)
+            errors::handle_error "INSTALLATION_ERROR" \
+                "Unknown installation strategy '$install_strategy' for '$app_name'." "$app_name"
+            return 1
+            ;;
+    esac
 
     # Explicit cleanup (trap also serves as safeguard)
     [[ -d "$temp_extract_dir" ]] && rm -rf "$temp_extract_dir"
@@ -390,6 +429,7 @@ packages::process_tgz_package() {
 
     local -n app_config_ref=$config_ref_name
     local allow_http="${app_config_ref[allow_insecure_http]:-0}"
+    local install_strategy="${app_config_ref[install_strategy]:-move_binary}" # Get strategy from config
 
     local artifact_cache_dir="${HOME}/.cache/packwatch/artifacts/${app_name}/v${latest_version}"
     mkdir -p "$artifact_cache_dir"
@@ -417,7 +457,7 @@ packages::process_tgz_package() {
         return 1
     fi
 
-    packages::install_tgz_package "$cached_artifact_path" "$app_name" "$latest_version" "$app_key" "$binary_name"
+    packages::install_tgz_package "$cached_artifact_path" "$app_name" "$latest_version" "$app_key" "$binary_name" "$install_strategy"
 }
 
 # ==============================================================================

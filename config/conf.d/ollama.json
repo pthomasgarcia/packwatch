@@ -8,6 +8,7 @@
     "repo_owner": "ollama",
     "repo_name": "ollama",
     "filename_pattern_template": "ollama-linux-amd64.tgz",
+    "install_strategy": "move_binary",
     "checksum_from_github_release_digest": true
   }
 }

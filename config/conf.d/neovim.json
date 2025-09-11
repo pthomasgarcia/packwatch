@@ -1,0 +1,16 @@
+{
+    "$schema": "../schema.json",
+    "app_key": "Neovim",
+    "enabled": true,
+    "application": {
+        "name": "Neovim",
+        "type": "github_release",
+        "repo_owner": "neovim",
+        "repo_name": "neovim",
+        "filename_pattern_template": "nvim-linux-x86_64.tar.gz",
+        "binary_name": "nvim",
+        "install_strategy": "copy_root_contents",
+        "checksum_from_github_release_digest": true,
+        "allow_insecure_http": false
+    }
+}
