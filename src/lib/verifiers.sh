@@ -41,6 +41,9 @@ PACKWATCH_VERIFIERS_LOADED=1
 
 # Constants
 
+# Default curl timeout for verifiers (in seconds)
+: ${VERIFIERS_CURL_TIMEOUT:=10}
+
 # --------------------------------------------------------------------
 # Private: basic utilities
 # --------------------------------------------------------------------
@@ -309,6 +312,70 @@ installation." "$app_name" # Changed message
         return 0           # Changed to return 0 to proceed
     fi
 }
+# --------------------------------------------------------------------
+# Public: verify content length from header
+# Usage: verifiers::verify_content_length "file_path" "download_url" "app_name" [expected_content_length]
+# Returns 0 on match, 1 on mismatch or if header is not found
+# --------------------------------------------------------------------
+verifiers::verify_content_length() {
+    local file_path="$1"
+    local download_url="$2"
+    local app_name="$3"
+    local expected_content_length="${4:-}" # New: Pre-resolved content length
+
+    local header_content_length
+    if [[ -n "$expected_content_length" ]]; then
+        header_content_length="$expected_content_length"
+    else
+        if [[ -z "${USER_AGENT:-}" ]]; then
+            # shellcheck source=src/core/globals.sh
+            source "$CORE_DIR/globals.sh" # Source globals for USER_AGENT
+        fi
+        header_content_length=$(curl -sI "$download_url" -A "$USER_AGENT" --max-time "$VERIFIERS_CURL_TIMEOUT" |
+            awk '/Content-Length:/ {print $2}' | tr -d '\r')
+    fi
+
+    if [[ -z "$header_content_length" ]]; then
+        verifiers::_has_func loggers::log &&
+            loggers::debug "Content-Length check skipped for '$app_name': no \
+Content-Length header found for '$download_url'"
+        verifiers::_emit_verify_hook "content-length" 0 "<missing-header>" \
+            "<no-length>" "content-length" "$app_name" "$file_path" \
+            "$download_url"
+        return 0 # Treat as success if no Content-Length to check against
+    fi
+
+    local local_file_size
+    local_file_size=$(stat -c %s "$file_path")
+
+    verifiers::_has_func interfaces::print_ui_line && {
+        interfaces::print_ui_line "  " "→ " "Expected Content-Length: \
+$header_content_length bytes"
+        interfaces::print_ui_line "  " "→ " "Actual file size:        \
+$local_file_size bytes"
+    }
+
+    if [[ "$header_content_length" == "$local_file_size" ]]; then
+        verifiers::_has_func interfaces::print_ui_line &&
+            interfaces::print_ui_line "  " "✓ " "Content-Length verified." \
+                "${COLOR_GREEN}"
+        verifiers::_emit_verify_hook "content-length" 1 \
+            "$header_content_length" "$local_file_size" "content-length" \
+            "$app_name" "$file_path" "$download_url"
+        return 0
+    else
+        verifiers::_has_func interfaces::print_ui_line &&
+            interfaces::print_ui_line "  " "✗ " \
+                "Content-Length verification FAILED." "${COLOR_RED}"
+        verifiers::_emit_verify_hook "content-length" 0 \
+            "$header_content_length" "$local_file_size" "content-length" \
+            "$app_name" "$file_path" "$download_url"
+        verifiers::_has_func errors::handle_error &&
+            errors::handle_error "VALIDATION_ERROR" "Content-Length mismatch \
+for '$app_name'." "$app_name"
+        return 1
+    fi
+}
 
 # --------------------------------------------------------------------
 # Private: perform checksum verification with hooks
@@ -544,7 +611,6 @@ ${actual_signature:-<not-found>}"
         "$gpg_fingerprint" "${actual_signature:-<not-found>}" \
         "${VERIFIER_ALGO_PGP}" "$app_name" "$downloaded_file_path" \
         "$sig_download_url" "$gpg_key_id" "$gpg_fingerprint"
-
     return 0
 }
 
@@ -591,7 +657,7 @@ Skipping GPG verification."
 
 # --------------------------------------------------------------------
 # Public: main verification entry point
-# Usage: verifiers::verify_artifact config_ref_name file_path download_url [direct_checksum]
+# Usage: verifiers::verify_artifact config_ref_name file_path download_url [direct_checksum] [expected_content_length]
 # Returns 0 on success, 1 on failure
 # --------------------------------------------------------------------
 verifiers::verify_artifact() {
@@ -599,11 +665,13 @@ verifiers::verify_artifact() {
     local downloaded_file_path="$2"
     local download_url="$3"
     local direct_checksum="${4:-}"
+    local expected_content_length_arg="${5:-}" # New: Optional pre-resolved content length from argument
 
     local -n cfg="$config_ref_name"
     local app_name="${cfg[name]:-unknown}"
     local skip_checksum="${cfg[skip_checksum]:-false}"
-    local skip_md5_check="${cfg[skip_md5_check]:-false}" # New configuration option
+    local skip_md5_check="${cfg[md5_check_skip]:-false}" # Use md5_check_skip from config
+    local skip_content_length_check="${cfg[skip_content_length_check]:-false}" # New configuration option
 
     verifiers::_has_func loggers::log &&
         loggers::debug "Verifying downloaded artifact for '$app_name': \
@@ -622,7 +690,15 @@ verifiers::verify_artifact() {
             "$downloaded_file_path" "$download_url" "$app_name" || return 1
     fi
 
-    # 3) Signature (optional)
+    # 3) Content Length (optional)
+    if [[ "$skip_content_length_check" != "true" ]]; then
+        local content_length_from_config="${cfg[content_length]:-$expected_content_length_arg}"
+        verifiers::verify_content_length \
+            "$downloaded_file_path" "$download_url" "$app_name" \
+            "$content_length_from_config" || return 1 # Pass content_length from config or argument
+    fi
+
+    # 4) Signature (optional)
     verifiers::verify_signature "$config_ref_name" "$downloaded_file_path" \
         "$download_url" || return 1
 

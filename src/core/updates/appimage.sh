@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source=src/core/updates/common.sh
 # ==============================================================================
 # MODULE: src/core/updates/appimage.sh
 # ==============================================================================
@@ -38,7 +39,13 @@ updates::process_appimage_file() {
     TEMP_FILES+=("$temp_appimage_path")
     # allow_http is provided as the 8th argument; do not override from config here.
 
-    updates::on_download_start "$app_name" "unknown"
+    local content_length_from_config="${app_config_ref[content_length]:-unknown}"
+    local content_length_display="${content_length_from_config}"
+    if [[ "$content_length_display" =~ ^[0-9]+$ ]]; then
+        content_length_display="$(_format_bytes "$content_length_display")"
+    fi
+
+    updates::on_download_start "$app_name" "$content_length_display"
     if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "" "" "$allow_http"; then # DI applied, added allow_http
         errors::handle_error "NETWORK_ERROR" "Failed to download AppImage" "$app_name"
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download AppImage.\"}"
@@ -47,7 +54,8 @@ updates::process_appimage_file() {
     updates::on_download_complete "$app_name" "$temp_appimage_path" # Hook
 
     # Perform verification after download
-    if ! verifiers::verify_artifact "$config_array_name" "$temp_appimage_path" "$download_url" "$expected_checksum"; then
+    # Pass content_length from config to verifiers::verify_artifact
+    if ! verifiers::verify_artifact "$config_array_name" "$temp_appimage_path" "$download_url" "$expected_checksum" "$content_length_from_config"; then
         errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded AppImage: '$app_name'." "$app_name"
         return 1
     fi

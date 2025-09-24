@@ -107,12 +107,14 @@ updates::handle_custom_check() {
         return 1
     fi
 
-    local status latest_version source error_message error_type_from_checker
+    local status latest_version source error_message error_type_from_checker content_length_from_output
     status=$(echo "$custom_checker_output" | jq -r '.status // "error"')
     latest_version=$(versions::normalize "$(echo "$custom_checker_output" | jq -r '.latest_version // "0.0.0"')")
     source=$(echo "$custom_checker_output" | jq -r '.source // "Unknown"')
     error_message=$(echo "$custom_checker_output" | jq -r '.error_message // empty')
     error_type_from_checker=$(echo "$custom_checker_output" | jq -r '.error_type // "CUSTOM_CHECKER_ERROR"')
+    content_length_from_output=$(echo "$custom_checker_output" | jq -r '.content_length // empty') # New: Content-Length
+    app_config_ref[content_length]="$content_length_from_output" # Store content_length in config map
 
     updates::print_version_info "$installed_version" "$source" "$latest_version"
 
