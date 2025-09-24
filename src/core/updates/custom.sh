@@ -114,6 +114,7 @@ updates::handle_custom_check() {
     error_message=$(echo "$custom_checker_output" | jq -r '.error_message // empty')
     error_type_from_checker=$(echo "$custom_checker_output" | jq -r '.error_type // "CUSTOM_CHECKER_ERROR"')
     content_length_from_output=$(echo "$custom_checker_output" | jq -r '.content_length // empty') # New: Content-Length
+    # shellcheck disable=SC2154 # content_length is a key in an associative array, not a variable.
     app_config_ref[content_length]="$content_length_from_output" # Store content_length in config map
 
     updates::print_version_info "$installed_version" "$source" "$latest_version"

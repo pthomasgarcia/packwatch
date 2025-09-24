@@ -42,7 +42,7 @@ PACKWATCH_VERIFIERS_LOADED=1
 # Constants
 
 # Default curl timeout for verifiers (in seconds)
-: ${VERIFIERS_CURL_TIMEOUT:=10}
+: "${VERIFIERS_CURL_TIMEOUT:=10}"
 
 # --------------------------------------------------------------------
 # Private: basic utilities
@@ -670,7 +670,7 @@ verifiers::verify_artifact() {
     local -n cfg="$config_ref_name"
     local app_name="${cfg[name]:-unknown}"
     local skip_checksum="${cfg[skip_checksum]:-false}"
-    local skip_md5_check="${cfg[md5_check_skip]:-false}" # Use md5_check_skip from config
+    local skip_md5_check="${cfg[md5_check_skip]:-false}"                       # Use md5_check_skip from config
     local skip_content_length_check="${cfg[skip_content_length_check]:-false}" # New configuration option
 
     verifiers::_has_func loggers::log &&

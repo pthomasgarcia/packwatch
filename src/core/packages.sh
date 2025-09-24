@@ -87,7 +87,7 @@ packages::update_installed_version_json() {
     }
 
     if [[ ! -f "$versions_file" ]]; then
-        echo '{}' >"$versions_file" || {
+        echo '{}' > "$versions_file" || {
             errors::handle_error "PERMISSION_ERROR" \
                 "Failed to initialize versions file: '$versions_file'"
             return 1
@@ -99,11 +99,11 @@ packages::update_installed_version_json() {
         return 1
     fi
 
-    if jq --arg key "$app_key" --arg version "$new_version" '.[$key] = $version' "$versions_file" >"$temp_versions_file"; then
+    if jq --arg key "$app_key" --arg version "$new_version" '.[$key] = $version' "$versions_file" > "$temp_versions_file"; then
         if mv "$temp_versions_file" "$versions_file"; then
             systems::unregister_temp_file "$temp_versions_file"
-            if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
-                sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2>/dev/null ||
+            if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
+                sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2> /dev/null ||
                     loggers::warn "Failed to change ownership of '$versions_file' \
 to '$ORIGINAL_USER'."
             fi
@@ -135,7 +135,7 @@ packages::initialize_installed_versions_file() {
             return 1
         }
 
-        echo '{}' >"$versions_file" || {
+        echo '{}' > "$versions_file" || {
             errors::handle_error "PERMISSION_ERROR" \
                 "Failed to create versions file: '$versions_file'"
             return 1
@@ -170,7 +170,7 @@ packages::extract_deb_version() {
         return 1
     fi
 
-    version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null)
+    version=$(dpkg-deb -f "$deb_file" Version 2> /dev/null)
 
     # Fallback: attempt to parse version from filename using canonical sentinel pattern
     if [[ -z "$version" ]]; then
@@ -198,7 +198,7 @@ packages::verify_deb_sanity() {
         return 1
     fi
 
-    if ! dpkg-deb --info "$deb_file" &>/dev/null; then
+    if ! dpkg-deb --info "$deb_file" &> /dev/null; then
         errors::handle_error "VALIDATION_ERROR" \
             "Downloaded file is not a valid Debian package: '$deb_file'" \
             "$app_name"
@@ -299,68 +299,68 @@ packages::install_tgz_package() {
     fi
 
     case "$install_strategy" in
-    "move_binary")
-        local binary_path
-        # Find only the first matching file to avoid mv ambiguity
-        local binary_path=""
-        while IFS= read -r -d '' file; do
-            binary_path="$file"
-            break
-        done < <(find "$temp_extract_dir" -type f -name "$binary_name" -print0)
-        if [[ -z "$binary_path" ]]; then
-            errors::handle_error "INSTALLATION_ERROR" \
-                "Could not find executable '$binary_name' in extracted archive \
+        "move_binary")
+            local binary_path
+            # Find only the first matching file to avoid mv ambiguity
+            local binary_path=""
+            while IFS= read -r -d '' file; do
+                binary_path="$file"
+                break
+            done < <(find "$temp_extract_dir" -type f -name "$binary_name" -print0)
+            if [[ -z "$binary_path" ]]; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Could not find executable '$binary_name' in extracted archive \
 for '$app_name'." "$app_name"
-            return 1
-        fi
+                return 1
+            fi
 
-        if ! sudo mv "$binary_path" "${install_dir}/bin/${binary_name}"; then
-            errors::handle_error "INSTALLATION_ERROR" \
-                "Failed to move binary for '$app_name'." "$app_name"
-            return 1
-        fi
+            if ! sudo mv "$binary_path" "${install_dir}/bin/${binary_name}"; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Failed to move binary for '$app_name'." "$app_name"
+                return 1
+            fi
 
-        if ! sudo chmod +x "${install_dir}/bin/${binary_name}"; then
-            errors::handle_error "PERMISSION_ERROR" \
-                "Failed to make binary executable for '$app_name'." "$app_name"
-            return 1
-        fi
-        ;;
-    "copy_root_contents")
-        local extracted_root_dir
-        # Find the top-level directory created by tar (e.g., nvim-linux-x86_64)
-        local extracted_root_dir=""
-        while IFS= read -r -d '' dir; do
-            extracted_root_dir="$dir"
-            break
-        done < <(find "$temp_extract_dir" -mindepth 1 -maxdepth 1 -type d -print0)
-        if [[ -z "$extracted_root_dir" ]]; then
-            errors::handle_error "INSTALLATION_ERROR" \
-                "Could not find extracted root directory in '$temp_extract_dir' for '$app_name'." "$app_name"
-            return 1
-        fi
-
-        # Copy the contents of the extracted directory to /usr/local/
-        if ! sudo cp -r "${extracted_root_dir}/"* "${install_dir}/"; then
-            errors::handle_error "INSTALLATION_ERROR" \
-                "Failed to copy extracted files to '${install_dir}' for '$app_name'." "$app_name"
-            return 1
-        fi
-
-        # Ensure the main binary is executable (assuming it's in /usr/local/bin)
-        if [[ -n "$binary_name" ]] && [[ -f "${install_dir}/bin/${binary_name}" ]]; then
             if ! sudo chmod +x "${install_dir}/bin/${binary_name}"; then
                 errors::handle_error "PERMISSION_ERROR" \
                     "Failed to make binary executable for '$app_name'." "$app_name"
                 return 1
             fi
-        fi
-        ;;
-    *)
-        errors::handle_error "INSTALLATION_ERROR" \
-            "Unknown installation strategy '$install_strategy' for '$app_name'." "$app_name"
-        return 1
-        ;;
+            ;;
+        "copy_root_contents")
+            local extracted_root_dir
+            # Find the top-level directory created by tar (e.g., nvim-linux-x86_64)
+            local extracted_root_dir=""
+            while IFS= read -r -d '' dir; do
+                extracted_root_dir="$dir"
+                break
+            done < <(find "$temp_extract_dir" -mindepth 1 -maxdepth 1 -type d -print0)
+            if [[ -z "$extracted_root_dir" ]]; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Could not find extracted root directory in '$temp_extract_dir' for '$app_name'." "$app_name"
+                return 1
+            fi
+
+            # Copy the contents of the extracted directory to /usr/local/
+            if ! sudo cp -r "${extracted_root_dir}/"* "${install_dir}/"; then
+                errors::handle_error "INSTALLATION_ERROR" \
+                    "Failed to copy extracted files to '${install_dir}' for '$app_name'." "$app_name"
+                return 1
+            fi
+
+            # Ensure the main binary is executable (assuming it's in /usr/local/bin)
+            if [[ -n "$binary_name" ]] && [[ -f "${install_dir}/bin/${binary_name}" ]]; then
+                if ! sudo chmod +x "${install_dir}/bin/${binary_name}"; then
+                    errors::handle_error "PERMISSION_ERROR" \
+                        "Failed to make binary executable for '$app_name'." "$app_name"
+                    return 1
+                fi
+            fi
+            ;;
+        *)
+            errors::handle_error "INSTALLATION_ERROR" \
+                "Unknown installation strategy '$install_strategy' for '$app_name'." "$app_name"
+            return 1
+            ;;
     esac
 
     # Explicit cleanup (trap also serves as safeguard)
