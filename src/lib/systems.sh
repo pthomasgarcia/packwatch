@@ -343,6 +343,16 @@ systems::require_json_value() {
     return 0
 }
 
+# Check if a file contains valid JSON.
+# Usage: systems::is_valid_json "/path/to/file.json"
+systems::is_valid_json() {
+    local json_file="$1"
+    if [[ ! -f "$json_file" ]]; then
+        return 1
+    fi
+   jq empty > /dev/null 2>&1 < "$json_file"
+}
+
 # ------------------------------------------------------------------------------
 # SECTION: Sudo Session Check
 # ------------------------------------------------------------------------------

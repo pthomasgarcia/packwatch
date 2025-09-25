@@ -390,53 +390,83 @@ cursor::check() {
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' RETURN
 
-    # Resolve download information
-    local download_info
-    mapfile -t download_info < <(cursor::resolve_download "$tmpdir")
-    if [[ ${#download_info[@]} -lt 5 ]]; then # Changed from 4 to 5
-        responses::emit_error "PARSING_ERROR" \
-            "Could not resolve download information for $name." "$name"
+    # Fetch API response
+    local api_response_path="$tmpdir/api_response"
+    local final_url
+    final_url=$(cursor::http_request "$CURSOR_API_ENDPOINT" "GET" "$tmpdir/headers.txt" "$api_response_path")
+
+    if [[ -z "$final_url" ]]; then
+        responses::emit_error "NETWORK_ERROR" "Failed to fetch Cursor API response for $name." "$name"
         return 1
     fi
 
-    local actual_download_url="${download_info[0]}"
-    local latest_version="${download_info[1]}"
-    local artifact_type="${download_info[2]}"
-    local chosen_name="${download_info[3]}"
-    local content_length="${download_info[4]}" # New: Content-Length
+    # Attempt to parse as JSON first
+    local actual_download_url="" latest_version="" content_length="" artifact_type=""
+    if systems::is_valid_json "$api_response_path"; then
+        actual_download_url=$(systems::fetch_json "$api_response_path" '.downloadUrl // empty')
+        latest_version=$(systems::fetch_json "$api_response_path" '.version // empty')
 
-    # Handle empty results
+        if [[ -n "$actual_download_url" && -n "$latest_version" ]]; then
+            loggers::debug "CURSOR: Parsed API response as JSON. Resolving final download URL."
+            local download_header_file="$tmpdir/download_headers.txt"
+            local resolved_download_url
+            if ! resolved_download_url=$(cursor::http_request "$actual_download_url" "HEAD" "$download_header_file"); then
+                resolved_download_url=$(cursor::http_request "$actual_download_url" "GET" "$download_header_file")
+            fi
+
+            if [[ -n "$resolved_download_url" ]]; then
+                actual_download_url="$resolved_download_url"
+                artifact_type="$(cursor::detect_artifact_type "$(basename "${actual_download_url%%[\?#]*}")")"
+                local download_info
+                mapfile -t download_info < <(cursor::parse_download_info "$download_header_file" "$resolved_download_url")
+                content_length="${download_info[4]}"
+            else
+                loggers::warn "CURSOR: Could not resolve download URL headers."
+                # Fallback to HTML parsing if resolution fails
+                actual_download_url=""
+                latest_version=""
+            fi
+        else
+            loggers::debug "CURSOR: JSON response missing required keys, falling back to HTML parsing."
+            actual_download_url=""
+            latest_version=""
+        fi
+    fi
+
+    if [[ -z "$actual_download_url" || -z "$latest_version" ]]; then
+        loggers::debug "CURSOR: API response is not valid JSON or was incomplete, attempting to parse as HTML."
+        local download_info
+        mapfile -t download_info < <(cursor::resolve_download "$tmpdir")
+        if [[ ${#download_info[@]} -lt 5 ]]; then
+            responses::emit_error "PARSING_ERROR" "Could not resolve download information for $name from HTML." "$name"
+            return 1
+        fi
+        actual_download_url="${download_info[0]}"
+        latest_version="${download_info[1]}"
+        artifact_type="${download_info[2]}"
+        content_length="${download_info[4]}"
+    fi
+
+    # Post-parsing validation and processing
     if [[ -z "$actual_download_url" ]]; then
-        responses::emit_error "PARSING_ERROR" \
-            "Could not resolve download URL for $name." "$name"
+        responses::emit_error "PARSING_ERROR" "Could not resolve download URL for $name." "$name"
         return 1
     fi
 
-    # If no version found, try to extract from URL
     if [[ -z "$latest_version" ]]; then
         latest_version="$(echo "$actual_download_url" | cursor::extract_version)"
     fi
 
-    # If no artifact type detected, try to detect from URL
     if [[ "$artifact_type" == "unknown" || -z "$artifact_type" ]]; then
         artifact_type="$(cursor::detect_artifact_type "$(basename "${actual_download_url%%[\?#]*}")")"
     fi
 
-    # Validate architecture compatibility
-    if [[ -n "$chosen_name" ]] && ! cursor::validate_architecture "$chosen_name" "$artifact_type"; then
-        responses::emit_error "PARSING_ERROR" \
-            "Could not find an x86_64 AppImage or .deb download for $name." "$name"
-        return 1
-    fi
-
-    # Determine artifact filename and install path
     local artifact_filename_final
     case "$artifact_type" in
         appimage) artifact_filename_final="cursor.AppImage" ;;
         deb) artifact_filename_final="cursor.deb" ;;
         *)
-            responses::emit_error "PARSING_ERROR" \
-                "Could not find an x86_64 AppImage or .deb download for $name." "$name"
+            responses::emit_error "PARSING_ERROR" "Unsupported artifact type '$artifact_type' for $name." "$name"
             return 1
             ;;
     esac
@@ -444,38 +474,30 @@ cursor::check() {
     local install_target_path
     install_target_path="$(cursor::resolve_install_path "$install_path_config" "$artifact_filename_final")" || return 1
 
-    # Clean and validate version
     latest_version="$(versions::strip_prefix "${latest_version:-}")"
 
-    # Validate required fields
-    if [[ -z "$actual_download_url" || -z "$latest_version" ]]; then
-        responses::emit_error "PARSING_ERROR" \
-            "Could not determine version and download URL from HTML/redirects." "$name"
+    if [[ -z "$latest_version" ]]; then
+        responses::emit_error "PARSING_ERROR" "Could not determine version for $name." "$name"
         return 1
     fi
 
-    # Validate download URL
     local resolved_url
     if ! resolved_url=$(networks::validate_url "$actual_download_url"); then
-        responses::emit_error "NETWORK_ERROR" \
-            "Invalid or unresolved download URL for $name (url=$actual_download_url)." "$name"
+        responses::emit_error "NETWORK_ERROR" "Invalid or unresolved download URL for $name (url=$actual_download_url)." "$name"
         return 1
     fi
 
-    # Log debug information
-    loggers::debug "CURSOR: installed_version='$installed_version' \
-latest_version='$latest_version' url='$resolved_url' type='$artifact_type'"
+    loggers::debug "CURSOR: installed_version='$installed_version' latest_version='$latest_version' url='$resolved_url' type='$artifact_type'"
 
-    # Determine status and emit response
     local output_status
     output_status=$(responses::determine_status "$installed_version" "$latest_version")
 
     responses::emit_success "$output_status" "$latest_version" "$artifact_type" \
-        "HTML redirect/scrape (x86_64 AppImage preferred, deb fallback)" \
+        "Official API (JSON with HTML fallback)" \
         download_url "$resolved_url" \
         install_target_path "$install_target_path" \
         app_key "$app_key" \
-        content_length "$content_length" # New: Content-Length
+        content_length "$content_length"
 
     return 0
 }
