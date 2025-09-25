@@ -285,8 +285,6 @@ packages::install_tgz_package() {
         errors::handle_error "SYSTEM_ERROR" "Failed to create temporary directory for '$app_name'." "$app_name"
         return 1
     fi
-    # Ensure cleanup on any return path (trap executes inline command)
-    trap '[[ -d \"$temp_extract_dir\" ]] && rm -rf \"$temp_extract_dir\"' RETURN EXIT
 
     if ! tar -xzf "$tgz_file" -C "$temp_extract_dir"; then
         errors::handle_error "INSTALLATION_ERROR" \

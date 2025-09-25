@@ -6,6 +6,7 @@
     "timeout": 30,
     "user_agent": "Packwatch/1.0",
     "rate_limit": 1,
+    "timeout_multiplier": 20,
     "retry_delay": 2
   }
 }
