@@ -327,11 +327,9 @@ verifiers::verify_content_length() {
     if [[ -n "$expected_content_length" ]]; then
         header_content_length="$expected_content_length"
     else
-        if [[ -z "${USER_AGENT:-}" ]]; then
-            # shellcheck source=src/core/globals.sh
-            source "$CORE_DIR/globals.sh" # Source globals for USER_AGENT
-        fi
-        header_content_length=$(curl -sI "$download_url" -A "$USER_AGENT" --max-time "$VERIFIERS_CURL_TIMEOUT" |
+        # USER_AGENT is a global associative array element, not a scalar variable.
+        # It is loaded via configs.sh into NETWORK_CONFIG.
+        header_content_length=$(curl -sI "$download_url" -A "${NETWORK_CONFIG["USER_AGENT"]}" --max-time "$VERIFIERS_CURL_TIMEOUT" |
             awk '/Content-Length:/ {print $2}' | tr -d '\r')
     fi
 

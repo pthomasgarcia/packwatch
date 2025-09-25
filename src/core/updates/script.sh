@@ -30,7 +30,6 @@ updates::process_script_installation() {
         return 1
     fi
 
-    local latest_version
     local temp_download_file
 
     if ! "$UPDATER_UTILS_CHECK_AND_GET_VERSION_FROM_DOWNLOAD_IMPL" \
@@ -76,7 +75,7 @@ updates::_fetch_version_from_url() {
             # If JSON extraction fails, try regex from the file content
             local file_content
             file_content=$(cat "$api_response_file")
-            if parsed_version=$(versions::extract_from_regex "$file_content" "$version_regex" "$app_name"); then
+            if parsed_version=$(web_parsers::extract_version "$file_content" "$version_regex"); then
                 latest_version="$parsed_version"
             else
                 loggers::warn "Could not extract version from '$version_url' for '$app_name' using JSON or regex. Defaulting to 0.0.0."

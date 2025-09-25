@@ -350,7 +350,7 @@ systems::is_valid_json() {
     if [[ ! -f "$json_file" ]]; then
         return 1
     fi
-   jq empty > /dev/null 2>&1 < "$json_file"
+    jq empty > /dev/null 2>&1 < "$json_file"
 }
 
 # ------------------------------------------------------------------------------

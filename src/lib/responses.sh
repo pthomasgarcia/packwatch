@@ -33,8 +33,7 @@ responses::emit_error() {
         --arg status "error" \
         --arg error_message "$error_message" \
         --arg error_type "$error_type" \
-        '{ "status": $status, "error_message": $error_message, \
-"error_type": $error_type }'
+        '{ "status": $status, "error_message": $error_message, "error_type": $error_type }'
 }
 # Determine the status of an application update.
 # Usage: responses::determine_status "1.0.0" "1.0.1"

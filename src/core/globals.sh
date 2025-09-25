@@ -30,6 +30,7 @@ fi
 readonly APP_NAME="Packwatch"
 readonly APP_DESCRIPTION="Application Update Checker"
 readonly SCRIPT_VERSION="2.0.0"
+readonly SCRIPT_NAME="packwatch"
 
 # --- 2. ANSI Formatting Constants ---
 # Constants for colored and formatted terminal output.

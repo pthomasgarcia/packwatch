@@ -71,21 +71,10 @@ updates::check_direct_download() {
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
 
         # Determine artifact type using filename patterns to handle multi-part extensions
-        local filename                             # Declare filename
-        filename=$(basename "$temp_download_file") # Assign filename from temp_download_file
-
-        local artifact_type=""
-        if [[ "$filename" == *.tar.gz ]]; then
-            artifact_type="tar.gz"
-        elif [[ "$filename" == *.tgz ]]; then
-            artifact_type="tgz"
-        elif [[ "$filename" == *.deb ]]; then
-            artifact_type="deb"
-        elif [[ "$filename" == *.AppImage || "$filename" == *.appimage ]]; then
-            artifact_type="AppImage"
-        else
-            artifact_type="${filename##*.}"
-        fi
+        local filename
+        filename=$(basename "$temp_download_file")
+        local artifact_type
+        artifact_type=$(web_parsers::detect_artifact_type "$filename")
 
         case "$artifact_type" in
             deb)
@@ -112,7 +101,7 @@ updates::check_direct_download() {
                     "$app_key" \
                     "$binary_name"
                 ;;
-            AppImage)
+            appimage)
                 local install_target_full_path="${app_config_ref[install_path]:-$HOME/Applications/${name}.AppImage}"
                 updates::process_installation \
                     "$name" \

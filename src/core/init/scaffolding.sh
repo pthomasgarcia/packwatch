@@ -26,6 +26,7 @@ source "$CORE_DIR/../lib/gpg.sh"
 source "$CORE_DIR/../lib/string_utils.sh"
 source "$CORE_DIR/../lib/systems.sh"
 source "$CORE_DIR/../lib/responses.sh"
+source "$CORE_DIR/../lib/web_parsers.sh"
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).

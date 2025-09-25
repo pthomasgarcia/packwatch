@@ -13,14 +13,20 @@
 #   - packages.sh
 #   - systems.sh
 #   - validators.sh
+#   - web_parsers.sh
 # ==============================================================================
 
 _warp::get_latest_version_from_url() {
     local actual_deb_url="$1"
     local filename
     filename=$(basename "$actual_deb_url")
-    echo "$filename" | grep -oP \
-        '[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?'
+    loggers::debug "Warp: _warp::get_latest_version_from_url - filename='$filename'"
+    local regex_pattern='[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{2}\.[0-9]{2})?(\.stable)?(\.[0-9]+)?(_[0-9]+)?'
+    loggers::debug "Warp: _warp::get_latest_version_from_url - regex_pattern='$regex_pattern'"
+    local extracted_version
+    extracted_version=$(web_parsers::extract_version "$filename" "$regex_pattern")
+    loggers::debug "Warp: _warp::get_latest_version_from_url - web_parsers::extract_version returned '$extracted_version'"
+    echo "$extracted_version"
 }
 
 _warp::perform_md5_check() {
@@ -75,14 +81,17 @@ check_warp() {
 
     local url="$download_url_base"
     local actual_deb_url
+    loggers::debug "Warp: download_url_base='$download_url_base'"
     if ! actual_deb_url=$(networks::get_effective_url "$url"); then
         responses::emit_error "NETWORK_ERROR" \
             "Failed to resolve download URL for $name." "$name"
         return 1
     fi
+    loggers::debug "Warp: networks::get_effective_url returned actual_deb_url='$actual_deb_url'"
 
     local latest_version_raw
     latest_version_raw=$(_warp::get_latest_version_from_url "$actual_deb_url")
+    loggers::debug "Warp: _warp::get_latest_version_from_url returned latest_version_raw='$latest_version_raw'"
 
     local latest_version
     latest_version=$(versions::strip_prefix "$latest_version_raw")

@@ -13,11 +13,12 @@
 #   - packages.sh
 #   - systems.sh
 #   - validators.sh
+#   - web_parsers.sh
 # ==============================================================================
 
 _veracrypt::get_latest_version_from_page() {
     local page_content="$1"
-    echo "$page_content" | grep -oE 'VeraCrypt [0-9]+\.[0-9]+\.[0-9]+' | head -n1 | cut -d' ' -f2
+    web_parsers::extract_version "$page_content" 'VeraCrypt [0-9]+\.[0-9]+\.[0-9]+' | cut -d' ' -f2
 }
 
 _veracrypt::get_download_url_from_page() {
@@ -30,19 +31,18 @@ _veracrypt::get_download_url_from_page() {
 
     local download_url_final=""
     if [[ -n "$ubuntu_release" ]]; then
-        download_url_final=$(echo "$page_content" |
-            grep -E "href=\"[^\"]*veracrypt-${latest_version}-Ubuntu-${ubuntu_release}-amd64\\.deb\"" |
-            head -n 1 |
-            sed -nE "s/.*href=\"([^\"]*veracrypt-${latest_version}-Ubuntu-${ubuntu_release}-amd64\\.deb)\".*/\1/p")
-        download_url_final=$(networks::decode_url "$download_url_final")
+        local candidates
+        mapfile -t candidates < <(web_parsers::extract_urls_from_html <(echo "$page_content") "")
+        download_url_final=$(echo "${candidates[@]}" | grep -oE "https://[^\"]*veracrypt-${latest_version}-Ubuntu-${ubuntu_release}-amd64\\.deb" | head -n1)
         if ! download_url_final=$(networks::validate_url "$download_url_final"); then
             download_url_final=""
         fi
     fi
 
     if [[ -z "$download_url_final" ]]; then
-        download_url_final=$(echo "$page_content" |
-            grep -Eo "https://[^\"]*veracrypt-${latest_version}.*amd64\\.deb" | head -n1)
+        local candidates
+        mapfile -t candidates < <(web_parsers::extract_urls_from_html <(echo "$page_content") "")
+        download_url_final=$(echo "${candidates[@]}" | grep -oE "https://[^\"]*veracrypt-${latest_version}.*amd64\\.deb" | head -n1)
         if ! download_url_final=$(networks::validate_url "$download_url_final"); then
             download_url_final=""
         fi
@@ -109,11 +109,10 @@ check_veracrypt() {
     loggers::debug "VERACRYPT: installed_version='$installed_version' latest_version='$latest_version'"
 
     # Determine status
-    # Determine status
     local output_status
     output_status=$(responses::determine_status "$installed_version" "$latest_version")
 
-    if [[ "$output_status" == "UP_TO_DATE" ]]; then
+    if [[ "$output_status" == "no_update" ]]; then
         responses::emit_success "$output_status" "$latest_version" "deb" "Official Download Page" \
             gpg_key_id "$gpg_key_id" \
             gpg_fingerprint "$gpg_fingerprint"
