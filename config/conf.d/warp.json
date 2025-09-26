@@ -8,7 +8,7 @@
     "package_name": "warp-terminal",
     "download_dir": "/home/p/.cache/packwatch/artifacts/Warp",
     "custom_checker_script": "warp.sh",
-    "custom_checker_func": "check_warp",
+    "custom_checker_func": "warp::check",
     "download_url_base": "https://app.warp.dev/download?package=deb"
   }
 }

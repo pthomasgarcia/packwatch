@@ -7,6 +7,6 @@
     "type": "custom",
     "flatpak_app_id": "dev.zed.Zed",
     "custom_checker_script": "zed.sh",
-    "custom_checker_func": "check_zed"
+    "custom_checker_func": "zed::check"
   }
 }

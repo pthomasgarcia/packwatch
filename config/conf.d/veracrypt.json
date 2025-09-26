@@ -7,7 +7,7 @@
     "type": "custom",
     "package_name": "veracrypt",
     "custom_checker_script": "veracrypt.sh",
-    "custom_checker_func": "check_veracrypt",
+    "custom_checker_func": "veracrypt::check",
     "download_url_base": "https://veracrypt.io/en/Downloads.html",
     "gpg_key_id": "680D16DE",
     "gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",

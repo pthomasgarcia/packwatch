@@ -62,7 +62,17 @@ systems::cache_json() {
 systems::fetch_cached_json() {
     local cache_key="$1"
     local field="$2"
-    echo "${_jq_cache["${cache_key}_${field}"]:-}"
+    local value="${_jq_cache["${cache_key}_${field}"]:-}"
+    if [[ "$value" == "null" ]]; then
+        local original_json="${_jq_cache["$cache_key"]:-}"
+        if [[ -n "$original_json" ]] &&
+            echo "$original_json" | jq -e --arg field "$field" '.[$field] == null' > /dev/null; then
+            echo ""
+            return
+        fi
+    fi
+
+    echo "$value"
 }
 
 # Clear JSON cache

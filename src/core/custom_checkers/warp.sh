@@ -12,6 +12,7 @@
 #   - errors.sh
 #   - packages.sh
 #   - systems.sh
+#   - configs.sh
 # ==============================================================================
 
 _warp::get_latest_version_from_repo() {
@@ -19,26 +20,24 @@ _warp::get_latest_version_from_repo() {
         awk '/^Package: warp-terminal$/ {found=1} found && /^Version:/ {print $2; exit}'
 }
 
-check_warp() {
+warp::check() {
     local app_config_json="$1"
 
-    local cache_key
-    cache_key="warp_$(hashes::generate "$app_config_json")"
-    systems::cache_json "$app_config_json" "$cache_key"
-
-    local name app_key download_url_base
-    name=$(systems::fetch_cached_json "$cache_key" "name")
-    app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
-    download_url_base=$(systems::fetch_cached_json "$cache_key" "download_url_base")
-
-    if [[ -z "$name" || -z "$app_key" ]]; then
-        responses::emit_error "CONFIG_ERROR" \
-            "Missing required fields: name/app_key." "${name:-warp}"
+    local -A app_info
+    if ! configs::get_cached_app_info "$app_config_json" app_info; then
         return 1
     fi
 
+    local name="${app_info["name"]}"
+    local app_key="${app_info["app_key"]}"
     local installed_version
-    installed_version=$(packages::fetch_version "$app_key")
+    if ! installed_version=$(packages::fetch_version "$app_key"); then
+        installed_version="${app_info["installed_version"]}"
+    fi
+    local cache_key="${app_info["cache_key"]}"
+
+    local download_url_base
+    download_url_base=$(systems::fetch_cached_json "$cache_key" "download_url_base")
 
     local latest_version
     latest_version=$(_warp::get_latest_version_from_repo)

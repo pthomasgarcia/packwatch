@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # ==============================================================================
 # MODULE: configs.sh
 # ==============================================================================
@@ -330,7 +331,7 @@ configs::create_default_files() {
             "gpg_key_id": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
             "gpg_fingerprint": "5069A233D55A0EEB174A5FC3821ACD02680D16DE",
             "custom_checker_script": "veracrypt.sh",
-            "custom_checker_func": "check_veracrypt"
+            "custom_checker_func": "veracrypt::check"
         }
     },
     "Ghostty": {
@@ -365,7 +366,7 @@ configs::create_default_files() {
             "type": "custom",
             "package_name": "warp-terminal",
             "custom_checker_script": "warp.sh",
-            "custom_checker_func": "check_warp"
+            "custom_checker_func": "warp::check"
         }
     },
     "WaveTerm": {
@@ -399,7 +400,7 @@ configs::create_default_files() {
             "type": "custom",
             "flatpak_app_id": "dev.zed.Zed",
             "custom_checker_script": "zed.sh",
-            "custom_checker_func": "check_zed"
+            "custom_checker_func": "zed::check"
         }
     }
 }
@@ -464,6 +465,52 @@ configs::get_app_config() {
 
     # Add the app_key itself to the config for convenience
     app_config_ref["app_key"]="$app_key"
+    return 0
+}
+
+# Get cached application configuration and installed version.
+# This function centralizes the common logic for custom checkers.
+# Usage: configs::get_cached_app_info "$app_config_json" app_info_nameref
+#   app_config_json - The JSON string of the application's configuration.
+#   app_info_nameref - The name of an associative array in the caller's scope
+#                      to populate with 'name', 'app_key', 'installed_version'.
+# Returns 0 on success, 1 on error.
+configs::get_cached_app_info() {
+    local app_config_json="$1"
+    local app_info_nameref="$2"
+
+    if [[ -z "$app_info_nameref" ]] || ! declare -p "$app_info_nameref" 2> /dev/null | grep -q 'declare -A'; then
+        loggers::log "ERROR" "configs::get_cached_app_info: Second argument '$app_info_nameref' is missing or not an associative array."
+        return 1
+    fi
+    local -n app_info_ref=$app_info_nameref # Nameref to the array in the caller's scope
+
+    local cache_key
+    cache_key="$(hashes::generate "$app_config_json")"
+    systems::cache_json "$app_config_json" "$cache_key"
+
+    local name app_key
+    name=$(systems::fetch_cached_json "$cache_key" "name")
+    app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
+
+    if [[ -z "$name" || -z "$app_key" ]]; then
+        responses::emit_error "CONFIG_ERROR" \
+            "Missing 'name' or 'app_key' in config JSON for cache_key '$cache_key'." "${name:-unknown_app}"
+        return 1
+    fi
+
+    local installed_version
+    local installed_version
+    if ! installed_version=$(packages::fetch_version "$app_key"); then
+        loggers::log "ERROR" "Failed to fetch installed version for app_key: '$app_key'"
+        return 1
+    fi
+
+    app_info_ref["name"]="$name"
+    app_info_ref["app_key"]="$app_key"
+    app_info_ref["installed_version"]="$installed_version"
+    app_info_ref["cache_key"]="$cache_key"
+
     return 0
 }
 

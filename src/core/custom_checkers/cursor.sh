@@ -13,6 +13,7 @@
 #   - packages.sh
 #   - systems.sh
 #   - web_parsers.sh
+#   - configs.sh
 # ==============================================================================
 
 # Constants
@@ -20,27 +21,6 @@ readonly CURSOR_API_ENDPOINT="https://cursor.com/api/download?platform=linux-x64
 readonly USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 # Configuration parsing and validation
-cursor::parse_config() {
-    local app_config_json="$1"
-    local cache_key
-    cache_key="cursor_$(hashes::generate "$app_config_json")"
-
-    systems::cache_json "$app_config_json" "$cache_key"
-
-    local name install_path_config app_key
-    name=$(systems::fetch_cached_json "$cache_key" "name")
-    install_path_config=$(systems::fetch_cached_json "$cache_key" "install_path")
-    app_key=$(systems::fetch_cached_json "$cache_key" "app_key")
-
-    if [[ -z "$name" || -z "$app_key" ]]; then
-        responses::emit_error "PARSING_ERROR" \
-            "Missing 'name' or 'app_key' in config JSON." "${name:-cursor}"
-        return 1
-    fi
-
-    printf '%s\n%s\n%s\n' "$name" "$install_path_config" "$app_key"
-}
-
 # Path resolution with environment variable expansion
 cursor::resolve_install_path() {
     local install_path_config="$1"
@@ -188,16 +168,26 @@ cursor::check() {
     local app_config_json="$1"
 
     # Parse configuration
-    local config_info
-    mapfile -t config_info < <(cursor::parse_config "$app_config_json") || return 1
-    local name="${config_info[0]}"
-    local install_path_config="${config_info[1]}"
-    local app_key="${config_info[2]}"
+    local -A app_info
+    if ! configs::get_cached_app_info "$app_config_json" app_info; then
+        return 1
+    fi
 
-    # Get installed version
-    local installed_version
-    installed_version=$(packages::fetch_version "$app_key")
+    local name="${app_info["name"]}"
+    local app_key="${app_info["app_key"]}"
+    local installed_version="${app_info["installed_version"]}"
+    local cache_key="${app_info["cache_key"]}"
 
+    local install_path_config
+    if ! install_path_config="$(systems::fetch_cached_json "$cache_key" "install_path")"; then
+        responses::emit_error "PARSING_ERROR" "Failed to resolve install path for $name (cache_key=$cache_key)." "$name"
+        return 1
+    fi
+
+    if [[ -z "$install_path_config" || "$install_path_config" == "null" ]]; then
+        responses::emit_error "PARSING_ERROR" "install_path is missing in cached data for $name." "$name"
+        return 1
+    fi
     # Set up temporary directory
     local tmpdir
     tmpdir="$(mktemp -d)"

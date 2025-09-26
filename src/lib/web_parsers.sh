@@ -92,14 +92,14 @@ web_parsers::extract_urls_from_html() {
     local html_file="$1"
     local base_url="$2"
 
-    # Extract absolute URLs
-    grep -Eo 'https?://[^"'\''<>\s]+' "$html_file" | sed -n '1,200p'
+    # Extract absolute URLs and decode HTML entities
+    grep -Eo 'https?://[^"'\''<>\s]+' "$html_file" | sed -n '1,200p' | sed 's/&#43;/+/g'
 
-    # Extract and resolve relative URLs
+    # Extract and resolve relative URLs, then decode HTML entities
     local rel_hrefs
     mapfile -t rel_hrefs < <(
         grep -Eio '<a[^>]+href=["'\''][^"'\'' #>]+["'\'']' "$html_file" |
-            sed -E 's/.*href=["'\'']([^"'\''#>]+).*/\1/i' | sed -n '1,200p'
+            sed -E 's/.*href=["'\'']([^"'\''#>]+).*/\1/i' | sed -n '1,200p' | sed 's/&#43;/+/g'
     )
 
     local rel
