@@ -115,7 +115,9 @@ networks::fetch_cached_data() {
     local cache_duration_val="${CACHE_DURATION:-300}"
     # Use global CACHE_DURATION
     if [[ -f "$cache_file" ]] && [[ $(($(date +%s) - $(stat -c %Y "$cache_file"))) -lt "$cache_duration_val" ]]; then
-        loggers::debug "Using cached response for: '$url' (file: '$cache_file')"
+        if [[ ${VERBOSE:-0} -eq 1 ]]; then
+            loggers::debug "Using cached response for: '$url' (file: '$cache_file')"
+        fi
         echo "$cache_file" # Return the path to the cached file
         return 0
     else

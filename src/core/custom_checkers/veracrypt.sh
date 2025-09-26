@@ -19,7 +19,9 @@
 
 _veracrypt::get_latest_version_from_page() {
     local page_content="$1"
-    web_parsers::extract_version "$page_content" 'VeraCrypt [0-9]+\.[0-9]+\.[0-9]+' | cut -d' ' -f2
+    echo "$page_content" |
+        grep -Po 'Latest Stable Release - \K[0-9]+\.[0-9]+\.[0-9]+' |
+        head -n1
 }
 
 _veracrypt::get_download_url_from_page() {
@@ -27,23 +29,20 @@ _veracrypt::get_download_url_from_page() {
     local latest_version="$2"
     local name="$3"
 
-    local ubuntu_release
-    ubuntu_release=$(lsb_release -rs 2> /dev/null || echo "")
-
     local download_url_final=""
     local -a candidates
     mapfile -t candidates < <(web_parsers::extract_urls_from_html <(echo "$page_content") "")
 
-    # Try to find Ubuntu-specific DEB
+    # Try to find Ubuntu-specific DEB (still keep this logic, just remove the `ubuntu_release` variable)
     for url_candidate in "${candidates[@]}"; do
-        if [[ -n "$ubuntu_release" ]] && [[ "$url_candidate" =~ https://[^\"]*veracrypt-${latest_version}-Ubuntu-[0-9.]+-amd64\.deb ]]; then
+        if [[ "$url_candidate" =~ https://[^\"]*veracrypt-${latest_version}-Ubuntu-[0-9.]+-amd64\.deb ]]; then
             download_url_final="$url_candidate"
             break
         fi
     done
 
+    # If no Ubuntu-specific DEB, try a generic amd64 DEB
     if [[ -z "$download_url_final" ]]; then
-        # If no Ubuntu-specific DEB, try to find a generic DEB
         for url_candidate in "${candidates[@]}"; do
             if [[ "$url_candidate" =~ https://[^\"]*veracrypt-${latest_version}.*amd64\.deb ]]; then
                 download_url_final="$url_candidate"
@@ -51,18 +50,16 @@ _veracrypt::get_download_url_from_page() {
             fi
         done
     fi
-    # No error emitted here, just return the best candidate or empty string.
 
-    # Handle launchpadlibrarian.net URLs - fix the URL encoding issue
+    # Adjust launchpadlibrarian.net URLs
     if [[ "$download_url_final" =~ launchpadlibrarian\.net ]]; then
         local base_name
         base_name=$(basename "$download_url_final")
-        # Properly decode any HTML entities and construct the correct URL
         base_name="${base_name//%2B/+}"
         download_url_final="https://launchpad.net/veracrypt/trunk/${latest_version}/+download/${base_name}"
     fi
 
-    echo "$download_url_final"
+    printf %s "$download_url_final"
 }
 
 _veracrypt::get_signature_url_from_page() {
@@ -74,7 +71,7 @@ _veracrypt::get_signature_url_from_page() {
     local -a candidates
     mapfile -t candidates < <(web_parsers::extract_urls_from_html <(echo "$page_content") "")
 
-    # Look for a signature URL explicitly linked with the latest version
+    # Look for version-specific sig/asc
     for url_candidate in "${candidates[@]}"; do
         if [[ "$url_candidate" =~ veracrypt-${latest_version}.*\.sig ]] ||
             [[ "$url_candidate" =~ veracrypt-${latest_version}.*\.asc ]]; then
@@ -83,17 +80,17 @@ _veracrypt::get_signature_url_from_page() {
         fi
     done
 
-    # Fallback: look for generic PGP signature links if no version-specific one found
+    # Fallback: look for any .sig/.asc with "PGP" in it
     if [[ -z "$sig_url_final" ]]; then
         for url_candidate in "${candidates[@]}"; do
-            if [[ "$url_candidate" =~ PGP ]] && [[ "$url_candidate" =~ \.sig|\.asc ]]; then
+            if [[ "$url_candidate" =~ PGP ]] && [[ "$url_candidate" =~ \.(sig|asc) ]]; then
                 sig_url_final="$url_candidate"
                 break
             fi
         done
     fi
 
-    echo "$sig_url_final"
+    printf %s "$sig_url_final"
 }
 
 veracrypt::check() {
@@ -102,6 +99,7 @@ veracrypt::check() {
     # Cache config JSON
     local -A app_info
     if ! configs::get_cached_app_info "$app_config_json" app_info; then
+        responses::emit_error "CONFIG_ERROR" "Failed to cache app info." "VeraCrypt" >&2
         return 1
     fi
 
@@ -118,7 +116,9 @@ veracrypt::check() {
     # Fetch download page
     local url="$download_url_base"
     local page_content
-    if ! page_content=$(networks::fetch_and_load "$url" "html" "$name" "Failed to fetch download page for $name."); then
+    if ! page_content=$(networks::fetch_and_load "$url" "html" "$name" \
+        "Failed to fetch download page for $name."); then
+        responses::emit_error "NETWORK_ERROR" "Failed to fetch download page for $name." "$name" >&2
         return 1
     fi
 
@@ -126,7 +126,7 @@ veracrypt::check() {
     local latest_version
     latest_version=$(_veracrypt::get_latest_version_from_page "$page_content")
     if [[ -z "$latest_version" ]]; then
-        responses::emit_error "PARSING_ERROR" "Failed to detect latest version for $name." "$name"
+        responses::emit_error "PARSING_ERROR" "Failed to detect latest version for $name." "$name" >&2
         return 1
     fi
 
@@ -152,12 +152,14 @@ veracrypt::check() {
     download_url_final=$(_veracrypt::get_download_url_from_page "$page_content" "$latest_version" "$name")
 
     if [[ -z "$download_url_final" ]]; then
-        responses::emit_error "NETWORK_ERROR" "No compatible DEB package found for Ubuntu $ubuntu_release for $name." "$name"
+        responses::emit_error "NETWORK_ERROR" "No compatible DEB package found for $name." "$name" >&2
         return 1
     fi
 
-    if ! networks::validate_url "$download_url_final"; then
-        responses::emit_error "NETWORK_ERROR" "Invalid or unresolved download URL for $name (url=$download_url_final)." "$name"
+    local validated_download_url
+    if ! validated_download_url=$(networks::validate_url "$download_url_final"); then
+        responses::emit_error "NETWORK_ERROR" \
+            "Invalid or unresolved download URL for $name (url=$download_url_final)." "$name" >&2
         return 1
     fi
 
@@ -165,7 +167,7 @@ veracrypt::check() {
     sig_url=$(_veracrypt::get_signature_url_from_page "$page_content" "$latest_version" "$name")
 
     responses::emit_success "$output_status" "$latest_version" "deb" "Official Download Page" \
-        download_url "$download_url_final" \
+        download_url "$validated_download_url" \
         gpg_key_id "$gpg_key_id" \
         gpg_fingerprint "$gpg_fingerprint" \
         sig_url "$sig_url" \
