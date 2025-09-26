@@ -19,8 +19,8 @@
 
 # Constants for version and URL pattern matching
 readonly VERACRYPT_VERSION_PATTERN='Latest Stable Release - \K[0-9]+\.[0-9]+\.[0-9]+'
-readonly VERACRYPT_UBUNTU_PATTERN='veracrypt-VERSION-Ubuntu-[0-9.]+-amd64\.deb'
-readonly VERACRYPT_GENERIC_PATTERN='veracrypt-VERSION.*amd64\.deb'
+readonly VERACRYPT_UBUNTU_PATTERN='veracrypt-VERSION-Ubuntu-[0-9.]+-amd64\.deb([?#]|$)'
+readonly VERACRYPT_GENERIC_PATTERN='veracrypt-VERSION.*amd64\.deb([?#]|$)'
 readonly VERACRYPT_SIG_SPECIFIC_PATTERN='veracrypt-VERSION.*\.(sig|asc)'
 readonly VERACRYPT_SIG_GENERIC_PATTERN='PGP.*\.(sig|asc)'
 readonly LAUNCHPAD_DOMAIN='launchpadlibrarian\.net'
