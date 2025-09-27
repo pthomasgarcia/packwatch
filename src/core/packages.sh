@@ -447,7 +447,7 @@ packages::process_tgz_package() {
     if [[ ! -f "$cached_artifact_path" ]]; then
         loggers::info "Artifact not found in cache. Downloading..."
         if ! networks::download_file "$download_url" "$cached_artifact_path" \
-            "" "" "$allow_http"; then
+            "" "" "" "$allow_http"; then
             errors::handle_error "NETWORK_ERROR" \
                 "Failed to download TGZ archive for '$app_name'." "$app_name"
             return 1

@@ -18,10 +18,10 @@
 # ==============================================================================
 
 # Constants for internal use
-readonly ZED_FLATPAK_REMOTE='flathub'             # Target repo name for flatpak remote-info queries
-readonly ZED_VERSION_FIELD='^Version$'            # Field used to identify version in flatpak output
-readonly ZED_FLATPAK_RETRY_COUNT=3                # Number of retry attempts on flatpak query failure
-readonly ZED_FLATPAK_RETRY_DELAY=5                # Seconds between retry attempts
+readonly ZED_FLATPAK_REMOTE='flathub'  # Target repo name for flatpak remote-info queries
+readonly ZED_VERSION_FIELD='^Version$' # Field used to identify version in flatpak output
+readonly ZED_FLATPAK_RETRY_COUNT=3     # Number of retry attempts on flatpak query failure
+readonly ZED_FLATPAK_RETRY_DELAY=5     # Seconds between retry attempts
 
 # Validate required input string is non-empty
 # $1: String to validate

@@ -33,7 +33,7 @@ _veracrypt::apply_pattern() {
     local pattern="$1"
     local version="$2"
     echo "${pattern//VERSION/$version}"
-	return 0
+    return 0
 }
 
 # Transforms Launchpad redirect-style URLs to direct download links.
@@ -53,7 +53,7 @@ _veracrypt::transform_launchpad_url() {
     fi
 
     echo "$url"
-	return 0
+    return 0
 }
 
 # Extracts the latest VeraCrypt version from a fetched HTML page.
@@ -64,7 +64,7 @@ _veracrypt::get_latest_version_from_page() {
     local version
     version=$(echo "$page_content" | grep -Po "$VERACRYPT_VERSION_PATTERN" | head -n1)
     [[ -n "$version" ]] && echo "$version"
-	return 0
+    return 0
 }
 
 # Searches for a suitable download URL from the provided HTML content.

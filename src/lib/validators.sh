@@ -94,7 +94,10 @@ validators::is_empty() {
 # Returns: 0 if blank or null, 1 if not.
 validators::is_blank_or_null() {
     local input="$1"
-    [[ -z "$input" || "$input" =~ ^[[:space:]]*$ || "$input" == "null" ]]
+    if validators::is_empty "$input"; then
+        return 0
+    fi
+    [[ "$input" =~ ^[[:space:]]*$ ]]
 }
 
 # ==============================================================================

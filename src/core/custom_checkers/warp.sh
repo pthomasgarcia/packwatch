@@ -18,7 +18,7 @@
 # Constants for repo querying and version detection
 readonly WARP_APT_REPO_URL='https://releases.warp.dev/linux/deb/dists/stable/main/binary-amd64/Packages'
 readonly WARP_PACKAGE_NAME='warp-terminal'
-readonly WARP_VERSION_PATTERN='/^Package: '$WARP_PACKAGE_NAME'$/ {found=1} found && /^Version:/ {print $2; exit}'
+readonly WARP_VERSION_PATTERN="/^Package: $WARP_PACKAGE_NAME$/ {found=1} found && /^Version:/ {print \$2; exit}"
 
 # Validates presence of expected input value
 # $1: Value to test
@@ -26,7 +26,7 @@ readonly WARP_VERSION_PATTERN='/^Package: '$WARP_PACKAGE_NAME'$/ {found=1} found
 _warp::validate_input() {
     local input="$1"
     local input_name="$2"
-    
+
     if [[ -z "$input" ]]; then
         loggers::debug "WARP: Empty $input_name provided"
         return 1
@@ -38,29 +38,29 @@ _warp::validate_input() {
 # Returns: Latest version string or fails if not parsable
 _warp::get_latest_version_from_repo() {
     local packages_content
-    
+
     # Download APT Packages file
     if ! packages_content=$(networks::fetch_and_load "$WARP_APT_REPO_URL" "text" "Warp" \
         "Failed to fetch Warp apt repository package list."); then
         loggers::debug "WARP: Failed to fetch packages from APT repo"
         return 1
     fi
-    
+
     # Ensure retrieved content exists
     if ! _warp::validate_input "$packages_content" "packages content"; then
         loggers::debug "WARP: Empty packages content retrieved"
         return 1
     fi
-    
+
     # Extract version using AWK
     local version
     version=$(echo "$packages_content" | awk "$WARP_VERSION_PATTERN")
-    
+
     if [[ -z "$version" ]]; then
         loggers::debug "WARP: Failed to extract version from APT Packages file."
         return 1
     fi
-    
+
     # Return successfully parsed version
     echo "$version"
 }
