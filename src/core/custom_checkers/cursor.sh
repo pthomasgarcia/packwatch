@@ -12,6 +12,7 @@
 #   - errors.sh
 #   - packages.sh
 #   - systems.sh
+#   - validators.sh
 #   - web_parsers.sh
 #   - configs.sh
 # ==============================================================================
@@ -20,28 +21,28 @@
 readonly CURSOR_API_ENDPOINT="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
 readonly USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
-# Configuration parsing and validation
-# Path resolution with environment variable expansion
+# Path resolution with environment variable expansion for $HOME only
 cursor::resolve_install_path() {
     local install_path_config="$1"
     local artifact_filename="$2"
 
-    local original_home="${ORIGINAL_HOME:-$HOME}"
-    local install_base_dir="$install_path_config"
+    # Expand $HOME only, using sed for consistent and safe substitution
+    local expanded_path
+    expanded_path="$(printf '%s' "$install_path_config" | sed "s|\$HOME|$HOME|g")"
 
-    # Expand environment variables
-    install_base_dir="${install_base_dir//\$HOME/$original_home}"
-    install_base_dir="${install_base_dir//\$\{HOME\}/$original_home}"
-    [[ "$install_base_dir" == "~"* ]] && install_base_dir="${install_base_dir/#\~/$original_home}"
-    [[ -z "$install_base_dir" ]] && install_base_dir="$original_home"
+    # If the expanded path is still empty, fall back to $HOME
+    validators::is_empty "$expanded_path" && expanded_path="$HOME"
 
-    mkdir -p -- "$install_base_dir" || {
+    # Ensure the target directory exists
+    mkdir -p -- "$expanded_path" || {
         responses::emit_error "FILESYSTEM_ERROR" \
-            "Unable to create install directory '$install_base_dir'." "cursor"
+            "Unable to create install directory '$expanded_path'." "cursor"
         return 1
     }
 
-    echo "${install_base_dir%/}/${artifact_filename}"
+    # Return final install path with artifact filename
+    echo "${expanded_path%/}/${artifact_filename}"
+    return 0
 }
 
 # Parse download information from HTTP response
@@ -50,13 +51,14 @@ cursor::parse_download_info() {
     local final_url="$2"
 
     local content_type content_disp filename version content_length
-    content_type="$(grep -i '^Content-Type:' "$header_file" 2> /dev/null | tail -n1 | sed 's/\r$//' | awk -F': ' '{print $2}' || true)"
-    content_disp="$(grep -i '^Content-Disposition:' "$header_file" 2> /dev/null | tail -n1 | sed 's/\r$//' || true)"
-    content_length="$(grep -i '^Content-Length:' "$header_file" 2> /dev/null | tail -n1 | sed 's/\r$//' | awk -F': ' '{print $2}' || true)"
+    content_type=$(awk -F': ' '/^Content-Type:/ { gsub(/\r$/, "", $2); print $2; exit }' "$header_file" 2>/dev/null || true)
+    content_disp=$(awk '/^Content-Disposition:/ { gsub(/\r$/, ""); print; exit }' "$header_file" 2>/dev/null || true)
+    content_length=$(awk -F': ' '/^Content-Length:/ { gsub(/\r$/, "", $2); print $2; exit }' "$header_file" 2>/dev/null || true)
     filename="$(web_parsers::parse_content_disposition "$content_disp")"
     version="$(printf '%s\n%s\n%s\n' "$content_disp" "$filename" "$final_url" | web_parsers::extract_version)"
 
     printf '%s\n%s\n%s\n%s\n%s\n' "$content_type" "$content_disp" "$filename" "$version" "$content_length"
+    return 0
 }
 
 # Resolve download URL and metadata
@@ -77,9 +79,9 @@ cursor::resolve_download() {
 
     local download_info
     mapfile -t download_info < <(cursor::parse_download_info "$header_file" "$final_url")
-    local content_type="${download_info[0]}"
-    local filename="${download_info[2]}"
-    local version="${download_info[3]}"
+    local content_type="${download_info[0]:-}"
+    local filename="${download_info[2]:-}"
+    local version="${download_info[3]:-}"
 
     local final_name_part
     final_name_part="$(basename "${final_url%%[\?#]*}")"
@@ -90,7 +92,7 @@ cursor::resolve_download() {
     # Determine if we need to parse HTML for better options
     local need_html_parse="false"
     if [[ "$artifact_type" != "appimage" && "$artifact_type" != "deb" ]] ||
-        [[ -z "$version" ]] ||
+        validators::is_empty "$version" ||
         [[ "$content_type" == *"text/html"* ]] ||
         ! web_parsers::validate_architecture "$chosen_name" "$artifact_type"; then
         need_html_parse="true"
@@ -99,9 +101,11 @@ cursor::resolve_download() {
     if [[ "$need_html_parse" == "true" ]]; then
         cursor::resolve_from_html "$tmpdir"
     else
-        local content_length="${download_info[4]}"
+        local content_length="${download_info[4]:-}"
         printf '%s\n%s\n%s\n%s\n%s\n' "$final_url" "$version" "$artifact_type" "$chosen_name" "$content_length"
     fi
+    
+    return 0
 }
 
 # Resolve download from HTML content
@@ -147,9 +151,9 @@ cursor::resolve_from_html() {
 
         local download_info
         mapfile -t download_info < <(cursor::parse_download_info "$header_file" "$resolved_url")
-        local version="${download_info[3]}"
-        local filename="${download_info[2]}"
-        local content_length="${download_info[4]}"
+        local version="${download_info[3]:-}"
+        local filename="${download_info[2]:-}"
+        local content_length="${download_info[4]:-}"
 
         local final_name_part
         final_name_part="$(basename "${resolved_url%%[\?#]*}")"
@@ -161,6 +165,8 @@ cursor::resolve_from_html() {
     else
         return 1
     fi
+    
+    return 0
 }
 
 # Main checker function
@@ -184,7 +190,7 @@ cursor::check() {
         return 1
     fi
 
-    if [[ -z "$install_path_config" || "$install_path_config" == "null" ]]; then
+    if validators::is_empty "$install_path_config" || [[ "$install_path_config" == "null" ]]; then
         responses::emit_error "PARSING_ERROR" "install_path is missing in cached data for $name." "$name"
         return 1
     fi
@@ -210,10 +216,10 @@ cursor::check() {
         # Prefer AppImage URL if available, otherwise fallback to debUrl
         actual_download_url=$(systems::fetch_json "$api_response_path" '.downloadUrl // .debUrl // empty')
         # If we got a download URL from JSON, try to get its content length
-        if [[ -n "$actual_download_url" ]]; then
+        if ! validators::is_empty "$actual_download_url"; then
             local download_header_file="$tmpdir/download_headers.txt"
             curl -fsSIL "$actual_download_url" -A "$USER_AGENT" -D "$download_header_file" -o /dev/null
-            content_length="$(grep -i '^Content-Length:' "$download_header_file" 2> /dev/null | tail -n1 | sed 's/\r$//' | awk -F': ' '{print $2}' || true)"
+            content_length=$(awk -F': ' '/^Content-Length:/ { gsub(/\r$/, "", $2); print $2; exit }' "$download_header_file" 2>/dev/null || true)
         fi
     else
         loggers::warn "CURSOR: API response is not valid JSON, falling back to HTML parsing (less efficient)."
@@ -221,30 +227,30 @@ cursor::check() {
         local download_info
         mapfile -t download_info < <(cursor::resolve_download "$tmpdir")
         if [[ ${#download_info[@]} -ge 5 ]]; then
-            actual_download_url="${download_info[0]}"
-            latest_version="${download_info[1]}"
-            artifact_type="${download_info[2]}"
-            content_length="${download_info[4]}"
+            actual_download_url="${download_info[0]:-}"
+            latest_version="${download_info[1]:-}"
+            artifact_type="${download_info[2]:-}"
+            content_length="${download_info[4]:-}"
         fi
     fi
 
     # Post-parsing validation and processing
-    if [[ -z "$actual_download_url" ]]; then
+    if validators::is_empty "$actual_download_url"; then
         responses::emit_error "PARSING_ERROR" "Could not resolve download URL for $name." "$name"
         return 1
     fi
 
-    if [[ -z "$latest_version" ]]; then
+    if validators::is_empty "$latest_version"; then
         latest_version="$(echo "$actual_download_url" | web_parsers::extract_version)"
     fi
 
-    if [[ "$artifact_type" == "unknown" || -z "$artifact_type" ]]; then
+    if [[ "$artifact_type" == "unknown" ]] || validators::is_empty "$artifact_type"; then
         artifact_type="$(web_parsers::detect_artifact_type "$(basename "${actual_download_url%%[\?#]*}")")"
     fi
 
     latest_version="$(versions::strip_prefix "${latest_version:-}")"
 
-    if [[ -z "$latest_version" ]]; then
+    if validators::is_empty "$latest_version"; then
         responses::emit_error "PARSING_ERROR" "Could not determine version for $name." "$name"
         return 1
     fi
@@ -275,14 +281,14 @@ cursor::check() {
         install_target_path="$(cursor::resolve_install_path "$install_path_config" "$artifact_filename_final")" || return 1
 
         responses::emit_success "$output_status" "$latest_version" "$artifact_type" \
-            "Official API (JSON with HTML fallback)" \
+            "Official API" \
             download_url "$resolved_url" \
             install_target_path "$install_target_path" \
             app_key "$app_key" \
             content_length "$content_length"
     else
         responses::emit_success "$output_status" "$latest_version" "$artifact_type" \
-            "Official API (JSON with HTML fallback)" \
+            "Official API" \
             download_url "$actual_download_url" \
             app_key "$app_key" \
             content_length "$content_length"

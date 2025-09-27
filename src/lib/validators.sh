@@ -81,6 +81,14 @@ validators::check_semver_format() {
         [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}(-[0-9A-Za-z.~-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
 }
 
+# Check if a string is empty or null.
+# Usage: validators::is_empty "some_string"
+# Returns: 0 if empty, 1 if not empty
+validators::is_empty() {
+    local input="$1"
+    [[ -z "$input" || "$input" == "null" ]]
+}
+
 # ==============================================================================
 # END OF MODULE
 # ==============================================================================

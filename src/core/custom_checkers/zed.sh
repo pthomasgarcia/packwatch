@@ -13,6 +13,7 @@
 #   - errors.sh
 #   - packages.sh
 #   - systems.sh
+#   - validators.sh
 #   - configs.sh
 # ==============================================================================
 
@@ -33,7 +34,7 @@ zed::check() {
     local flatpak_app_id
     flatpak_app_id=$(systems::fetch_cached_json "$cache_key" "flatpak_app_id")
     # Early guard: flatpak_app_id must be present for Flatpak-based checks
-    if [[ -z "$flatpak_app_id" || "$flatpak_app_id" == "null" ]]; then
+    if validators::is_empty "$flatpak_app_id" || [[ "$flatpak_app_id" == "null" ]]; then
         responses::emit_error "CONFIG_ERROR" \
             "Missing required flatpak_app_id in config (cache_key=$cache_key) \
  for $name. Set 'flatpak_app_id' to the Flathub application ID." "$name"
@@ -42,7 +43,7 @@ zed::check() {
 
     local configured_download_url=""
     configured_download_url=$(systems::fetch_cached_json "$cache_key" "download_url")
-    if [[ -n "$configured_download_url" && "$configured_download_url" != "null" ]]; then
+    if ! validators::is_empty "$configured_download_url" && [[ "$configured_download_url" != "null" ]]; then
         local resolved_url
         if ! resolved_url=$(networks::validate_url \
             "$configured_download_url"); then
@@ -67,7 +68,7 @@ zed::check() {
     local latest_version
     latest_version=$(string_utils::extract_colon_value "$flatpak_info" "^Version$")
 
-    if [[ -z "$latest_version" ]]; then
+    if validators::is_empty "$latest_version"; then
         responses::emit_error "PARSING_ERROR" \
             "Failed to parse latest version from flatpak info for $name." \
             "$name"
@@ -86,7 +87,7 @@ zed::check() {
     output_status=$(responses::determine_status "$installed_version" "$latest_version")
 
     # Emit success response
-    if [[ -n "$configured_download_url" ]]; then
+    if ! validators::is_empty "$configured_download_url"; then
         responses::emit_success "$output_status" "$latest_version" \
             "flatpak" "Flathub" flatpak_app_id "$flatpak_app_id" \
             download_url "$configured_download_url"

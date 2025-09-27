@@ -675,25 +675,25 @@ verifiers::verify_artifact() {
         loggers::debug "Verifying downloaded artifact for '$app_name': \
 '$downloaded_file_path'"
 
-    # 1) Checksum (optional)
+    # 1) Content Length (always check for file-downloading apps)
+    if [[ "$skip_content_length_check" != "true" ]]; then
+        local content_length_from_config="${cfg[content_length]:-$expected_content_length_arg}"
+        verifiers::verify_content_length \
+            "$downloaded_file_path" "$download_url" "$app_name" \
+            "$content_length_from_config" || return 1
+    fi
+
+    # 2) Checksum (optional)
     if [[ "$skip_checksum" != "true" ]]; then
         verifiers::_verify_checksum_with_hooks \
             "$config_ref_name" "$downloaded_file_path" "$download_url" \
             "$direct_checksum" || return 1
     fi
 
-    # 2) MD5 from header (optional)
+    # 3) MD5 from header (optional)
     if [[ "$skip_md5_check" != "true" ]]; then
         verifiers::verify_md5_from_header \
             "$downloaded_file_path" "$download_url" "$app_name" || return 1
-    fi
-
-    # 3) Content Length (optional)
-    if [[ "$skip_content_length_check" != "true" ]]; then
-        local content_length_from_config="${cfg[content_length]:-$expected_content_length_arg}"
-        verifiers::verify_content_length \
-            "$downloaded_file_path" "$download_url" "$app_name" \
-            "$content_length_from_config" || return 1 # Pass content_length from config or argument
     fi
 
     # 4) Signature (optional)

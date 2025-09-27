@@ -33,6 +33,7 @@ _veracrypt::apply_pattern() {
     local pattern="$1"
     local version="$2"
     echo "${pattern//VERSION/$version}"
+	return 0
 }
 
 # Transforms Launchpad redirect-style URLs to direct download links.
@@ -52,16 +53,18 @@ _veracrypt::transform_launchpad_url() {
     fi
 
     echo "$url"
+	return 0
 }
 
 # Extracts the latest VeraCrypt version from a fetched HTML page.
 # $1: Fetched page content as string (HTML)
-# Returns: Version string (e.g., 1.25.9) or empty on failure
+# Returns: Version string (e.25.9) or empty on failure
 _veracrypt::get_latest_version_from_page() {
     local page_content="$1"
     local version
     version=$(echo "$page_content" | grep -Po "$VERACRYPT_VERSION_PATTERN" | head -n1)
     [[ -n "$version" ]] && echo "$version"
+	return 0
 }
 
 # Searches for a suitable download URL from the provided HTML content.
@@ -72,7 +75,7 @@ _veracrypt::get_latest_version_from_page() {
 _veracrypt::find_download_url() {
     local page_content="$1"
     local version="$2"
-    
+
     # Extract all URLs from page content
     local -a candidates
     mapfile -t candidates < <(web_parsers::extract_urls_from_html <(echo "$page_content") "")
@@ -109,7 +112,7 @@ _veracrypt::find_download_url() {
 _veracrypt::find_signature_url() {
     local page_content="$1"
     local version="$2"
-    
+
     local -a candidates
     mapfile -t candidates < <(web_parsers::extract_urls_from_html <(echo "$page_content") "")
 
@@ -161,7 +164,7 @@ veracrypt::check() {
     gpg_fingerprint=$(systems::fetch_cached_json "$cache_key" "gpg_fingerprint")
     download_url_base=$(systems::fetch_cached_json "$cache_key" "download_url_base")
 
-    if [[ -z "$download_url_base" ]]; then
+    if validators::is_empty "$download_url_base"; then
         responses::emit_error "CONFIG_ERROR" "Missing download URL base in configuration." "$name" >&2
         return 1
     fi
@@ -181,7 +184,7 @@ veracrypt::check() {
     # --------------------------------------------------------------------------
     local latest_version
     latest_version=$(_veracrypt::get_latest_version_from_page "$page_content")
-    if [[ -z "$latest_version" ]]; then
+    if validators::is_empty "$latest_version"; then
         responses::emit_error "PARSING_ERROR" \
             "Failed to detect latest version for $name. Check if page format has changed." "$name" >&2
         return 1
