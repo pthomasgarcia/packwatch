@@ -3,7 +3,8 @@
 # MODULE: custom_checkers/cursor.sh
 # ==============================================================================
 # Responsibilities:
-#   - Custom logic to check for updates for Cursor.
+#   - Custom logic for updating Cursor IDE binary (Debian/AppImage).
+#   - Handles both API-driven discovery and HTML parsing fallback.
 #
 # Dependencies:
 #   - responses.sh
@@ -19,280 +20,433 @@
 
 # Constants
 readonly CURSOR_API_ENDPOINT="https://cursor.com/api/download?platform=linux-x64&releaseTrack=stable"
-readonly USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+readonly CURSOR_USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+readonly CURSOR_DEFAULT_APPIMAGE_NAME="cursor.AppImage"
+readonly CURSOR_DEFAULT_DEB_NAME="cursor.deb"
+readonly CURSOR_SUPPORTED_TYPES=("appimage" "deb")
 
-# Path resolution with environment variable expansion for $HOME only
-cursor::resolve_install_path() {
+# Validates presence of input data
+# $1: Input value
+# $2: Field name for logging context
+_cursor::validate_input() {
+    local input="$1" field="$2"
+    if [[ -z "$input" ]]; then
+        loggers::debug "CURSOR: Missing required $field"
+        return 1
+    fi
+    return 0
+}
+
+# Checks and validates installation path config
+# $1: Configured install path string
+# $2: Program name
+# $3: Config hash
+_cursor::validate_install_path_config() {
+    local path_str="$1"
+    local name="$2"
+    local key="$3"
+    if ! _cursor::validate_input "$path_str" "install_path_config"; then
+        responses::emit_error "PARSING_ERROR" "Install path unresolved for $name." "$name"
+        return 1
+    fi
+    return 0
+}
+
+# Expands environment variables in user-specified path, ensures parent dirs exist
+# $1: Base install path string (may contain environment variables e.g., $HOME)
+# $2: Artifact filename
+# Returns: Fully expanded path where binary will be placed
+_cursor::resolve_install_path() {
     local install_path_config="$1"
     local artifact_filename="$2"
 
-    # Expand $HOME only, using sed for consistent and safe substitution
+    # Expand $HOME only
     local expanded_path
     expanded_path="$(printf '%s' "$install_path_config" | sed "s|\$HOME|$HOME|g")"
+    [[ -z "$expanded_path" ]] && expanded_path="$HOME"
 
-    # If the expanded path is still empty, fall back to $HOME
-    validators::is_empty "$expanded_path" && expanded_path="$HOME"
-
-    # Ensure the target directory exists
-    mkdir -p -- "$expanded_path" || {
-        responses::emit_error "FILESYSTEM_ERROR" \
-            "Unable to create install directory '$expanded_path'." "cursor"
+    if ! mkdir -p -- "$expanded_path"; then
+        responses::emit_error "FILESYSTEM_ERROR" "Cannot access/install to $expanded_path" "cursor"
         return 1
-    }
+    fi
 
-    # Return final install path with artifact filename
-    echo "${expanded_path%/}/${artifact_filename}"
-    return 0
+    printf %s "${expanded_path%/}/${artifact_filename}"
 }
 
-# Parse download information from HTTP response
-cursor::parse_download_info() {
-    local header_file="$1"
-    local final_url="$2"
+# ------------------------------------------------------------------------------
+# Metadata Parsing Helpers
+# ------------------------------------------------------------------------------
 
-    local content_type content_disp filename version content_length
-    content_type=$(awk -F': ' '/^Content-Type:/ { gsub(/\r$/, "", $2); print $2; exit }' "$header_file" 2>/dev/null || true)
-    content_disp=$(awk '/^Content-Disposition:/ { gsub(/\r$/, ""); print; exit }' "$header_file" 2>/dev/null || true)
-    content_length=$(awk -F': ' '/^Content-Length:/ { gsub(/\r$/, "", $2); print $2; exit }' "$header_file" 2>/dev/null || true)
+# Extract useful fields from raw header lines
+# $1: Header file path
+# $2: Effective resolved URL
+# Returns lines:
+#   content-type
+#   content-disposition
+#   suggested-filename
+#   inferred-version
+#   content-length
+_cursor::_download::parse_metadata_from_headers() {
+    local header_file="$1"
+    local resolved_url="$2"
+
+    local content_type content_disp content_length filename version
+    content_type=$(awk -F': ' '/^Content-Type:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2>/dev/null || true)
+    content_disp=$(awk '/^Content-Disposition:/ {gsub(/\r$/, ""); print}' "$header_file" 2>/dev/null || true)
+    content_length=$(awk -F': ' '/^Content-Length:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2>/dev/null || true)
     filename="$(web_parsers::parse_content_disposition "$content_disp")"
-    version="$(printf '%s\n%s\n%s\n' "$content_disp" "$filename" "$final_url" | web_parsers::extract_version)"
+    version="$(printf '%s\n%s\n%s\n' "$content_disp" "$filename" "$resolved_url" | web_parsers::extract_version)"
 
     printf '%s\n%s\n%s\n%s\n%s\n' "$content_type" "$content_disp" "$filename" "$version" "$content_length"
+}
+
+# Fetch HTTP response headers via cURL HEAD request
+# $1: Resource URL
+# $2: Destination header file
+# Returns success/failure state of remote fetch
+_cursor::_download::fetch_headers_for_url() {
+    local url="$1"
+    local dst="$2"
+    if ! curl -fsSIL "$url" -A "$CURSOR_USER_AGENT" -D "$dst" -o /dev/null; then
+        loggers::debug "CURSOR: Failed fetching headers for $url"
+        return 1
+    fi
     return 0
 }
 
-# Resolve download URL and metadata
-cursor::resolve_download() {
-    local tmpdir="$1"
-    local header_file="$tmpdir/headers.txt"
-    local body_file="$tmpdir/body.html"
+# Traverse HTML markup to locate downloadable asset links
+# $1: Temp dir holding downloaded documents
+# $2: Last known redirect URL from upstream endpoint
+_cursor::_download::_html_scraper::extract_best_asset_url() {
+    local workdir="$1"
+    local baseurl="$2"
 
-    # Try HEAD request first
-    local final_url
-    if ! final_url="$(networks::get_effective_url "$CURSOR_API_ENDPOINT")"; then
-        responses::emit_error "NETWORK_ERROR" "Failed to resolve effective URL for Cursor." "cursor"
+    local html_doc="$workdir/page.html"
+    if ! networks::download_file "$baseurl" "$html_doc" "" "" true -H "User-Agent: $CURSOR_USER_AGENT"; then
+        loggers::debug "CURSOR: Failed downloading landing page"
         return 1
     fi
 
-    # Fetch headers for the final URL
-    curl -fsSIL "$final_url" -A "$USER_AGENT" -D "$header_file" -o /dev/null
+    local refresh_target
+    refresh_target="$(web_parsers::check_meta_refresh "$html_doc")"
+    if [[ -n "$refresh_target" ]]; then
+        # Resolve meta refresh target and fetch headers to get Content-Length
+        local resolved_asset_url
+        if ! resolved_asset_url="$(networks::get_effective_url "$refresh_target")"; then
+            loggers::debug "CURSOR: Meta refresh target does not resolve cleanly"
+            return 1
+        fi
 
-    local download_info
-    mapfile -t download_info < <(cursor::parse_download_info "$header_file" "$final_url")
-    local content_type="${download_info[0]:-}"
-    local filename="${download_info[2]:-}"
-    local version="${download_info[3]:-}"
+        local head_file="$workdir/asset-head.tmp"
+        if ! _cursor::_download::fetch_headers_for_url "$resolved_asset_url" "$head_file"; then
+            return 1
+        fi
 
-    local final_name_part
-    final_name_part="$(basename "${final_url%%[\?#]*}")"
-    local chosen_name="${filename:-$final_name_part}"
-    local artifact_type
-    artifact_type="$(web_parsers::detect_artifact_type "$chosen_name")"
+        local -a parsed_array
+        mapfile -t parsed_array < <(_cursor::_download::parse_metadata_from_headers "$head_file" "$resolved_asset_url")
 
-    # Determine if we need to parse HTML for better options
-    local need_html_parse="false"
-    if [[ "$artifact_type" != "appimage" && "$artifact_type" != "deb" ]] ||
-        validators::is_empty "$version" ||
-        [[ "$content_type" == *"text/html"* ]] ||
-        ! web_parsers::validate_architecture "$chosen_name" "$artifact_type"; then
-        need_html_parse="true"
-    fi
+        local asset_name
+        asset_name="$(web_parsers::parse_content_disposition "${parsed_array[1]:-}")"
+        asset_name="${asset_name:-$(basename "$resolved_asset_url")}"
 
-    if [[ "$need_html_parse" == "true" ]]; then
-        cursor::resolve_from_html "$tmpdir"
-    else
-        local content_length="${download_info[4]:-}"
-        printf '%s\n%s\n%s\n%s\n%s\n' "$final_url" "$version" "$artifact_type" "$chosen_name" "$content_length"
-    fi
-    
-    return 0
-}
+        local detected_type
+        detected_type="$(web_parsers::detect_artifact_type "$asset_name")"
 
-# Resolve download from HTML content
-cursor::resolve_from_html() {
-    local tmpdir="$1"
-    local header_file="$tmpdir/headers.txt"
-    local body_file="$tmpdir/body.html"
-
-    # Get HTML content
-    local final_url
-    local cached_file
-    if ! cached_file=$(networks::fetch_cached_data "$CURSOR_API_ENDPOINT" "html"); then
-        responses::emit_error "NETWORK_ERROR" "Failed to fetch HTML content for Cursor." "cursor"
-        return 1
-    fi
-    cat "$cached_file" > "$body_file"
-    final_url="$CURSOR_API_ENDPOINT" # The base URL for resolving relative links
-
-    # Check for meta refresh redirect
-    local refresh_url
-    refresh_url="$(web_parsers::check_meta_refresh "$body_file")"
-
-    if [[ -n "$refresh_url" ]]; then
-        printf '%s\n\n\n\n' "$refresh_url"
+        printf '%s\n%s\n%s\n%s\n' "$resolved_asset_url" "${parsed_array[3]:-}" "$detected_type" "${parsed_array[4]:-}"
         return 0
     fi
 
-    # Extract and select best URL from HTML
-    local -a candidates
-    mapfile -t candidates < <(web_parsers::extract_urls_from_html "$body_file" "$final_url")
-
-    local best_url
-    if best_url="$(web_parsers::select_best_url "${candidates[@]}")"; then
-        # Resolve the selected URL
-        local resolved_url
-        if ! resolved_url="$(networks::get_effective_url "$best_url")"; then
-            responses::emit_error "NETWORK_ERROR" "Failed to resolve best URL for Cursor." "cursor"
-            return 1
-        fi
-
-        # Fetch headers for the resolved URL
-        curl -fsSIL "$resolved_url" -A "$USER_AGENT" -D "$header_file" -o /dev/null
-
-        local download_info
-        mapfile -t download_info < <(cursor::parse_download_info "$header_file" "$resolved_url")
-        local version="${download_info[3]:-}"
-        local filename="${download_info[2]:-}"
-        local content_length="${download_info[4]:-}"
-
-        local final_name_part
-        final_name_part="$(basename "${resolved_url%%[\?#]*}")"
-        local chosen_name="${filename:-$final_name_part}"
-        local artifact_type
-        artifact_type="$(web_parsers::detect_artifact_type "$chosen_name")"
-
-        printf '%s\n%s\n%s\n%s\n%s\n' "$resolved_url" "$version" "$artifact_type" "$chosen_name" "$content_length"
-    else
+    local -a hrefs_map
+    mapfile -t hrefs_map < <(web_parsers::extract_urls_from_html "$html_doc" "$baseurl")
+    local selected_link
+    if ! selected_link="$(web_parsers::select_best_url "${hrefs_map[@]}")"; then
+        loggers::debug "CURSOR: No viable asset link discovered during parsing"
         return 1
     fi
-    
-    return 0
+
+    local resolved_asset_url
+    if ! resolved_asset_url="$(networks::get_effective_url "$selected_link")"; then
+        loggers::debug "CURSOR: Asset link does not resolve cleanly"
+        return 1
+    fi
+
+    local head_file="$workdir/asset-head.tmp"
+    if ! _cursor::_download::fetch_headers_for_url "$resolved_asset_url" "$head_file"; then
+        return 1
+    fi
+
+    local -a parsed_array
+    mapfile -t parsed_array < <(_cursor::_download::parse_metadata_from_headers "$head_file" "$resolved_asset_url")
+
+    local asset_name
+    asset_name="$(web_parsers::parse_content_disposition "${parsed_array[1]:-}")"
+    asset_name="${asset_name:-$(basename "$resolved_asset_url")}"
+
+    local detected_type
+    detected_type="$(web_parsers::detect_artifact_type "$asset_name")"
+
+    printf '%s\n%s\n%s\n%s\n' "$resolved_asset_url" "${parsed_array[3]:-}" "$detected_type" "${parsed_array[4]:-}"
 }
 
-# Main checker function
-cursor::check() {
-    local app_config_json="$1"
+## API-based metadata fetching
+# $1: Temp working dir
+# $2: Log label ("Cursor")
+# Outputs: url\nversion\ntype\ncontent-length OR exits
+_cursor::_download::from_api() {
+    local tmpdir="$1"
+    local name="$2"
 
-    # Parse configuration
-    local -A app_info
-    if ! configs::get_cached_app_info "$app_config_json" app_info; then
+    local api_response="$tmpdir/api.json"
+    if ! networks::download_file "$CURSOR_API_ENDPOINT" "$api_response" "" "" false; then
+        loggers::debug "CURSOR: Failed downloading JSON API"
         return 1
     fi
 
-    local name="${app_info["name"]}"
-    local app_key="${app_info["app_key"]}"
-    local installed_version="${app_info["installed_version"]}"
-    local cache_key="${app_info["cache_key"]}"
-
-    local install_path_config
-    if ! install_path_config="$(systems::fetch_cached_json "$cache_key" "install_path")"; then
-        responses::emit_error "PARSING_ERROR" "Failed to resolve install path for $name (cache_key=$cache_key)." "$name"
+    if ! systems::is_valid_json "$api_response"; then
+        loggers::debug "CURSOR: Received invalid JSON at $CURSOR_API_ENDPOINT"
         return 1
     fi
 
-    if validators::is_empty "$install_path_config" || [[ "$install_path_config" == "null" ]]; then
-        responses::emit_error "PARSING_ERROR" "install_path is missing in cached data for $name." "$name"
-        return 1
-    fi
-    # Set up temporary directory
-    local tmpdir
-    tmpdir="$(mktemp -d)"
-    trap 'rm -rf "$tmpdir"' RETURN
+    # Prefer the AppImage asset
+    local version url content_len=""
+    version=$(jq -r '.version // empty' "$api_response" 2>/dev/null)
+    url=$(jq -r '.downloadUrl // empty' "$api_response" 2>/dev/null)
 
-    local latest_version=""
-    local actual_download_url=""
-    local artifact_type=""
-    local content_length=""
-
-    # Fetch API response (JSON) to get the latest version and download URLs
-    local api_response_path="$tmpdir/api_response"
-    if ! networks::download_file "$CURSOR_API_ENDPOINT" "$api_response_path" "" "" "false" > /dev/null 2>&1; then
-        responses::emit_error "NETWORK_ERROR" "Failed to fetch Cursor API response for $name." "$name"
+    if [[ -z "$version" || -z "$url" ]]; then
+        loggers::debug "CURSOR: JSON missing version or downloadUrl"
         return 1
     fi
 
-    if systems::is_valid_json "$api_response_path"; then
-        latest_version=$(systems::fetch_json "$api_response_path" '.version // empty')
-        # Prefer AppImage URL if available, otherwise fallback to debUrl
-        actual_download_url=$(systems::fetch_json "$api_response_path" '.downloadUrl // .debUrl // empty')
-        # If we got a download URL from JSON, try to get its content length
-        if ! validators::is_empty "$actual_download_url"; then
-            local download_header_file="$tmpdir/download_headers.txt"
-            curl -fsSIL "$actual_download_url" -A "$USER_AGENT" -D "$download_header_file" -o /dev/null
-            content_length=$(awk -F': ' '/^Content-Length:/ { gsub(/\r$/, "", $2); print $2; exit }' "$download_header_file" 2>/dev/null || true)
-        fi
+    # 🔑 Perform HEAD request on downloadUrl to capture Content-Length
+    content_len=$(curl -sI -A "$CURSOR_USER_AGENT" "$url" \
+        | awk '/[Cc]ontent-[Ll]ength/ {print $2}' | tr -d '\r')
+
+    # Detect artifact type from filename in URL
+    local inferred_type
+    inferred_type="$(web_parsers::detect_artifact_type "$(basename -- "$url")")"
+
+    printf '%s\n%s\n%s\n%s\n' "$url" "$version" "$inferred_type" "$content_len"
+}
+
+# Attempt manual traversal of download pages + redirects and extract assets
+# $1: Working temp directory
+# $2: Log label ("Cursor")
+# Outputs: url\nversion\ntype\nlength
+_cursor::_download::from_html_redirects() {
+    local tmpdir="$1"
+    local name="$2"
+
+    loggers::warn "CURSOR: Fallback route engaged – manual parsing mode enabled."
+
+    local final_url
+    if ! final_url="$(networks::get_effective_url "$CURSOR_API_ENDPOINT")"; then
+        loggers::debug "CURSOR: Unresolveable redirect chain"
+        return 1
+    fi
+
+    local header_file="$tmpdir/headers.txt"
+    if ! _cursor::_download::fetch_headers_for_url "$final_url" "$header_file"; then
+        loggers::debug "CURSOR: Initial attempt to grab headers failed."
+        return 1
+    fi
+
+    local -a lines
+    mapfile -t lines < <(_cursor::_download::parse_metadata_from_headers "$header_file" "$final_url")
+
+    declare -A meta=(
+        [url]="$final_url"
+        [version]="${lines[3]:-}"
+        [type]="$(web_parsers::detect_artifact_type "${lines[2]:-$(basename "$final_url")}")"
+        [length]="${lines[4]:-}"
+    )
+
+    # If result doesn’t pass muster, fall back manually scanning
+    if [[ ("${meta[type]}" != "appimage" && "${meta[type]}" != "deb") || -z "${meta[version]}" ]]; then
+        loggers::debug "CURSOR: Inconclusive parse, proceeding to deep html walk..."
+        _cursor::_download::_html_scraper::extract_best_asset_url "$tmpdir" "$final_url"
     else
-        loggers::warn "CURSOR: API response is not valid JSON, falling back to HTML parsing (less efficient)."
-        # Fallback to HTML parsing if JSON is invalid or incomplete
-        local download_info
-        mapfile -t download_info < <(cursor::resolve_download "$tmpdir")
-        if [[ ${#download_info[@]} -ge 5 ]]; then
-            actual_download_url="${download_info[0]:-}"
-            latest_version="${download_info[1]:-}"
-            artifact_type="${download_info[2]:-}"
-            content_length="${download_info[4]:-}"
+        printf '%s\n%s\n%s\n%s\n' "${meta[url]}" "${meta[version]}" "${meta[type]}" "${meta[length]}"
+    fi
+}
+
+# Top-level resolver that orchestrates fetching process
+# $1: Work directory location
+# $2: Label display name ("Cursor")
+# Results emitted as lines: url\nversion\ntype\nsize
+_cursor::_download::resolve() {
+    local tempdir="$1"
+    local label="$2"
+
+    local result
+    if result=$(_cursor::_download::from_api "$tempdir" "$label"); then
+        local -a rdata
+        mapfile -t rdata <<< "$result"
+
+        local url="${rdata[0]:-}"
+        local ver="${rdata[1]:-}"
+        local type="${rdata[2]:-}"
+        local leng="${rdata[3]:-}"
+
+        # If API didn't provide type, infer from URL if available
+        if [[ -z "$type" && -n "$url" ]]; then
+            type="$(web_parsers::detect_artifact_type "$(basename -- "$url")")"
         fi
+
+        printf '%s\n%s\n%s\n%s\n' "$url" "$ver" "$type" "$leng"
+        return 0
     fi
 
-    # Post-parsing validation and processing
-    if validators::is_empty "$actual_download_url"; then
-        responses::emit_error "PARSING_ERROR" "Could not resolve download URL for $name." "$name"
+    _cursor::_download::from_html_redirects "$tempdir" "$label"
+}
+
+# Verifies artifact compatibility with allowed types list
+# $1: Candidate type ('deb','appimage')
+# $2: Application name
+_cursor::validate_artifact_type() {
+    local candidate="$1"
+    local appname="$2"
+
+    local t
+    for t in "${CURSOR_SUPPORTED_TYPES[@]}"; do
+        if [[ "$candidate" == "$t" ]]; then
+            return 0
+        fi
+    done
+
+    responses::emit_error "PLATFORM_UNSUPPORTED" "Type '$candidate' unsupported for $appname" "$appname"
+    return 1
+}
+
+# Provides default filename depending on artifact kind
+# $1: Detected package type ("appimage"/"deb")
+# Returns: Suggested filename ("cursor.AppImage" etc.)
+_cursor::get_artifact_filename() {
+    case "$1" in
+        appimage) printf %s "$CURSOR_DEFAULT_APPIMAGE_NAME" ;;
+        deb) printf %s "$CURSOR_DEFAULT_DEB_NAME" ;;
+        *) loggers::error "CURSOR: Cannot resolve artifact type for filename"; return 1 ;;
+    esac
+}
+
+# Entry point to check for available Cursor upgrades
+# Fetches latest stable version and returns structured metadata
+# for downstream consumption.
+# $1: Application JSON configuration blob
+cursor::check() {
+    local json_cfg="$1"
+
+    # --------------------------------------------------------------------------
+    # STEP 1: Load and validate configuration
+    # --------------------------------------------------------------------------
+    if ! _cursor::validate_input "$json_cfg" "app configuration"; then
+        responses::emit_error "CONFIG_ERROR" "Missing cursor app config." "Cursor"
         return 1
     fi
 
-    if validators::is_empty "$latest_version"; then
-        latest_version="$(echo "$actual_download_url" | web_parsers::extract_version)"
-    fi
-
-    if [[ "$artifact_type" == "unknown" ]] || validators::is_empty "$artifact_type"; then
-        artifact_type="$(web_parsers::detect_artifact_type "$(basename "${actual_download_url%%[\?#]*}")")"
-    fi
-
-    latest_version="$(versions::strip_prefix "${latest_version:-}")"
-
-    if validators::is_empty "$latest_version"; then
-        responses::emit_error "PARSING_ERROR" "Could not determine version for $name." "$name"
+    local -A ctx_data
+    if ! configs::get_cached_app_info "$json_cfg" ctx_data; then
+        responses::emit_error "CACHE_ERROR" "Could not decode config" "Cursor"
         return 1
     fi
 
-    loggers::debug "CURSOR: installed_version='$installed_version' latest_version='$latest_version' url='$actual_download_url' type='$artifact_type'"
+    local name="${ctx_data[name]}"
+    local appkey="${ctx_data[app_key]}"
+    local instver="${ctx_data[installed_version]}"
+    local ckey="${ctx_data[cache_key]}"
 
-    local output_status
-    output_status=$(responses::determine_status "$installed_version" "$latest_version")
+    local installdir
+    installdir="$(systems::fetch_cached_json "$ckey" "install_path")"
+    if ! _cursor::validate_install_path_config "$installdir" "$name" "$ckey"; then
+        return 1
+    fi
 
-    if [[ "$output_status" == "success" ]]; then
-        local resolved_url
-        if ! resolved_url=$(networks::validate_url "$actual_download_url"); then
-            responses::emit_error "NETWORK_ERROR" "Invalid or unresolved download URL for $name (url=$actual_download_url)." "$name"
+    # --------------------------------------------------------------------------
+    # STEP 2: Create temporary workspace and begin metadata resolution
+    # --------------------------------------------------------------------------
+    local wdir
+    wdir="$(mktemp -d)" || {
+        responses::emit_error "FILESYSTEM_ERROR" "Failed to create temp dir for downloads" "Cursor"
+        return 1
+    }
+    trap '[[ -n "${wdir:-}" ]] && rm -fr "$wdir"' EXIT RETURN
+
+    # --------------------------------------------------------------------------
+    # STEP 3: Attempt to fetch update metadata via API or HTML fallback
+    # --------------------------------------------------------------------------
+    declare -a meta_lines
+    if ! mapfile -t meta_lines < <(_cursor::_download::resolve "$wdir" "$name"); then
+        responses::emit_error "DOWNLOAD_ERROR" "Failed to resolve metadata for $name" "$name"
+        return 1
+    fi
+
+    declare -A meta=(
+        [url]="${meta_lines[0]:-}"
+        [version]="${meta_lines[1]:-}"
+        [type]="${meta_lines[2]:-"unknown"}"
+        [length]="${meta_lines[3]:-}"
+    )
+
+    # --------------------------------------------------------------------------
+    # STEP 4: Validate resolved metadata and double-check type/indexing
+    # --------------------------------------------------------------------------
+    local pkgurl="${meta[url]}"
+    local pkgver="${meta[version]}"
+    local pkgtype="${meta[type]}"
+    local pgleng="${meta[length]}"
+
+    if [[ -z "$pkgurl" || -z "$pkgver" || -z "$pkgtype" ]]; then
+        responses::emit_error "MISSING_DEPENDENCY" "Incomplete information from server for $name" "$name"
+        return 1
+    fi
+
+    if ! _cursor::validate_artifact_type "$pkgtype" "$name"; then
+        return 1
+    fi
+
+    # Normalize version before comparing
+    local normalized_version
+    normalized_version="$(versions::strip_prefix "$pkgver")"
+
+    loggers::debug "CURSOR: installed='$instver' latest='$normalized_version' url='$pkgurl' type='$pkgtype' bytes=$pgleng"
+
+    # --------------------------------------------------------------------------
+    # STEP 5: Determine whether an update is needed
+    # --------------------------------------------------------------------------
+    local status_code
+    status_code="$(responses::determine_status "$instver" "$normalized_version")"
+
+    # --------------------------------------------------------------------------
+    # STEP 6: Prepare final structured response and send it
+    # --------------------------------------------------------------------------
+    local -a args=(
+        "$status_code" "$normalized_version" "$pkgtype" "Official API Endpoint"
+        download_url "$pkgurl"
+        app_key "$appkey"
+    )
+
+    if [[ -n "$pgleng" ]]; then
+        args+=(content_length "$pgleng")
+    fi
+
+    if [[ "$status_code" == "success" ]]; then
+        local final_validated_url
+        if ! final_validated_url="$(networks::validate_url "$pkgurl")"; then
+            responses::emit_error "NETWORK_ERROR" "Invalid resolved URL: $pkgurl" "$name"
             return 1
         fi
+        args[5]=$final_validated_url  # Update index for download_url in array
 
-        local artifact_filename_final
-        case "$artifact_type" in
-            appimage) artifact_filename_final="cursor.AppImage" ;;
-            deb) artifact_filename_final="cursor.deb" ;;
-            *)
-                responses::emit_error "PARSING_ERROR" "Unsupported artifact type '$artifact_type' for $name." "$name"
-                return 1
-                ;;
-        esac
-
-        local install_target_path
-        install_target_path="$(cursor::resolve_install_path "$install_path_config" "$artifact_filename_final")" || return 1
-
-        responses::emit_success "$output_status" "$latest_version" "$artifact_type" \
-            "Official API" \
-            download_url "$resolved_url" \
-            install_target_path "$install_target_path" \
-            app_key "$app_key" \
-            content_length "$content_length"
-    else
-        responses::emit_success "$output_status" "$latest_version" "$artifact_type" \
-            "Official API" \
-            download_url "$actual_download_url" \
-            app_key "$app_key" \
-            content_length "$content_length"
+        local bin_name target_path
+        if ! bin_name="$(_cursor::get_artifact_filename "$pkgtype")"; then
+            responses::emit_error "INTERNAL_ERROR" "Failed to get default name for type '$pkgtype'" "$name"
+            return 1
+        fi
+        if ! target_path="$(_cursor::resolve_install_path "$installdir" "$bin_name")"; then
+            return 1
+        fi
+        args+=(install_target_path "$target_path")
     fi
 
+    responses::emit_success "${args[@]}"
     return 0
 }

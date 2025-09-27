@@ -58,7 +58,7 @@ _veracrypt::transform_launchpad_url() {
 
 # Extracts the latest VeraCrypt version from a fetched HTML page.
 # $1: Fetched page content as string (HTML)
-# Returns: Version string (e.25.9) or empty on failure
+# Returns: Version string (e.g. 1.25.9) or empty on failure
 _veracrypt::get_latest_version_from_page() {
     local page_content="$1"
     local version

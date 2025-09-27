@@ -89,6 +89,14 @@ validators::is_empty() {
     [[ -z "$input" || "$input" == "null" ]]
 }
 
+# Check if a string is blank (empty or only whitespace) or null.
+# Usage: validators::is_blank_or_null "some string"
+# Returns: 0 if blank or null, 1 if not.
+validators::is_blank_or_null() {
+    local input="$1"
+    [[ -z "$input" || "$input" =~ ^[[:space:]]*$ || "$input" == "null" ]]
+}
+
 # ==============================================================================
 # END OF MODULE
 # ==============================================================================
