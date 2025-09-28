@@ -246,17 +246,19 @@ configs::populate_globals_from_json() {
     mapfile -t CUSTOM_APP_KEYS < <(echo "$extracted_data" | jq -r '.apps_to_check[]')
 
     # Populate ALL_APP_CONFIGS in one go
-    while IFS=$'\t' read -r app_key prop_key prop_value; do
-        [[ -z "$app_key" || -z "$prop_key" || "$prop_key" == "_comment"* ]] && continue
-        ALL_APP_CONFIGS["${app_key}_${prop_key}"]="$prop_value"
+    # Safely populate ALL_APP_CONFIGS without using eval
+    while IFS=$'\t' read -r key value; do
+        # The key is already formatted as app_key_config_key
+        ALL_APP_CONFIGS["$key"]="$value"
     done < <(echo "$extracted_data" | jq -r '
-        .all_fields | 
+        .all_fields |
         to_entries[] |
         .key as $app_key |
         .value |
         to_entries[] |
         select(.key | startswith("_comment") | not) |
-        [$app_key, .key, .value] | @tsv
+        # Output format: key<TAB>value
+        "\($app_key)_\(.key)\t\(.value)"
     ')
 }
 

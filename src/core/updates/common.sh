@@ -34,7 +34,11 @@ updates::process_installation() {
     notifiers::send_notification "$app_name Update Available" "v$latest_version ready for install" "normal"
 
     if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
-        updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name"  # Pre-install hook (deferred until user confirms)
+        if ! updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name"; then
+            updates::on_install_skipped "$app_name" # Hook
+            counters::inc_skipped
+            return 0
+        fi
         updates::on_install_start "$app_name"                 # Hook
         if ((${DRY_RUN:-0})); then
             loggers::debug "  [DRY RUN] Would execute installation command: '$install_command_func ${install_command_args[*]}'."
@@ -166,4 +170,67 @@ updates::print_version_info() {
 updates::handle_up_to_date() {
     interfaces::print_ui_line "  " "✓ " "Up to date." "${COLOR_GREEN}"
     counters::inc_up_to_date
+}
+
+
+
+
+# Perform pre-installation checks for running processes.
+# This function is intended to be used as a PRE_INSTALL_HOOK.
+# It checks for running processes based on the 'binary_name' in the app's
+# config and prompts the user to terminate them if found.
+#
+# Usage:
+#   updates::pre_install_check_running_processes "app_name" "{}"
+#
+# Returns:
+#   0 - If no processes are running, or if they were successfully terminated.
+#   1 - If the user chooses not to terminate, or if termination fails. This
+#       signals to the calling installer to skip the installation.
+updates::pre_install_check_running_processes() {
+    local app_name="$1"
+    # The second argument (details_json) is ignored for this hook.
+
+    declare -A app_config
+    if ! configs::get_app_config "$app_name" "app_config"; then
+        # If config fails to load, we can't check, so we must return success
+        # to not block other installations. The config error is logged inside get_app_config.
+        return 0
+    fi
+
+    local binary_name="${app_config[binary_name]:-}"
+    local should_prompt="${app_config[prompt_to_kill_running_processes]:-false}"
+
+    # If this feature is not enabled for the app, exit successfully.
+    if [[ "$should_prompt" != "true" || -z "$binary_name" ]]; then
+        return 0
+    fi
+
+    # Construct the likely full path of the binary. This is an assumption but
+    # covers the most common installation scenario. A more robust solution
+    # might involve storing the full path at install time.
+    local binary_path="/usr/local/bin/${binary_name}"
+
+    local pids
+    if ! pids=$(systems::is_file_in_use "$binary_path"); then
+        # No processes found, so we can proceed.
+        return 0
+    fi
+
+    interfaces::print_ui_line "  " "!" "The application '$app_name' appears to be running." "${COLOR_YELLOW}"
+    interfaces::print_ui_line "  " " " "Running processes must be closed to prevent a 'Text file busy' error."
+    interfaces::print_ui_line "  " " " "Detected PIDs: $pids"
+
+    if interfaces::confirm_prompt "Do you want to automatically terminate these processes?"; then
+        if systems::kill_processes_by_file_path "$binary_path" "$app_name"; then
+            interfaces::print_ui_line "  " "✓" "Processes terminated." "${COLOR_GREEN}"
+            return 0 # Success, installation can continue.
+        else
+            errors::handle_error "SYSTEM_ERROR" "Failed to terminate all processes for '$app_name'. Please close them manually." "$app_name"
+            return 1 # Failure, skip installation.
+        fi
+    else
+        loggers::info "User chose not to terminate running processes for '$app_name'."
+        return 1 # User declined, skip installation.
+    fi
 }

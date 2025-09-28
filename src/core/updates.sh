@@ -105,8 +105,10 @@ updates::trigger_hooks() {
     local hook_func
     for hook_func in "${hook_array_ref[@]}"; do
         if [[ -n "$hook_func" ]] && declare -F "$hook_func" > /dev/null; then
-            "$hook_func" "$app_name" "$details_json" ||
-                loggers::warn "Hook function '$hook_func' failed for '$app_name'."
+            if ! "$hook_func" "$app_name" "$details_json"; then
+                loggers::warn "Hook function '$hook_func' failed for '$app_name'. Halting hook chain."
+                return 1 # Propagate failure
+            fi
         elif [[ -n "$hook_func" ]]; then
             loggers::warn "Hook '$hook_func' is not a callable function."
         fi
@@ -119,6 +121,9 @@ updates::trigger_hooks() {
 
 # Updates module; checks for updates for a single application defined in config.
 updates::check_application() {
+    # Reset hooks for each application to prevent state leakage
+    PRE_INSTALL_HOOKS=()
+
     local app_key="$1"
     local current_index="$2"
     local total_apps="$3"
@@ -141,6 +146,12 @@ updates::check_application() {
 
     local app_display_name="${_current_app_config[name]:-$app_key}"
     interfaces::display_header "$app_display_name" "$current_index" "$total_apps"
+
+
+    # Conditionally register the pre-install hook for checking running processes.
+    if [[ "${_current_app_config[prompt_to_kill_running_processes]:-false}" == "true" && -n "${_current_app_config[binary_name]:-}" ]]; then
+        updates::register_hook "pre_install" "updates::pre_install_check_running_processes"
+    fi
 
     # Validate the current application's configuration
     local app_type="${_current_app_config[type]:-}"

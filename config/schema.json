@@ -69,6 +69,14 @@
         },
         "allow_insecure_http": {
           "type": "boolean"
+        },
+        "binary_name": {
+          "type": "string",
+          "description": "Name of the main executable binary (e.g., 'nvim' for Neovim) to check for running processes."
+        },
+        "prompt_to_kill_running_processes": {
+          "type": "boolean",
+          "description": "If true, prompt the user to kill running processes associated with binary_name before installation."
         }
       }
     },

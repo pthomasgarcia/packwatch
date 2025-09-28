@@ -439,6 +439,77 @@ install them." "core"
     loggers::info "All core system dependencies found."
 }
 
+# ------------------------------------------------------------------------------
+# SECTION: Process Management
+# ------------------------------------------------------------------------------
+
+# Check if a file is currently in use by any running process.
+# Echos a space-separated list of PIDs if found.
+# Usage: pids=$(systems::is_file_in_use "/path/to/executable")
+# Returns 0 if file is in use, 1 otherwise.
+systems::is_file_in_use() {
+    local file_path="$1"
+    if [[ -z "$file_path" ]]; then
+        errors::handle_error "VALIDATION_ERROR" "File path cannot be empty for systems::is_file_in_use."
+        return 2 # Using 2 for invalid arguments
+    fi
+
+    # Use lsof to find processes that have the exact file path open.
+    # This is more reliable than pgrep for finding a process using a specific binary.
+    # The '-t' flag provides terse output (PIDs only).
+    local pids
+    pids=$(lsof -t "$file_path" 2>/dev/null || true)
+
+    if [[ -n "$pids" ]]; then
+        # Join PIDs into a single space-separated string
+        echo "$pids" | tr '\n' ' ' | sed 's/ $//'
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Kill processes associated with a given file path.
+# Usage: systems::kill_processes_by_file_path "/path/to/executable" "App Name"
+# Returns 0 on success, 1 on failure.
+systems::kill_processes_by_file_path() {
+    local file_path="$1"
+    local app_name="$2"
+
+    local pids
+    if ! pids=$(systems::is_file_in_use "$file_path"); then
+        loggers::info "No running processes found for '$app_name'."
+        return 0
+    fi
+
+    loggers::warn "Attempting to terminate running processes for '$app_name' (PIDs: $pids)."
+
+    # Use sudo kill to ensure processes are terminated
+    if ! sudo kill -TERM $pids 2>/dev/null; then
+        loggers::warn "Initial TERM signal failed for '$app_name' (PIDs: $pids). This can happen if processes already exited."
+    fi
+
+    # Give processes a moment to terminate gracefully
+    sleep 2
+
+    # Check if any processes are still running
+    if pids=$(systems::is_file_in_use "$file_path"); then
+        loggers::warn "Processes for '$app_name' (PIDs: $pids) did not terminate gracefully. Attempting to force kill."
+        if ! sudo kill -KILL $pids 2>/dev/null; then
+            errors::handle_error "SYSTEM_ERROR" "Failed to force-terminate processes for '$app_name' (PIDs: $pids)." "$app_name"
+            return 1
+        fi
+        sleep 1 # Brief pause after force kill
+        if pids=$(systems::is_file_in_use "$file_path"); then
+            errors::handle_error "SYSTEM_ERROR" "Processes for '$app_name' (PIDs: $pids) are still running after force kill." "$app_name"
+            return 1
+        fi
+    fi
+
+    loggers::info "Successfully terminated running processes for '$app_name'."
+    return 0
+}
+
 # ==============================================================================
 # END OF MODULE
 # ==============================================================================

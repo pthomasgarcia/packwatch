@@ -11,6 +11,7 @@
         "binary_name": "nvim",
         "install_strategy": "copy_root_contents",
         "checksum_from_github_release_digest": true,
-        "allow_insecure_http": false
+        "allow_insecure_http": false,
+        "prompt_to_kill_running_processes": true
     }
 }

@@ -68,7 +68,7 @@ export CACHE_DIR
 # --- 4. System Dependencies & Installation ---
 # Commands required for Packwatch to function, and the default installation command.
 readonly REQUIRED_COMMANDS=(
-    "wget" "curl" "gpg" "jq" "dpkg" "ajv"
+    "wget" "curl" "gpg" "jq" "dpkg" "ajv" "lsof"
     "sha256sum" "lsb_release" "getent"
 )
 readonly INSTALL_CMD="sudo apt install -y" # Default command for package installation
