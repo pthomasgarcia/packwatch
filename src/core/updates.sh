@@ -61,6 +61,12 @@ declare -a POST_INSTALL_HOOKS
 declare -a POST_VERIFY_HOOKS
 declare -a ERROR_HOOKS
 
+# --- GLOBAL HOOK SNAPSHOT ---
+# Snapshot of the initial state of pre-install hooks, allowing app-specific
+# checks to be added without losing the global baseline.
+declare -a DEFAULT_PRE_INSTALL_HOOKS
+DEFAULT_PRE_INSTALL_HOOKS=("${PRE_INSTALL_HOOKS[@]}")
+
 updates::register_hook() {
     local hook_type="$1"
     local function_name="$2"
@@ -121,8 +127,8 @@ updates::trigger_hooks() {
 
 # Updates module; checks for updates for a single application defined in config.
 updates::check_application() {
-    # Reset hooks for each application to prevent state leakage
-    PRE_INSTALL_HOOKS=()
+    # Reset hooks to the global default before adding app-specific ones
+    PRE_INSTALL_HOOKS=("${DEFAULT_PRE_INSTALL_HOOKS[@]}")
 
     local app_key="$1"
     local current_index="$2"
@@ -146,7 +152,6 @@ updates::check_application() {
 
     local app_display_name="${_current_app_config[name]:-$app_key}"
     interfaces::display_header "$app_display_name" "$current_index" "$total_apps"
-
 
     # Conditionally register the pre-install hook for checking running processes.
     if [[ "${_current_app_config[prompt_to_kill_running_processes]:-false}" == "true" && -n "${_current_app_config[binary_name]:-}" ]]; then

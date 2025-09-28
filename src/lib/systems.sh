@@ -458,7 +458,7 @@ systems::is_file_in_use() {
     # This is more reliable than pgrep for finding a process using a specific binary.
     # The '-t' flag provides terse output (PIDs only).
     local pids
-    pids=$(lsof -t "$file_path" 2>/dev/null || true)
+    pids=$(lsof -t "$file_path" 2> /dev/null || true)
 
     if [[ -n "$pids" ]]; then
         # Join PIDs into a single space-separated string
@@ -476,32 +476,37 @@ systems::kill_processes_by_file_path() {
     local file_path="$1"
     local app_name="$2"
 
-    local pids
-    if ! pids=$(systems::is_file_in_use "$file_path"); then
+    local pids_string
+    if ! pids_string=$(systems::is_file_in_use "$file_path"); then
         loggers::info "No running processes found for '$app_name'."
         return 0
     fi
 
-    loggers::warn "Attempting to terminate running processes for '$app_name' (PIDs: $pids)."
+    # Convert space-separated PIDs string to a bash array
+    IFS=' ' read -r -a pids_array <<< "$pids_string"
+
+    loggers::warn "Attempting to terminate running processes for '$app_name' (PIDs: ${pids_array[*]})."
 
     # Use sudo kill to ensure processes are terminated
-    if ! sudo kill -TERM $pids 2>/dev/null; then
-        loggers::warn "Initial TERM signal failed for '$app_name' (PIDs: $pids). This can happen if processes already exited."
+    if ! sudo kill -TERM "${pids_array[@]}" 2> /dev/null; then
+        loggers::warn "Initial TERM signal failed for '$app_name' (PIDs: ${pids_array[*]}). This can happen if processes already exited."
     fi
 
     # Give processes a moment to terminate gracefully
     sleep 2
 
     # Check if any processes are still running
-    if pids=$(systems::is_file_in_use "$file_path"); then
-        loggers::warn "Processes for '$app_name' (PIDs: $pids) did not terminate gracefully. Attempting to force kill."
-        if ! sudo kill -KILL $pids 2>/dev/null; then
-            errors::handle_error "SYSTEM_ERROR" "Failed to force-terminate processes for '$app_name' (PIDs: $pids)." "$app_name"
+    if pids_string=$(systems::is_file_in_use "$file_path"); then
+        IFS=' ' read -r -a pids_array <<< "$pids_string" # Re-read PIDs
+        loggers::warn "Processes for '$app_name' (PIDs: ${pids_array[*]}) did not terminate gracefully. Attempting to force kill."
+        if ! sudo kill -KILL "${pids_array[@]}" 2> /dev/null; then
+            errors::handle_error "SYSTEM_ERROR" "Failed to force-terminate processes for '$app_name' (PIDs: ${pids_array[*]})." "$app_name"
             return 1
         fi
         sleep 1 # Brief pause after force kill
-        if pids=$(systems::is_file_in_use "$file_path"); then
-            errors::handle_error "SYSTEM_ERROR" "Processes for '$app_name' (PIDs: $pids) are still running after force kill." "$app_name"
+        if pids_string=$(systems::is_file_in_use "$file_path"); then
+            IFS=' ' read -r -a pids_array <<< "$pids_string" # Re-read PIDs
+            errors::handle_error "SYSTEM_ERROR" "Processes for '$app_name' (PIDs: ${pids_array[*]}) are still running after force kill." "$app_name"
             return 1
         fi
     fi

@@ -162,6 +162,8 @@ readonly -A APP_TYPE_VALIDATIONS=(
     ["script"]="name,download_url,version_url,version_regex"
     ["flatpak"]="name,flatpak_app_id"
     ["custom"]="name,custom_checker_script,custom_checker_func"
+    ["github_deb"]="repo_owner,repo_name,filename_pattern_template"
+    ["custom_checker"]="name,custom_checker_script,custom_checker_func" # Alias for 'custom'
 )
 
 # --- 11. Dependency Injection Variables ---

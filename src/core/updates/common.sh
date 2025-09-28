@@ -39,7 +39,7 @@ updates::process_installation() {
             counters::inc_skipped
             return 0
         fi
-        updates::on_install_start "$app_name"                 # Hook
+        updates::on_install_start "$app_name" # Hook
         if ((${DRY_RUN:-0})); then
             loggers::debug "  [DRY RUN] Would execute installation command: '$install_command_func ${install_command_args[*]}'."
             # Do not mutate state during dry runs.
@@ -172,9 +172,6 @@ updates::handle_up_to_date() {
     counters::inc_up_to_date
 }
 
-
-
-
 # Perform pre-installation checks for running processes.
 # This function is intended to be used as a PRE_INSTALL_HOOK.
 # It checks for running processes based on the 'binary_name' in the app's
@@ -190,6 +187,12 @@ updates::handle_up_to_date() {
 updates::pre_install_check_running_processes() {
     local app_name="$1"
     # The second argument (details_json) is ignored for this hook.
+
+    # If DRY_RUN is enabled, short-circuit and return immediately.
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        loggers::debug "  [DRY RUN] Skipping pre-install process check for '$app_name'."
+        return 0
+    fi
 
     declare -A app_config
     if ! configs::get_app_config "$app_name" "app_config"; then

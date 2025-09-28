@@ -16,29 +16,15 @@
       "type": "object",
       "description": "Contains the specific configuration for the application.",
       "oneOf": [
-        {
-          "$ref": "#/definitions/appimage"
-        },
-        {
-          "$ref": "#/definitions/custom"
-        },
-        {
-          "$ref": "#/definitions/direct_download"
-        },
-        {
-          "$ref": "#/definitions/github_release"
-        },
-        {
-          "$ref": "#/definitions/script"
-        }
+        { "$ref": "#/definitions/appimage" },
+        { "$ref": "#/definitions/custom" },
+        { "$ref": "#/definitions/direct_download" },
+        { "$ref": "#/definitions/github_release" },
+        { "$ref": "#/definitions/script" }
       ]
     }
   },
-  "required": [
-    "app_key",
-    "enabled",
-    "application"
-  ],
+  "required": ["app_key", "enabled", "application"],
   "definitions": {
     "common_properties": {
       "type": "object",
@@ -52,10 +38,7 @@
         },
         "checksum_algorithm": {
           "type": "string",
-          "enum": [
-            "sha256",
-            "sha512"
-          ]
+          "enum": ["sha256", "sha512"]
         },
         "sig_url": {
           "type": "string",
@@ -78,6 +61,9 @@
           "type": "boolean",
           "description": "If true, prompt the user to kill running processes associated with binary_name before installation."
         }
+      },
+      "dependencies": {
+        "prompt_to_kill_running_processes": ["binary_name"]
       }
     },
     "appimage": {
@@ -94,16 +80,8 @@
           "type": "string"
         }
       },
-      "required": [
-        "type",
-        "download_url",
-        "install_path"
-      ],
-      "allOf": [
-        {
-          "$ref": "#/definitions/common_properties"
-        }
-      ]
+      "required": ["type", "download_url", "install_path"],
+      "allOf": [{ "$ref": "#/definitions/common_properties" }]
     },
     "custom": {
       "type": "object",
@@ -122,16 +100,8 @@
           "type": "string"
         }
       },
-      "required": [
-        "type",
-        "custom_checker_script",
-        "custom_checker_func"
-      ],
-      "allOf": [
-        {
-          "$ref": "#/definitions/common_properties"
-        }
-      ]
+      "required": ["type", "custom_checker_script", "custom_checker_func"],
+      "allOf": [{ "$ref": "#/definitions/common_properties" }]
     },
     "direct_download": {
       "type": "object",
@@ -147,15 +117,8 @@
           "type": "string"
         }
       },
-      "required": [
-        "type",
-        "download_url"
-      ],
-      "allOf": [
-        {
-          "$ref": "#/definitions/common_properties"
-        }
-      ]
+      "required": ["type", "download_url"],
+      "allOf": [{ "$ref": "#/definitions/common_properties" }]
     },
     "github_release": {
       "type": "object",
@@ -176,17 +139,8 @@
           "type": "string"
         }
       },
-      "required": [
-        "type",
-        "repo_owner",
-        "repo_name",
-        "filename_pattern_template"
-      ],
-      "allOf": [
-        {
-          "$ref": "#/definitions/common_properties"
-        }
-      ]
+      "required": ["type", "repo_owner", "repo_name", "filename_pattern_template"],
+      "allOf": [{ "$ref": "#/definitions/common_properties" }]
     },
     "script": {
       "type": "object",
@@ -206,17 +160,8 @@
           "type": "string"
         }
       },
-      "required": [
-        "type",
-        "download_url",
-        "version_url",
-        "version_regex"
-      ],
-      "allOf": [
-        {
-          "$ref": "#/definitions/common_properties"
-        }
-      ]
+      "required": ["type", "download_url", "version_url", "version_regex"],
+      "allOf": [{ "$ref": "#/definitions/common_properties" }]
     }
   }
 }
