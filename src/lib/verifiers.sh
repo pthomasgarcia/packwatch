@@ -525,7 +525,7 @@ verification..."
         # Try .asc fallback only if no explicit override was set
         if [[ -z "$sig_url_override" ]]; then
             local asc_url="${download_url}.asc"
-            if networks::url_exists "$asc_url"; then
+            if networks::fast_url_exists "$asc_url"; then
                 temp_sig_file=$(networks::download_text_to_cache "$asc_url" \
                     "$allow_http") || {
                     verifiers::_handle_sig_download_failure \
