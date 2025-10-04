@@ -33,6 +33,10 @@
 #   - GPG signature verification support included
 # ==============================================================================
 
+# ==============================================================================
+# SECTION: Global Constants
+# ==============================================================================
+
 readonly DOWNSTREAM_NAME="VeraCrypt"
 readonly PLATFORM_NAME="Ubuntu"
 readonly ARCHITECTURE="amd64"
@@ -55,6 +59,10 @@ readonly UPSTREAM_BACKEND_SUFFIX="+download"
 readonly SOURCE_DESCRIPTION="Official Download Page"
 readonly CONTENT_TYPE="html"
 
+# ==============================================================================
+# SECTION: Helper Functions - Filename & URL Construction
+# ==============================================================================
+
 _veracrypt::build_package_filename() {
     : <<- 'DOC'
     Builds the expected package filename from upstream details.
@@ -70,6 +78,7 @@ _veracrypt::build_package_filename() {
     local version_upstream="$1"
     local platform_version="$2"
     echo "${DOWNSTREAM_NAME,,}-${version_upstream}-${PLATFORM_NAME}-${platform_version}-${ARCHITECTURE}.${PACKAGE_TYPE}"
+    return 0
 }
 
 _veracrypt::build_package_url() {
@@ -89,6 +98,7 @@ _veracrypt::build_package_url() {
     local package_filename
     package_filename=$(_veracrypt::build_package_filename "$version_upstream" "$platform_version")
     echo "${UPSTREAM_BACKEND_BASE_URL}/${version_upstream}/${UPSTREAM_BACKEND_SUFFIX}/${package_filename}"
+    return 0
 }
 
 _veracrypt::build_signature_url() {
@@ -104,7 +114,12 @@ _veracrypt::build_signature_url() {
 
     local package_url="$1"
     echo "${package_url}.${SIGNATURE_TYPE}"
+    return 0
 }
+
+# ==============================================================================
+# SECTION: Helper Functions - Pattern Application & Cache Management
+# ==============================================================================
 
 _veracrypt::apply_pattern() {
     : <<- 'DOC'
@@ -121,6 +136,7 @@ _veracrypt::apply_pattern() {
     local pattern="$1"
     local version="$2"
     echo "${pattern//VERSION/$version}"
+    return 0
 }
 
 _veracrypt::build_cache_dirname() {
@@ -136,6 +152,7 @@ _veracrypt::build_cache_dirname() {
 
     local version_upstream="$1"
     echo "${VERACRYPT_CACHE_DIR}/v${version_upstream}"
+    return 0
 }
 
 _veracrypt::build_signature_pathname() {
@@ -157,7 +174,12 @@ _veracrypt::build_signature_pathname() {
     local package_filename
     package_filename=$(_veracrypt::build_package_filename "$version_upstream" "$platform_version")
     echo "${dirname}/${package_filename}.${SIGNATURE_TYPE}"
+    return 0
 }
+
+# ==============================================================================
+# SECTION: Helper Functions - Signature Download
+# ==============================================================================
 
 _veracrypt::download_signature() {
     : <<- 'DOC'
@@ -198,7 +220,12 @@ _veracrypt::download_signature() {
 
     loggers::debug "VERACRYPT: Successfully downloaded signature to $pathname"
     echo "$pathname"
+    return 0
 }
+
+# ==============================================================================
+# SECTION: Parsing Functions - Web Content
+# ==============================================================================
 
 _veracrypt::get_version_upstream_from_page() {
     : <<- 'DOC'
@@ -214,7 +241,10 @@ _veracrypt::get_version_upstream_from_page() {
     local page_content="$1"
     local version
     version=$(grep -Po "$VERACRYPT_VERSION_PATTERN" <<< "$page_content" | head -n1)
-    [[ -n "$version" ]] && echo "$version"
+    if [[ -n "$version" ]]; then
+        echo "$version"
+    fi
+    return 0
 }
 
 _veracrypt::get_platform_version_from_page() {
@@ -235,71 +265,206 @@ _veracrypt::get_platform_version_from_page() {
     pattern=$(_veracrypt::apply_pattern "$VERACRYPT_PLATFORM_VERSION_PATTERN" "$version_upstream")
     local platform_version
     platform_version=$(grep -Po "$pattern" <<< "$page_content" | sort -V | tail -n1)
-    [[ -n "$platform_version" ]] && echo "$platform_version"
+    if [[ -n "$platform_version" ]]; then
+        echo "$platform_version"
+    fi
+    return 0
 }
+
+# ==============================================================================
+# SECTION: Parsing Functions - Configuration
+# ==============================================================================
+
+_veracrypt::parse_config() {
+    : <<- 'DOC'
+	Parses the application config JSON and extracts all needed fields.
+	Arguments:
+	  $1 - raw JSON string of app config
+	Outputs:
+	  name, installed_version, cache_key, gpg_key_id, gpg_fingerprint, download_url_base
+	DOC
+
+    local app_config_json="$1"
+    local -A app_info
+
+    if ! configs::get_cached_app_info "$app_config_json" app_info; then
+        responses::emit_error "CONFIG_ERROR" "Failed to parse app info cache." "VeraCrypt" >&2
+        return 1
+    fi
+
+    local key
+    for key in name installed_version cache_key; do
+        echo "${app_info[$key]}"
+    done
+
+    local cache_key="${app_info["cache_key"]}"
+    for key in gpg_key_id gpg_fingerprint download_url_base; do
+        systems::fetch_cached_json "$cache_key" "$key"
+    done
+
+    return 0
+}
+
+# ==============================================================================
+# SECTION: Parsing Functions - Upstream Details
+# ==============================================================================
+
+_veracrypt::parse_upstream_details() {
+    : <<- 'DOC'
+	Fetches webpage and parses upstream version and platform version.
+	Arguments:
+		$1 - base download URL
+	Outputs:
+		version_upstream, platform_version
+	DOC
+
+    local download_url_base="$1"
+    local page_content
+    if ! page_content=$(networks::fetch_and_load "$download_url_base" "$CONTENT_TYPE" "$DOWNSTREAM_NAME" \
+        "Failed fetching download page for $DOWNSTREAM_NAME"); then
+        responses::emit_error "NETWORK_ERROR" "Network issue fetching page for $DOWNSTREAM_NAME" "$DOWNSTREAM_NAME" >&2
+        return 1
+    fi
+
+    local version_upstream
+    version_upstream=$(_veracrypt::get_version_upstream_from_page "$page_content")
+    if validators::is_empty "$version_upstream"; then
+        responses::emit_error "PARSING_ERROR" \
+            "Failed to locate latest version information. May require format update." "$DOWNSTREAM_NAME" >&2
+        return 1
+    fi
+
+    local platform_version
+    platform_version=$(_veracrypt::get_platform_version_from_page "$page_content" "$version_upstream")
+    if validators::is_empty "$platform_version"; then
+        responses::emit_error "PLATFORM_MISSING" \
+            "No matching ${PLATFORM_NAME} binaries found for version=${version_upstream}" "$DOWNSTREAM_NAME" >&2
+        return 1
+    fi
+
+    echo "$version_upstream"
+    echo "$platform_version"
+    return 0
+}
+
+# ==============================================================================
+# SECTION: Update Status Determination
+# ==============================================================================
+
+_veracrypt::determine_update_status() {
+    : <<- 'DOC'
+	Compares installed version against latest and returns appropriate status.
+	Arguments:
+		$1 - installed version string
+		$2 - upstream version string
+	Outputs:
+		update_status ("no_update", "update_available")
+	DOC
+
+    local installed_version="$1"
+    local version_upstream="$2"
+    installed_version=$(versions::strip_prefix "$installed_version")
+    version_upstream=$(versions::strip_prefix "$version_upstream")
+
+    loggers::debug "VERACRYPT: Installed v=$installed_version vs Latest v=$version_upstream"
+    responses::determine_status "$installed_version" "$version_upstream"
+    return 0
+}
+
+# ==============================================================================
+# SECTION: Response Generation
+# ==============================================================================
+
+_veracrypt::generate_response_data() {
+    : <<- 'DOC'
+	Constructs response arguments for success emit.
+	Arguments:
+		$1 - update_status
+		$2 - version_upstream
+		$3 - platform_version
+		$4 - download_url_base
+		$5 - gpg_key_id
+		$6 - gpg_fingerprint
+		$7 - sig_path (optional)
+	Output:
+		formatted argument array for responses::emit_success
+	DOC
+
+    local status="$1"
+    local version_upstream="$2"
+    local platform_version="$3"
+    local download_url_base="$4"
+    local gpg_key_id="$5"
+    local gpg_fingerprint="$6"
+    local sig_path="$7"
+
+    local download_url_final
+    download_url_final=$(_veracrypt::build_package_url "$version_upstream" "$platform_version")
+
+    local validated_download_url
+    if ! validated_download_url=$(networks::validate_url "$download_url_final"); then
+        responses::emit_error "NETWORK_ERROR" \
+            "Download link appears invalid or unreachable ($download_url_final)." \
+            "$DOWNSTREAM_NAME" >&2
+        return 1
+    fi
+
+    local -a response_args=(
+        "$status" "$version_upstream" "$PACKAGE_TYPE" "${SOURCE_DESCRIPTION}"
+        download_url "$validated_download_url"
+        gpg_key_id "$gpg_key_id"
+        gpg_fingerprint "$gpg_fingerprint"
+        install_type "$PACKAGE_TYPE"
+    )
+
+    if [[ -n "$sig_path" && -f "$sig_path" ]]; then
+        response_args+=(sig_path "$sig_path")
+    fi
+
+    responses::emit_success "${response_args[@]}"
+    return 0
+}
+
+# ==============================================================================
+# SECTION: Main Function
+# ==============================================================================
 
 veracrypt::check() {
     : <<- 'DOC'
 	Main function that checks if there is an update available for VeraCrypt based on the app config.
 
 	Arguments:
-	  	$1 - application config JSON as a string
+		$1 - application config JSON as a string
 
 	Stdout:
-	  	A structured JSON response indicating status, version, URL, signature path, etc.
+		A structured JSON response indicating status, version, URL, signature path, etc.
 
 	Stderr:
-	  	Logs and diagnostic information.
+		Logs and diagnostic information.
 	DOC
 
     local app_config_json="$1"
 
-    # STEP 1: Parse and validate configuration data
-    local -A app_info
-    if ! configs::get_cached_app_info "$app_config_json" app_info; then
-        responses::emit_error "CONFIG_ERROR" "Failed to parse app info cache." "VeraCrypt" >&2
+    if ! IFS=$'\n' read -rd '' name installed_version cache_key \
+        gpg_key_id gpg_fingerprint download_url_base < <(
+            _veracrypt::parse_config "$app_config_json" && printf '\0'
+        ); then
         return 1
     fi
-
-    local name="${app_info["name"]}"
-    local installed_version="${app_info["installed_version"]}"
-    local cache_key="${app_info["cache_key"]}"
-
-    local gpg_key_id gpg_fingerprint download_url_base
-    gpg_key_id=$(systems::fetch_cached_json "$cache_key" "gpg_key_id")
-    gpg_fingerprint=$(systems::fetch_cached_json "$cache_key" "gpg_fingerprint")
-    download_url_base=$(systems::fetch_cached_json "$cache_key" "download_url_base")
 
     if validators::is_empty "$download_url_base"; then
         responses::emit_error "CONFIG_ERROR" "Missing 'download_url_base' in config." "$name" >&2
         return 1
     fi
 
-    # STEP 2: Fetch the official downloads HTML page
-    local page_content
-    if ! page_content=$(networks::fetch_and_load "$download_url_base" "$CONTENT_TYPE" "$name" \
-        "Failed fetching download page for $name"); then
-        responses::emit_error "NETWORK_ERROR" "Network issue fetching page for $name" "$name" >&2
+    if ! IFS=$'\n' read -rd '' version_upstream platform_version < <(
+        _veracrypt::parse_upstream_details "$download_url_base" && printf '\0'
+    ); then
         return 1
     fi
 
-    # STEP 3: Detect upstream release version
-    local version_upstream
-    version_upstream=$(_veracrypt::get_version_upstream_from_page "$page_content")
-    if validators::is_empty "$version_upstream"; then
-        responses::emit_error "PARSING_ERROR" \
-            "Failed to locate latest version information for $name. May require format update." \
-            "$name" >&2
-        return 1
-    fi
-
-    installed_version=$(versions::strip_prefix "$installed_version")
-    version_upstream=$(versions::strip_prefix "$version_upstream")
-    loggers::debug "VERACRYPT: Installed v=$installed_version vs Latest v=$version_upstream"
-
-    # STEP 4: Compare local version against upstream
     local output_status
-    output_status=$(responses::determine_status "$installed_version" "$version_upstream")
+    output_status=$(_veracrypt::determine_update_status "$installed_version" "$version_upstream")
 
     if [[ "$output_status" == "no_update" ]]; then
         responses::emit_success "$output_status" "$version_upstream" "$PACKAGE_TYPE" "${SOURCE_DESCRIPTION}" \
@@ -308,40 +473,20 @@ veracrypt::check() {
         return 0
     fi
 
-    # STEP 5: Extract platform version
-    local platform_version
-    platform_version=$(_veracrypt::get_platform_version_from_page "$page_content" "$version_upstream")
-    if validators::is_empty "$platform_version"; then
-        responses::emit_error "PLATFORM_MISSING" \
-            "No matching ${PLATFORM_NAME} binaries were found for version=${version_upstream}" "$name" >&2
-        return 1
+    local sig_path=""
+    local downloaded_sig_path
+    if downloaded_sig_path=$(_veracrypt::download_signature "$version_upstream" "$platform_version"); then
+        if [[ -f "$downloaded_sig_path" ]]; then
+            sig_path="$downloaded_sig_path"
+        else
+            sig_path=""
+        fi
+    else
+        loggers::debug "VERACRYPT: Signature download failed; continuing without verification."
     fi
 
-    # STEP 6: Construct and validate binary download link
-    local download_url_final
-    download_url_final=$(_veracrypt::build_package_url "$version_upstream" "$platform_version")
-    local validated_download_url
-    if ! validated_download_url=$(networks::validate_url "$download_url_final"); then
-        responses::emit_error "NETWORK_ERROR" \
-            "Download link appears invalid or unreachable ($download_url_final)." "$name" >&2
-        return 1
-    fi
-
-    # STEP 7: Retrieve signed signature file associated with this release
-    local sig_path
-    sig_path=$(_veracrypt::download_signature "$version_upstream" "$platform_version")
-    if [[ ! -f "$sig_path" ]]; then
-        loggers::debug "VERACRYPT: Signature download failed; proceeding without verification..."
-    fi
-
-    # STEP 8: Emit structured successful response JSON blob
-    local -a response_args=(
-        "$output_status" "$version_upstream" "$PACKAGE_TYPE" "${SOURCE_DESCRIPTION}"
-        download_url "$validated_download_url"
-        gpg_key_id "$gpg_key_id"
-        gpg_fingerprint "$gpg_fingerprint"
-        install_type "$PACKAGE_TYPE"
-    )
-    [[ -n "$sig_path" && -f "$sig_path" ]] && response_args+=(sig_path "$sig_path")
-    responses::emit_success "${response_args[@]}"
+    _veracrypt::generate_response_data \
+        "$output_status" "$version_upstream" "$platform_version" "$download_url_base" \
+        "$gpg_key_id" "$gpg_fingerprint" "$sig_path"
+    return 0
 }
