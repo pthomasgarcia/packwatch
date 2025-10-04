@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 SHELLCHECK_FLAGS := -S style -x
 SHFMT_FLAGS := -i 4 -ci -sr
 
-.PHONY: lint-shell format-shell format-check ci tools
+.PHONY: lint-shell format-shell format-check check-line-length ci tools
 
 # Optional: verify tools exist locally
 tools:
@@ -19,6 +19,14 @@ lint-shell: tools
 		shellcheck $(SHELLCHECK_FLAGS) "$${files[@]}"; \
 	fi
 
+# Check line length using shfmt (80 chars by default)
+check-line-length: tools
+	@echo "Checking line lengths with shfmt..."
+	@shfmt -l -d $(SHFMT_FLAGS) . || { \
+		echo "Some files have formatting issues or long lines"; \
+		exit 1; \
+	}
+
 # Check formatting (no write) — same as the Action step
 format-check: tools
 	@shfmt -d $(SHFMT_FLAGS) .
@@ -27,6 +35,6 @@ format-check: tools
 format-shell: tools
 	@shfmt -w $(SHFMT_FLAGS) .
 
-# CI target: run ShellCheck then shfmt diff
-ci: lint-shell format-check
+# CI target: run ShellCheck then shfmt line length check
+ci: lint-shell check-line-length
 	@echo "CI checks passed."
