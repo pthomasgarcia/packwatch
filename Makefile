@@ -1,8 +1,13 @@
 SHELL := /usr/bin/env bash
 
 # Flags kept in one place to match CI exactly
+# -i 4 = 4 spaces per indent for normal blocks
+# -ci = indent switch cases
+# -sr = simplify redirects
+# -ln bash = enforce Bash mode
+# -kp = keep existing indentation on continuation lines
+SHFMT_FLAGS := -i 4 -ci -sr -ln bash -kp
 SHELLCHECK_FLAGS := -S style -x
-SHFMT_FLAGS := -i 4 -ci -sr
 
 .PHONY: lint-shell format-shell format-check check-line-length ci tools
 
@@ -27,14 +32,14 @@ check-line-length: tools
 		exit 1; \
 	}
 
-# Check formatting (no write) — same as the Action step
+# Check formatting (no write)
 format-check: tools
 	@shfmt -d $(SHFMT_FLAGS) .
 
-# Auto-format locally if you want fixes applied
+# Auto-format locally
 format-shell: tools
 	@shfmt -w $(SHFMT_FLAGS) .
 
-# CI target: run ShellCheck then shfmt line length check
+# CI target
 ci: lint-shell check-line-length
 	@echo "CI checks passed."
