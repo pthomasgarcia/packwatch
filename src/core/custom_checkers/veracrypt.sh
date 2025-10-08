@@ -87,8 +87,12 @@ DOC
     local version_upstream="$1"
     local platform_version="$2"
 
-    echo "${DOWNSTREAM_NAME,,}-${version_upstream}-${PLATFORM_NAME}-" \
-        "${platform_version}-${ARCHITECTURE}.${PACKAGE_TYPE}"
+    local package_filename
+    package_filename="${DOWNSTREAM_NAME,,}-${version_upstream}-"
+    package_filename+="${PLATFORM_NAME}-${platform_version}-${ARCHITECTURE}."
+    package_filename+="${PACKAGE_TYPE}"
+
+    echo "$package_filename"
     return 0
 }
 
@@ -111,8 +115,12 @@ DOC
     package_filename=$(_veracrypt::build_package_filename "$version_upstream" \
         "$platform_version")
 
-    echo "${UPSTREAM_BACKEND_BASE_URL}/${version_upstream}/" \
-        "${UPSTREAM_BACKEND_SUFFIX}/${package_filename}"
+    local package_url
+    package_url="${UPSTREAM_BACKEND_BASE_URL}/${version_upstream}/"
+    package_url+="${UPSTREAM_BACKEND_SUFFIX}/${package_filename}"
+
+    echo "$package_url"
+
     return 0
 }
 

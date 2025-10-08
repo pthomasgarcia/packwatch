@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 # -sr = simplify redirects
 # -ln bash = enforce Bash mode
 # -kp = keep existing indentation on continuation lines
-SHFMT_FLAGS := -i 4 -ci -sr -ln bash -kp
+SHFMT_FLAGS := -i 4 -ci -sr -ln bash
 SHELLCHECK_FLAGS := -S style -x
 
 .PHONY: lint-shell format-shell format-check check-line-length ci tools
