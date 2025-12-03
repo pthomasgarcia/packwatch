@@ -207,7 +207,7 @@ web_parsers::parse_metadata_from_headers() {
 
     local content_type content_disp content_length filename version
     content_type=$(awk -F': ' '/^Content-Type:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
-    content_disp=$(awk '/^Content-Disposition:/ {gsub(/\r$/, ""); print}' "$header_file" 2> /dev/null || true)
+    content_disp=$(awk -F': ' '/^Content-Disposition:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
     content_length=$(awk -F': ' '/^Content-Length:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
     filename="$(web_parsers::parse_content_disposition "$content_disp")"
 

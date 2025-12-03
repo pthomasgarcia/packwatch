@@ -7,6 +7,6 @@
         "package_name": "ghostty",
         "repo_owner": "mkasberg",
         "repo_name": "ghostty-ubuntu",
-        "filename_pattern_template": "ghostty_%s_amd64_25.10.deb"
+        "filename_pattern_template": "ghostty_%s_amd64_%s.deb"
     }
 }
