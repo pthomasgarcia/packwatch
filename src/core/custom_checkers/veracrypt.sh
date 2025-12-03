@@ -47,16 +47,15 @@ readonly CACHE_BASE_DIR="${HOME:-/tmp}/.cache/packwatch/artifacts"
 readonly DOWNSTREAM_CACHE_DIR="${CACHE_BASE_DIR}/VeraCrypt"
 readonly SIGNATURE_TYPE="sig"
 
-# Pattern matching constants
-readonly DOWNSTREAM_VERSION_REGEX='[0-9]+\.[0-9]+\.[0-9]+' # e.g. 1.25.9
-readonly PLATFORM_VERSION_REGEX='[0-9.]+(?=-amd64\.deb)'   # e.g. 20.04
-
-read -r -d '' DOWNSTREAM_VERSION_PATTERN <<EOF
-Latest Stable Release - \K${DOWNSTREAM_VERSION_REGEX}
+# Pattern matching constants using sed -E compatible ERE
+readonly DOWNSTREAM_VERSION_REGEX='([0-9]+\.[0-9]+\.[0-9]+)'
+read -r -d '' DOWNSTREAM_VERSION_PATTERN << EOF
+Latest Stable Release - ${DOWNSTREAM_VERSION_REGEX}
 EOF
 
-read -r -d '' PLATFORM_VERSION_PATTERN <<EOF
-veracrypt-VERSION-Ubuntu-\K${PLATFORM_VERSION_REGEX}
+readonly PLATFORM_VERSION_REGEX='([0-9.]+)-amd64\.deb'
+read -r -d '' PLATFORM_VERSION_PATTERN << EOF
+veracrypt-VERSION-Ubuntu-${PLATFORM_VERSION_REGEX}
 EOF
 
 # Network constants
@@ -72,7 +71,7 @@ readonly CONTENT_TYPE="html"
 # ==============================================================================
 
 _veracrypt::build_package_filename() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Builds the expected package filename from upstream details.
 
     Arguments:
@@ -97,7 +96,7 @@ DOC
 }
 
 _veracrypt::build_package_url() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Constructs the download URL for a specific package.
 
     Arguments:
@@ -123,7 +122,7 @@ DOC
 }
 
 _veracrypt::build_signature_url() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Appends .sig suffix to generate the corresponding signature URL.
 
     Arguments:
@@ -144,7 +143,7 @@ DOC
 # ==============================================================================
 
 _veracrypt::apply_pattern() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Replaces "VERSION" token in a regex pattern with an actual version string.
 
     Arguments:
@@ -163,7 +162,7 @@ DOC
 }
 
 _veracrypt::build_cache_dirname() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Generates the local directory path where artifacts for a given version 
     should be cached.
 
@@ -181,7 +180,7 @@ DOC
 }
 
 _veracrypt::build_signature_pathname() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Constructs the local path to a cached .sig file based on package details.
 
     Arguments:
@@ -210,7 +209,7 @@ DOC
 # ==============================================================================
 
 _veracrypt::download_signature() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Downloads the signature file for a given version if not already cached 
     locally.
 
@@ -263,7 +262,7 @@ DOC
 # ==============================================================================
 
 _veracrypt::extract_upstream_version() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Parses and returns the latest upstream VeraCrypt version found in the HTML 
     page.
 
@@ -276,19 +275,21 @@ DOC
 
     local page_content="$1"
 
-    local version
-    version=$(grep -Po "$DOWNSTREAM_VERSION_PATTERN" <<<"$page_content" |
-        head -n1)
+    local upstream_version
+    upstream_version=$(
+        sed -E -n "s/.*${DOWNSTREAM_VERSION_PATTERN}.*/\1/p" \
+            <<< "$page_content" | head -n1
+    )
 
-    if [[ -n "$version" ]]; then
-        echo "$version"
+    if [[ -n "$upstream_version" ]]; then
+        echo "$upstream_version"
     fi
 
     return 0
 }
 
 _veracrypt::extract_platform_version() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Finds the latest compatible Ubuntu platform version embedded in the release 
     page HTML.
 
@@ -306,9 +307,12 @@ DOC
     local pattern
     pattern=$(_veracrypt::apply_pattern "$PLATFORM_VERSION_PATTERN" \
         "$upstream_version")
+
     local platform_version
-    platform_version=$(grep -Po "$pattern" <<<"$page_content" | sort -V |
-        tail -n1)
+    platform_version=$(
+        sed -E -n "s/.*${pattern}.*/\1/p" <<< "$page_content" |
+            sort -V | tail -n1
+    )
 
     if [[ -n "$platform_version" ]]; then
         echo "$platform_version"
@@ -322,7 +326,7 @@ DOC
 # ==============================================================================
 
 _veracrypt::parse_config() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Parses the application config JSON and extracts all needed fields.
 
     Arguments:
@@ -360,13 +364,14 @@ DOC
 # ==============================================================================
 
 _veracrypt::parse_upstream_details() {
-    : <<-'DOC'
-    Fetches webpage and parses upstream version and platform version.
+    : <<- 'DOC'
+    Fetches webpage, parses primary metadata like version and platform, and
+    retrieves the package download size.
 
     Arguments:
         $1 - base download URL
     Outputs:
-        upstream_version, platform_version
+        upstream_version, platform_version, download_size
 DOC
 
     local download_base_url="$1"
@@ -403,8 +408,18 @@ DOC
         return 1
     fi
 
+    # Attempt to fetch download size early
+    local download_size=""
+    if download_size=$(_veracrypt::fetch_download_size \
+        "$upstream_version" "$platform_version"); then
+        loggers::debug "VERACRYPT: Download size fetched: $download_size bytes."
+    else
+        loggers::debug "VERACRYPT: Failed to fetch download size during initial check."
+    fi
+
     echo "$upstream_version"
     echo "$platform_version"
+    echo "$download_size"
     return 0
 }
 
@@ -413,7 +428,7 @@ DOC
 # ==============================================================================
 
 _veracrypt::compare_versions() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Compares installed version against latest and returns appropriate status.
 
     Arguments:
@@ -440,7 +455,7 @@ DOC
 # ==============================================================================
 
 _veracrypt::emit_response() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Constructs response arguments for success emit.
 
     Arguments:
@@ -451,6 +466,7 @@ _veracrypt::emit_response() {
         $5 - gpg_key_id
         $6 - gpg_fingerprint
         $7 - sig_path (optional)
+        $8 - content_length (optional)
     Outputs:
         formatted argument array for responses::emit_success
 DOC
@@ -462,6 +478,7 @@ DOC
     local gpg_key_id="$5"
     local gpg_fingerprint="$6"
     local sig_path="$7"
+    local content_length="${8:-}"
 
     local download_final_url
     download_final_url=$(_veracrypt::build_package_url "$upstream_version" \
@@ -491,7 +508,51 @@ DOC
         response_args+=(sig_path "$sig_path")
     fi
 
+    if [[ -n "$content_length" ]]; then
+        response_args+=(content_length "$content_length")
+    fi
+
     responses::emit_success "${response_args[@]}"
+    return 0
+}
+
+# ==============================================================================
+# SECTION: Helper Functions - Download Metadata
+# ==============================================================================
+
+_veracrypt::fetch_download_size() {
+    : << 'DOC'
+    Performs a HEAD request to retrieve the Content-Length (expected download
+    size) in bytes for a specific VeraCrypt package.
+
+    Arguments:
+        $1 - upstream version (e.g. '1.26.24')
+        $2 - platform version (e.g. '22.04')
+
+    Returns:
+        Standard output: content length in bytes (if available)
+DOC
+
+    local upstream_version="$1"
+    local platform_version="$2"
+
+    local package_url
+    package_url=$(_veracrypt::build_package_url "$upstream_version" "$platform_version")
+
+    # One-step HEAD request + parse Content-Length directly
+    local content_length
+    content_length=$(
+        curl -sI -L "$package_url" |
+            awk '/[Cc]ontent-[Ll]ength/ {print $2}' | tr -d '\r'
+    )
+
+    # Fail fast if no result found
+    if [[ -z "$content_length" ]]; then
+        loggers::debug "VERACRYPT: Could not determine Content-Length for $package_url"
+        return 1
+    fi
+
+    echo "$content_length"
     return 0
 }
 
@@ -500,7 +561,7 @@ DOC
 # ==============================================================================
 
 veracrypt::check() {
-    : <<-'DOC'
+    : <<- 'DOC'
     Main function that checks if there is an update available for VeraCrypt 
     based on the app config.
 
@@ -533,7 +594,7 @@ DOC
     fi
 
     # Fetch and parse upstream details (latest version and platform version)
-    if ! IFS=$'\n' read -rd '' upstream_version platform_version < <(
+    if ! IFS=$'\n' read -rd '' upstream_version platform_version download_size < <(
         _veracrypt::parse_upstream_details "$download_base_url" && printf '\0'
     ); then
         return 1
@@ -572,6 +633,7 @@ DOC
     # Generate and emit the final response data
     _veracrypt::emit_response \
         "$update_status" "$upstream_version" "$platform_version" \
-        "$download_base_url" "$gpg_key_id" "$gpg_fingerprint" "$sig_path"
+        "$download_base_url" "$gpg_key_id" "$gpg_fingerprint" "$sig_path" \
+        "$download_size"
     return 0
 }

@@ -191,3 +191,30 @@ web_parsers::check_meta_refresh() {
     grep -i '<meta[^>]*http-equiv=["'\'']refresh["'\'']' "$html_file" 2> /dev/null |
         sed -n 's/.*content=["'\''][^"'\'']*url=\([^"'\'' >]*\).*/\1/ip' | head -n1
 }
+
+# Extract useful fields from raw header lines
+# $1: Header file path
+# $2: Effective resolved URL
+# Returns lines:
+#   content-type
+#   content-disposition
+#   suggested-filename
+#   inferred-version
+#   content-length
+web_parsers::parse_metadata_from_headers() {
+    local header_file="$1"
+    local resolved_url="$2"
+
+    local content_type content_disp content_length filename version
+    content_type=$(awk -F': ' '/^Content-Type:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
+    content_disp=$(awk '/^Content-Disposition:/ {gsub(/\r$/, ""); print}' "$header_file" 2> /dev/null || true)
+    content_length=$(awk -F': ' '/^Content-Length:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
+    filename="$(web_parsers::parse_content_disposition "$content_disp")"
+
+    # Explicitly pass arguments to web_parsers::extract_version to avoid unbound variable errors
+    local version_input
+    version_input="$(printf '%s\n%s\n%s\n' "$content_disp" "$filename" "$resolved_url")"
+    version="$(web_parsers::extract_version "$version_input")"
+
+    printf '%s\n%s\n%s\n%s\n%s\n' "$content_type" "$content_disp" "$filename" "$version" "$content_length"
+}

@@ -312,6 +312,7 @@ installation." "$app_name" # Changed message
         return 0           # Changed to return 0 to proceed
     fi
 }
+
 # --------------------------------------------------------------------
 # Public: verify content length from header
 # Usage: verifiers::verify_content_length "file_path" "download_url" "app_name" [expected_content_length]

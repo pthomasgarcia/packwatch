@@ -76,34 +76,11 @@ _cursor::resolve_install_path() {
 # Metadata Parsing Helpers
 # ------------------------------------------------------------------------------
 
-# Extract useful fields from raw header lines
-# $1: Header file path
-# $2: Effective resolved URL
-# Returns lines:
-#   content-type
-#   content-disposition
-#   suggested-filename
-#   inferred-version
-#   content-length
-_cursor::_download::parse_metadata_from_headers() {
-    local header_file="$1"
-    local resolved_url="$2"
-
-    local content_type content_disp content_length filename version
-    content_type=$(awk -F': ' '/^Content-Type:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
-    content_disp=$(awk '/^Content-Disposition:/ {gsub(/\r$/, ""); print}' "$header_file" 2> /dev/null || true)
-    content_length=$(awk -F': ' '/^Content-Length:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
-    filename="$(web_parsers::parse_content_disposition "$content_disp")"
-    version="$(printf '%s\n%s\n%s\n' "$content_disp" "$filename" "$resolved_url" | web_parsers::extract_version)"
-
-    printf '%s\n%s\n%s\n%s\n%s\n' "$content_type" "$content_disp" "$filename" "$version" "$content_length"
-}
-
 # Fetch HTTP response headers via cURL HEAD request
 # $1: Resource URL
 # $2: Destination header file
 # Returns success/failure state of remote fetch
-_cubbbrsor::_download::fetch_headers_for_url() {
+_cursor::_download::fetch_headers_for_url() {
     local url="$1"
     local dst="$2"
     if ! curl -fsSIL "$url" -A "$CURSOR_USER_AGENT" -D "$dst" -o /dev/null; then
@@ -142,7 +119,7 @@ _cursor::_download::_html_scraper::extract_best_asset_url() {
         fi
 
         local -a parsed_array
-        mapfile -t parsed_array < <(_cursor::_download::parse_metadata_from_headers "$head_file" "$resolved_asset_url")
+        mapfile -t parsed_array < <(web_parsers::parse_metadata_from_headers "$head_file" "$resolved_asset_url")
 
         local asset_name
         asset_name="$(web_parsers::parse_content_disposition "${parsed_array[1]:-}")"
@@ -175,7 +152,7 @@ _cursor::_download::_html_scraper::extract_best_asset_url() {
     fi
 
     local -a parsed_array
-    mapfile -t parsed_array < <(_cursor::_download::parse_metadata_from_headers "$head_file" "$resolved_asset_url")
+    mapfile -t parsed_array < <(web_parsers::parse_metadata_from_headers "$head_file" "$resolved_asset_url")
 
     local asset_name
     asset_name="$(web_parsers::parse_content_disposition "${parsed_array[1]:-}")"
@@ -250,7 +227,7 @@ _cursor::_download::from_html_redirects() {
     fi
 
     local -a lines
-    mapfile -t lines < <(_cursor::_download::parse_metadata_from_headers "$header_file" "$final_url")
+    mapfile -t lines < <(web_parsers::parse_metadata_from_headers "$header_file" "$final_url")
 
     declare -A meta=(
         [url]="$final_url"
