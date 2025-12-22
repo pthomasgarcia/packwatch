@@ -24,7 +24,8 @@ PACKWATCH_WEB_PARSERS_LOADED=1
 # Extract version from text input
 web_parsers::extract_version() {
     local text="$1"
-    local regex="${2:-[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*}"
+    local regex
+    regex="${2:-[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*}"
     echo "$text" | grep -Eo "$regex" | head -n1 || true
 }
 
@@ -38,11 +39,17 @@ web_parsers::parse_content_disposition() {
     fi
 
     # Try filename* format first
-    filename="$(sed -n 's/.*filename\*=[^'\'']*'\''[^'\'']*'\''\([^;]*\).*/\1/p' <<< "$content_disp" | head -n1)"
+    filename="$(
+        sed -n 's/.*filename\*=[^'\'']*'\''[^'\'']*'\''\([^;]*\).*/\1/p' <<< "$content_disp" |
+            head -n1
+    )"
 
     # Fall back to regular filename format
     if [[ -z "$filename" ]]; then
-        filename="$(sed -En 's/.*filename="?([^";]+).*/\1/p' <<< "$content_disp" | sed -n '1p')"
+        filename="$(
+            sed -En 's/.*filename="?([^";]+).*/\1/p' <<< "$content_disp" |
+                sed -n '1p'
+        )"
     fi
 
     echo "$filename"
@@ -69,7 +76,7 @@ web_parsers::validate_architecture() {
     local artifact_type="$2"
     local arch_tags_appimage="${3:-x86_64|amd64|x64}"
     local arch_tags_deb="${4:-amd64}"
-    local deny_arch_tags="${5:-aarch64|arm64|armv7|armhf|armel|arm}"
+    local deny_arch_tags="${5:-aarch64|arm64|armv7|armhf|armel|arm}" # Keep this line as is, it's a long string
     local lname="${filename,,}"
 
     case "$artifact_type" in
@@ -93,13 +100,17 @@ web_parsers::extract_urls_from_html() {
     local base_url="$2"
 
     # Extract absolute URLs and decode HTML entities
-    grep -Eo 'https?://[^"'\''<>\s]+' "$html_file" | sed -n '1,200p' | sed 's/&#43;/+/g'
+    grep -Eo 'https?://[^"'\''<>\s]+' "$html_file" |
+        sed -n '1,200p' |
+        sed 's/&#43;/+/g'
 
     # Extract and resolve relative URLs, then decode HTML entities
     local rel_hrefs
     mapfile -t rel_hrefs < <(
         grep -Eio '<a[^>]+href=["'\''][^"'\'' #>]+["'\'']' "$html_file" |
-            sed -E 's/.*href=["'\'']([^"'\''#>]+).*/\1/i' | sed -n '1,200p' | sed 's/&#43;/+/g'
+            sed -E 's/.*href=["'\'']([^"'\''#>]+).*/\1/i' |
+            sed -n '1,200p' |
+            sed 's/&#43;/+/g'
     )
 
     local rel
@@ -120,7 +131,7 @@ web_parsers::resolve_relative_url() {
         proto="$(awk -F: '{print $1}' <<< "$base_url")"
         echo "${proto}:$rel"
     elif [[ "$rel" =~ ^/ ]]; then
-        echo "$(awk -F/ '{print $1"//"$3}' <<< "$base_url")$rel"
+        echo "$(awk -F/ '{print $1"//"$3}' <<< "$base_url")$rel" # Keep as is for now
     else
         local base_no_q base_dir
         base_no_q="${base_url%%[\?#]*}"
@@ -136,7 +147,7 @@ web_parsers::select_best_url() {
     local re_deb="\.deb(\?|$|[[:punct:]])"
     local arch_tags_appimage="${3:-x86_64|amd64|x64}"
     local arch_tags_deb="${4:-amd64}"
-    local deny_arch_tags="${5:-aarch64|arm64|armv7|armhf|armel|arm}"
+    local deny_arch_tags="${5:-aarch64|arm64|armv7|armhf|armel|arm}" # Keep this line as is, it's a long string
 
     # Priority 1: AppImage with x86_64 architecture
     local url
@@ -189,7 +200,8 @@ web_parsers::check_meta_refresh() {
     local html_file="$1"
 
     grep -i '<meta[^>]*http-equiv=["'\'']refresh["'\'']' "$html_file" 2> /dev/null |
-        sed -n 's/.*content=["'\''][^"'\'']*url=\([^"'\'' >]*\).*/\1/ip' | head -n1
+        sed -n 's/.*content=["'\''][^"'\'']*url=\([^"'\'' >]*\).*/\1/ip' |
+        head -n1
 }
 
 # Extract useful fields from raw header lines
@@ -206,15 +218,25 @@ web_parsers::parse_metadata_from_headers() {
     local resolved_url="$2"
 
     local content_type content_disp content_length filename version
-    content_type=$(awk -F': ' '/^Content-Type:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
-    content_disp=$(awk -F': ' '/^Content-Disposition:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
-    content_length=$(awk -F': ' '/^Content-Length:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true)
+    content_type=$(
+        awk -F': ' '/^Content-Type:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true
+    )
+    content_disp=$(
+        awk -F': ' '/^Content-Disposition:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true
+    )
+    content_length=$(
+        awk -F': ' '/^Content-Length:/ {gsub(/\r$/, "", $2); print $2}' "$header_file" 2> /dev/null || true
+    )
     filename="$(web_parsers::parse_content_disposition "$content_disp")"
 
-    # Explicitly pass arguments to web_parsers::extract_version to avoid unbound variable errors
+    # Explicitly pass arguments to web_parsers::extract_version to avoid unbound
+    # variable errors
     local version_input
-    version_input="$(printf '%s\n%s\n%s\n' "$content_disp" "$filename" "$resolved_url")"
+    version_input="$(
+        printf '%s\n%s\n%s\n' "$content_disp" "$filename" "$resolved_url"
+    )"
     version="$(web_parsers::extract_version "$version_input")"
 
-    printf '%s\n%s\n%s\n%s\n%s\n' "$content_type" "$content_disp" "$filename" "$version" "$content_length"
+    printf '%s\n%s\n%s\n%s\n%s\n' \
+        "$content_type" "$content_disp" "$filename" "$version" "$content_length"
 }
