@@ -1,19 +1,34 @@
-# Packwatch: App Update Checker
+# Packwatch
 
-Packwatch is a powerful and extensible shell-based utility for checking for updates to your favorite applications. It is designed to be modular, allowing you to easily add new application checkers by creating simple JSON configuration files.
+![Packwatch banner](assets/banner.jpg)
 
-## Features
+## What it is
+Packwatch is a modular shell utility that checks for updates to your applications.  
+Add a new checker by dropping a single JSON file—no code changes required.
 
-- **Modular Design:** Each application is defined in its own JSON configuration file, making it easy to add, remove, or modify checkers.
-- **Multiple Check Methods:** Supports various methods for checking updates, including GitHub releases, APT repositories, and direct URL lookups.
-- **Configurable:** Easily configure which applications to check.
-- **Dry-Run Mode:** See what updates are available without performing any downloads or installations.
-- **Verbose Output:** Enable verbose logging for debugging and detailed information.
-- **Dependency Checking:** Ensures all required tools are available before running.
+## Highlights
+- **Pluggable checkers** – GitHub, APT, static URL, Flatpak, …  
+- **Dry-run mode** – see what’s new before you pull the trigger  
+- **Desktop notifications** – optional libnotify integration  
+- **CI-friendly** – exit codes and JSON output for automation
+
+## Quick start
+```bash
+git clone https://github.com/pthomasgarcia/packwatch.git
+cd packwatch
+
+# (optional) create starter config files
+src/core/main.sh --create-config
+
+# check everything you have enabled
+src/core/main.sh
+
+# or just a few apps
+src/core/main.sh ghostty tabby zed
+```
 
 ## Requirements
-
-To run Packwatch, you need the following dependencies installed on your system:
+Packwatch requires the following tools to be available in your path:
 
 - `wget`
 - `curl`
@@ -23,103 +38,60 @@ To run Packwatch, you need the following dependencies installed on your system:
 - `sha256sum`
 - `lsb_release`
 - `getent`
-- `coreutils`
-- `libnotify-bin` (for desktop notifications)
+- `lsof`
+- `ajv`
 
-You can typically install these on a Debian-based system with:
-```bash
-- `libc-bin` (provides `getent`)
-- `coreutils`
-- `libnotify-bin` (for desktop notifications)
+Optional:
+- `notify-send` (for desktop notifications)
 
-You can typically install these on a Debian-based system with:
+### Installation
+**Debian/Ubuntu:**
 ```bash
-sudo apt install -y wget curl gpg jq dpkg coreutils lsb-release libc-bin libnotify-bin
+sudo apt install wget curl gpg jq dpkg coreutils lsb-release libc-bin libnotify-bin lsof npm
+sudo npm i @jirutka/ajv-cli
 ```
 
-For Flatpak support, ensure you have Flatpak installed. You can find instructions at [flatpak.org/setup/](https://flatpak.org/setup/).
+**Flatpak support:**
+Install Flatpak from [flatpak.org/setup](https://flatpak.org/setup).
 
-## Installation
+## CLI flags
+| Flag | Purpose |
+|------|---------|
+| `-h, --help` | show help |
+| `-v, --verbose` | debug logging |
+| `-n, --dry-run` | check only, no downloads |
+| `--cache-duration N` | cache results for N seconds (default 300) |
+| `--create-config` | scaffold `config/conf.d/*.json` files |
+| `--version` | show version |
 
-1.  Clone this repository to your local machine:
-    ```bash
-    git clone https://github.com/yourusername/packwatch.git
-    cd <repository-directory>
-    ```
-2.  (Optional) Create the default configuration files. This is a good way to get started.
-    ```bash
-    src/core/main.sh --create-config
-    ```
-    This will populate the `config/conf.d/` directory with example JSON files.
+## Adding your own app
+1. Create `config/conf.d/myapp.json`
+2. Set at least these keys:
 
-## Usage
+```json
+{
+  "enabled": true,
+  "method": "github-release",
+  "repo": "owner/myapp",
+  "current": "1.2.3"
+}
+```
 
-The main entry point for the script is `src/core/main.sh`.
+3. Run `src/core/main.sh myapp` – done.
 
-### Basic Commands
+See existing files for APT, URL, and Flatpak examples.
 
--   **Check for all enabled applications:**
-    ```bash
-    src/core/main.sh
-    ```
+## Hacking
+```bash
+# lint & format
+make lint-shell format-shell
 
--   **Check for specific applications:**
-    Provide the application keys (the JSON filename without the extension) as arguments.
-    ```bash
-    src/core/main.sh ghostty tabby zed
-    ```
+# run the same checks CI runs
+make ci
+```
 
--   **Show the help message:**
-    ```bash
-    src/core/main.sh --help
-    ```
+Tools used: [shellcheck](https://www.shellcheck.net) + [shfmt](https://github.com/mvdan/sh).
 
-### Command-Line Options
+---
 
--   `-h, --help`: Show the help message and exit.
--   `-v, --verbose`: Enable verbose output for debugging.
--   `-n, --dry-run`: Perform a dry run, checking for updates without downloading or installing anything.
--   `--cache-duration N`: Set the cache duration in seconds (default: 300).
--   `--create-config`: Create default modular configuration files and exit.
--   `--version`: Show the script version and exit.
-
-## Configuration
-
-Packwatch is configured through JSON files located in the `config/conf.d/` directory. Each file represents an application to be checked.
-
-You can enable or disable an application by setting the `"enabled": true/false` flag within its JSON file.
-
-To add a new application, create a new `.json` file in the `config/conf.d/` directory, following the structure of the existing files.
-
-## For Developers
-
-This project uses `shellcheck` for static analysis and `shfmt` for formatting.
-
-### Development Tools
-
--   **`shellcheck`**: A static analysis tool for shell scripts.
--   **`shfmt`**: A shell script formatter.
-
-### Makefile Commands
-
-The `Makefile` provides convenient targets for development:
-
--   **Lint Shell Scripts:**
-    ```bash
-    make lint-shell
-    ```
-
--   **Format Shell Scripts:**
-    ```bash
-    make format-shell
-    ```
-
--   **Check Formatting (without modifying files):**
-    ```bash
-    make format-check
-    ```
-
--   **Run all CI checks:**
-    ```bash
-    make ci
-    ```
+MIT © 
