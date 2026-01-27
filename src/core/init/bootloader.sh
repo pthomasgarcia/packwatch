@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# src/core/init/bootloader.sh
 # shellcheck disable=SC1090,SC1091
 # Idempotent guard for bootloader module
 if [ -n "${PACKWATCH_BOOTLOADER_LOADED:-}" ]; then
@@ -35,3 +36,7 @@ fi
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).
+
+# ==============================================================================
+# END OF MODULE
+# ==============================================================================

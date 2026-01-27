@@ -7,120 +7,204 @@
 #   - Encapsulates logic for AppImage updates and installations.
 # ==============================================================================
 
+# updates::process_appimage_file() {
+#     local config_array_name="$1" # Name of the app config associative array
+#     local app_name="$2"
+#     local latest_version="$3"
+#     local download_url="$4"
+#     local install_target_full_path="$5"
+#     local app_key="$6"
+#     local expected_checksum="${7:-}"        # Direct checksum value (if any) derived from release metadata
+#     local checksum_algorithm="${8:-sha256}" # Hash algorithm (default sha256)
+#     local allow_http="${9:-0}"              # Allow insecure HTTP (0/1)
+
+#     # Bind nameref for verification / config-driven options
+#     local -n app_config_ref="$config_array_name"
+
+#     if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$install_target_full_path" ]] || [[ -z "$app_key" ]]; then
+#         errors::handle_error "VALIDATION_ERROR" "Invalid parameters for AppImage update flow (version, URL, install path, or app_key missing)" "$app_name"
+#         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"appimage_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Invalid parameters for AppImage update flow.\"}"
+#         return 1
+#     fi
+
+#     local temp_appimage_path
+#     local base_filename_for_tmp
+#     base_filename_for_tmp="$(basename "$install_target_full_path" | sed 's/\.AppImage$//')"
+#     base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
+#     if ! temp_appimage_path=$(systems::create_temp_file "${base_filename_for_tmp}"); then
+#         errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: '${base_filename_for_tmp}'" "$app_name"
+#         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"appimage_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to create temporary file.\"}"
+#         return 1
+#     fi
+#     TEMP_FILES+=("$temp_appimage_path")
+#     # allow_http is provided as the 8th argument; do not override from config here.
+
+#     local content_length_from_config="${app_config_ref[content_length]:-unknown}"
+#     local content_length_display="${content_length_from_config}"
+#     if [[ "$content_length_display" =~ ^[0-9]+$ ]]; then
+#         content_length_display="$(_format_bytes "$content_length_display")"
+#     fi
+
+#     updates::on_download_start "$app_name" "$content_length_display"
+#     if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "" "" "$allow_http"; then # DI applied, added allow_http
+#         errors::handle_error "NETWORK_ERROR" "Failed to download AppImage" "$app_name"
+#         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download AppImage.\"}"
+#         return 1
+#     fi
+#     updates::on_download_complete "$app_name" "$temp_appimage_path" # Hook
+
+#     # Perform verification after download
+#     # Pass content_length from config to verifiers::verify_artifact
+#     if ! verifiers::verify_artifact "$config_array_name" "$temp_appimage_path" "$download_url" "$expected_checksum" "$content_length_from_config"; then
+#         errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded AppImage: '$app_name'." "$app_name"
+#         return 1
+#     fi
+
+#     if ! chmod +x "$temp_appimage_path"; then
+#         errors::handle_error "PERMISSION_ERROR" "Failed to make AppImage executable: '$temp_appimage_path'" "$app_name"
+#         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to make AppImage executable.\"}"
+#         return 1
+#     fi
+
+#     # Use the generic process_installation function
+#     updates::process_installation \
+#         "$app_name" \
+#         "$app_key" \
+#         "$latest_version" \
+#         "updates::_install_appimage_file_command" \
+#         "$temp_appimage_path" \
+#         "$install_target_full_path" \
+#         "$app_name"
+# }
+
 updates::process_appimage_file() {
-    local config_array_name="$1" # Name of the app config associative array
+    local config_array_name="$1"
     local app_name="$2"
     local latest_version="$3"
     local download_url="$4"
     local install_target_full_path="$5"
     local app_key="$6"
-    local expected_checksum="${7:-}"        # Direct checksum value (if any) derived from release metadata
-    local checksum_algorithm="${8:-sha256}" # Hash algorithm (default sha256)
-    local allow_http="${9:-0}"              # Allow insecure HTTP (0/1)
+    local expected_checksum="${7:-}"
+    local checksum_algorithm="${8:-sha256}"
+    local allow_http="${9:-0}"
 
-    # Bind nameref for verification / config-driven options
     local -n app_config_ref="$config_array_name"
 
-    if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$install_target_full_path" ]] || [[ -z "$app_key" ]]; then
-        errors::handle_error "VALIDATION_ERROR" "Invalid parameters for AppImage update flow (version, URL, install path, or app_key missing)" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"appimage_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Invalid parameters for AppImage update flow.\"}"
+    # 1. Validation
+    if [[ -z "$latest_version" ]] || ! validators::check_url_format "$download_url" || [[ -z "$install_target_full_path" ]]; then
+        errors::handle_error "VALIDATION_ERROR" "Invalid parameters for AppImage worker." "$app_name"
         return 1
     fi
 
-    local temp_appimage_path
-    local base_filename_for_tmp
-    base_filename_for_tmp="$(basename "$install_target_full_path" | sed 's/\.AppImage$//')"
-    base_filename_for_tmp=$(systems::sanitize_filename "$base_filename_for_tmp")
-    if ! temp_appimage_path=$(systems::create_temp_file "${base_filename_for_tmp}"); then
-        errors::handle_error "VALIDATION_ERROR" "Failed to create temporary file with template: '${base_filename_for_tmp}'" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"appimage_process\", \"error_type\": \"VALIDATION_ERROR\", \"message\": \"Failed to create temporary file.\"}"
+    # 2. Define Persistent Cache Path
+    # Using PACKAGES_ARTIFACTS_DIR ensures the file survives between runs
+    local cache_dir="${PACKAGES_ARTIFACTS_DIR}/${app_name}/v${latest_version}"
+    local filename
+    filename=$(basename "$download_url")
+    local cached_path="${cache_dir}/${filename}"
+
+    local temp_appimage_path=""
+
+    # 3. Check Cache
+    if [[ -f "$cached_path" ]]; then
+        interfaces::on_using_cache "$app_name"
+        temp_appimage_path="$cached_path"
+    else
+        # 4. Perform Download to Cache
+        if ! mkdir -p "$cache_dir"; then
+            errors::handle_error "SYSTEM_ERROR" "Failed to create cache directory: $cache_dir" "$app_name"
+            return 1
+        fi
+
+        temp_appimage_path="$cached_path"
+
+        local content_length_from_config="${app_config_ref[content_length]:-unknown}"
+        local content_length_display="${content_length_from_config}"
+        if [[ "$content_length_display" =~ ^[0-9]+$ ]]; then
+            content_length_display="$(_format_bytes "$content_length_display")"
+        fi
+
+        updates::on_download_start "$app_name" "$content_length_display"
+
+        # Using the actual network implementation provided
+        if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "" "" "$allow_http"; then
+            errors::handle_error "NETWORK_ERROR" "Failed to download AppImage" "$app_name"
+            # Cleanup partial download if it exists
+            [[ -f "$temp_appimage_path" ]] && rm -f "$temp_appimage_path"
+            return 1
+        fi
+
+        updates::on_download_complete "$app_name" "$temp_appimage_path"
+    fi
+
+    # 5. Verification
+    # We pass the content_length and checksum algorithm (dynamic overrides) to verifiers::verify_artifact
+    if ! verifiers::verify_artifact "$config_array_name" "$temp_appimage_path" "$download_url" "$expected_checksum" "${app_config_ref[content_length]:-}" "$checksum_algorithm"; then
+        # Verification failed - remove corrupted file so next run can retry download
+        [[ -f "$temp_appimage_path" ]] && rm -f "$temp_appimage_path"
         return 1
     fi
-    TEMP_FILES+=("$temp_appimage_path")
-    # allow_http is provided as the 8th argument; do not override from config here.
 
-    local content_length_from_config="${app_config_ref[content_length]:-unknown}"
-    local content_length_display="${content_length_from_config}"
-    if [[ "$content_length_display" =~ ^[0-9]+$ ]]; then
-        content_length_display="$(_format_bytes "$content_length_display")"
-    fi
-
-    updates::on_download_start "$app_name" "$content_length_display"
-    if ! "$UPDATES_DOWNLOAD_FILE_IMPL" "$download_url" "$temp_appimage_path" "" "" "$allow_http"; then # DI applied, added allow_http
-        errors::handle_error "NETWORK_ERROR" "Failed to download AppImage" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"download\", \"error_type\": \"NETWORK_ERROR\", \"message\": \"Failed to download AppImage.\"}"
-        return 1
-    fi
-    updates::on_download_complete "$app_name" "$temp_appimage_path" # Hook
-
-    # Perform verification after download
-    # Pass content_length from config to verifiers::verify_artifact
-    if ! verifiers::verify_artifact "$config_array_name" "$temp_appimage_path" "$download_url" "$expected_checksum" "$content_length_from_config"; then
-        errors::handle_error "VALIDATION_ERROR" "Verification failed for downloaded AppImage: '$app_name'." "$app_name"
-        return 1
-    fi
-
+    # 6. Finalize Permissions
     if ! chmod +x "$temp_appimage_path"; then
-        errors::handle_error "PERMISSION_ERROR" "Failed to make AppImage executable: '$temp_appimage_path'" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to make AppImage executable.\"}"
+        errors::handle_error "PERMISSION_ERROR" "Failed to make AppImage executable." "$app_name"
         return 1
     fi
 
-    # Use the generic process_installation function
-    updates::process_installation \
-        "$app_name" \
-        "$app_key" \
-        "$latest_version" \
-        "updates::_install_appimage_file_command" \
-        "$temp_appimage_path" \
-        "$install_target_full_path" \
-        "$app_name"
+    # 7. Move to Installation Target
+    # This helper handles mkdir -p for the target and the final move/cleanup
+    if ! updates::_install_appimage_file_command "$temp_appimage_path" "$install_target_full_path" "$app_name"; then
+        return 1
+    fi
+
+    return 0
 }
 
 # Helper function to encapsulate the AppImage installation command
 updates::_install_appimage_file_command() {
     local temp_appimage_path="$1"
     local install_target_full_path="$2"
-    local app_name="$3" # Passed from process_installation, but not used here directly
+    local app_name="$3"
 
     local target_dir
     target_dir="$(dirname "$install_target_full_path")"
+
+    # Ensure directory exists
     if ! mkdir -p "$target_dir"; then
-        errors::handle_error "PERMISSION_ERROR" "Failed to create installation directory: '$target_dir'" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to create installation directory.\"}"
+        errors::handle_error "PERMISSION_ERROR" "Failed to create directory: '$target_dir'" "$app_name"
         return 1
     fi
 
-    # Remove existing file if present
-    if [[ -f "$install_target_full_path" ]]; then
-        if ! rm -f "$install_target_full_path"; then
-            errors::handle_error "PERMISSION_ERROR" "Failed to remove existing AppImage: '$install_target_full_path'" "$app_name"
-            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"PERMISSION_ERROR\", \"message\": \"Failed to remove existing AppImage.\"}"
-            return 1
-        fi
-    fi
+    # Remove existing file to avoid "Busy" errors or stale links
+    [[ -f "$install_target_full_path" ]] && rm -f "$install_target_full_path"
 
-    loggers::debug "Moving from '$temp_appimage_path' to '$install_target_full_path'"
-    if mv "$temp_appimage_path" "$install_target_full_path"; then
-        systems::unregister_temp_file "$temp_appimage_path"
-        chmod +x "$install_target_full_path" || loggers::warn "Failed to make final AppImage executable: '$install_target_full_path'."
-        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
+    loggers::debug "Copying from '$temp_appimage_path' to '$install_target_full_path'"
+    if cp "$temp_appimage_path" "$install_target_full_path"; then
+        # systems::unregister_temp_file "$temp_appimage_path" # Do not unregister/delete, as we want to keep the cache!
+        chmod +x "$install_target_full_path"
+
+        # Ownership management (Handling root vs user context)
+        # Only attempt chown if we are root or if ownership is incorrect/needed
+        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
             if [[ $(id -u) -eq 0 ]]; then
-                chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null ||
-                    loggers::warn "Failed to change ownership of '$install_target_full_path' to '$ORIGINAL_USER' (running as root)."
-            else
-                if ! systems::ensure_sudo_privileges "$app_name"; then
-                    return 1
-                fi
-                if ! sudo -n chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null; then
-                    loggers::warn "Skipping ownership change for '$install_target_full_path' (sudo failed or password required)."
-                fi
+                # Running as root, fix ownership to original user
+                chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null
             fi
         fi
+
+        # Create symlink in ~/.local/bin for PATH access
+        local link_name
+        link_name="${app_name,,}" # Lowercase
+        local link_dir="$HOME/.local/bin"
+        local link_path="$link_dir/$link_name"
+
+        mkdir -p "$link_dir"
+        ln -sf "$install_target_full_path" "$link_path"
+        interfaces::log_info "Created symlink for '$link_name' at $link_path"
+
         return 0
     else
-        errors::handle_error "INSTALLATION_ERROR" "Failed to move new AppImage from '$temp_appimage_path' to '$install_target_full_path'" "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to move new AppImage.\"}"
+        errors::handle_error "INSTALLATION_ERROR" "Failed to copy AppImage to final destination." "$app_name"
         return 1
     fi
 }
@@ -212,7 +296,11 @@ updates::check_appimage() {
 
     if updates::is_needed "$installed_version" "$latest_version"; then
         interfaces::print_ui_line "  " "⬆ " "New version available: $latest_version" "${COLOR_YELLOW}"
-        updates::process_appimage_file \
+        updates::process_installation \
+            "$name" \
+            "$app_key" \
+            "$latest_version" \
+            "updates::process_appimage_file" \
             "$config_array_name" \
             "${name}" \
             "${latest_version}" \
@@ -224,7 +312,11 @@ updates::check_appimage() {
             "${app_config_ref[allow_insecure_http]:-0}"
     elif [[ "$installed_version" == "0.0.0" && "$latest_version" != "0.0.0" ]]; then
         interfaces::print_ui_line "  " "⬆ " "App not installed. Installing $latest_version." "${COLOR_YELLOW}"
-        updates::process_appimage_file \
+        updates::process_installation \
+            "$name" \
+            "$app_key" \
+            "$latest_version" \
+            "updates::process_appimage_file" \
             "$config_array_name" \
             "${name}" \
             "${latest_version}" \

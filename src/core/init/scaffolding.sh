@@ -30,3 +30,7 @@ source "$CORE_DIR/../lib/web_parsers.sh"
 
 # Any module sourced by this phase should implement an idempotent guard
 # (e.g., PACKWATCH_MODULE_LOADED).
+
+# ==============================================================================
+# END OF MODULE
+# ==============================================================================

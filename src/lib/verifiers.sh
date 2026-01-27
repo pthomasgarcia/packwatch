@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# src/lib/verifiers.sh
 # shellcheck disable=SC1090,SC1091
 # Idempotent guard for verifiers module
 if [ -n "${PACKWATCH_VERIFIERS_LOADED:-}" ]; then
@@ -43,6 +44,7 @@ PACKWATCH_VERIFIERS_LOADED=1
 
 # Default curl timeout for verifiers (in seconds)
 : "${VERIFIERS_CURL_TIMEOUT:=10}"
+: "${VERIFIERS_S3_CHUNK_SIZE:=5242880}" # 5MB chunk size for S3 multipart uploads
 
 # --------------------------------------------------------------------
 # Private: basic utilities
@@ -50,12 +52,12 @@ PACKWATCH_VERIFIERS_LOADED=1
 
 # Lowercase helper (portable to Bash 3)
 verifiers::_lower() {
-    tr '[:upper:]' '[:lower:]' <<< "$1"
+    tr '[:upper:]' '[:lower:]' <<<"$1"
 }
 
 # Safe check for function existence
 verifiers::_has_func() {
-    declare -F "$1" > /dev/null 2>&1
+    declare -F "$1" >/dev/null 2>&1
 }
 
 # Safe unregister wrapper
@@ -72,7 +74,7 @@ verifiers::_require_cmds() {
     local missing=0
     local cmds=(jq awk grep cut head date sha256sum sha512sum curl base64 xxd md5sum)
     for c in "${cmds[@]}"; do
-        if ! command -v "$c" > /dev/null 2>&1; then
+        if ! command -v "$c" >/dev/null 2>&1; then
             missing=1
             if verifiers::_has_func errors::handle_error; then
                 errors::handle_error "MISSING_DEP" \
@@ -204,6 +206,51 @@ verifiers::_handle_sig_download_failure() {
 }
 
 # --------------------------------------------------------------------
+# Private: Compute S3 Multipart ETag
+# --------------------------------------------------------------------
+verifiers::_compute_s3_etag() {
+    local file_path="$1"
+    
+    if [[ ! -f "$file_path" ]]; then
+        return 1
+    fi
+
+    local tmp_dir
+    tmp_dir=$(mktemp -d) || return 1
+    
+    # Split file into chunks
+    # We use split because it's standard.
+    split -b "$VERIFIERS_S3_CHUNK_SIZE" "$file_path" "${tmp_dir}/chunk_"
+    
+    # Calculate MD5 for each chunk, combine binary digests, then hash the combination
+    local calculated_hash part_count
+    
+    # Note: openssl dgst -md5 -binary outputs raw bytes.
+    # We need to concat them.
+    # find sorts by name (chunk_aa, chunk_ab...) which is correct for split default suffixes.
+    
+    # Using a subshell pipeline to avoid temp files for the concatenation if possible,
+    # but `xargs` is tricky with binary content.
+    # Safer: loop and append to a single temp file? Or use the user's find | xargs approach which is elegant.
+    
+    # User provided:
+    # find . -name "CURSOR_CHUNK_*" | sort | xargs -I {} openssl dgst -md5 -binary {} | openssl dgst -md5 -hex
+    
+    # We need strictly sorted list. `split` generates suffix 'aa', 'ab', etc.
+    # `find` order isn't guaranteed, need `sort`.
+    
+    calculated_hash=$(find "$tmp_dir" -type f -name "chunk_*" | sort | xargs -I {} openssl dgst -md5 -binary "{}" | openssl dgst -md5 -hex | awk '{print $NF}')
+    
+    part_count=$(find "$tmp_dir" -type f -name "chunk_*" | wc -l)
+    
+    # Cleanup
+    rm -rf "$tmp_dir"
+    
+    # Output format: HASH-PART_COUNT
+    echo "${calculated_hash}-${part_count}"
+}
+
+# --------------------------------------------------------------------
 # Public: compute hash for a file
 # Usage: verifiers::compute_checksum "path" ["sha256"|"sha512"]
 # Prints hash to stdout
@@ -215,12 +262,15 @@ verifiers::compute_checksum() {
     algo_lc="$(verifiers::_lower "$algorithm")"
 
     case "$algo_lc" in
-        "${VERIFIER_ALGO_SHA512}")
-            sha512sum "$file_path" | awk '{print $1}'
-            ;;
-        "${VERIFIER_ALGO_SHA256}" | *)
-            sha256sum "$file_path" | awk '{print $1}'
-            ;;
+    "${VERIFIER_ALGO_SHA512}")
+        sha512sum "$file_path" | awk '{print $1}'
+        ;;
+    "s3_etag")
+        verifiers::_compute_s3_etag "$file_path"
+        ;;
+    "${VERIFIER_ALGO_SHA256}" | *)
+        sha256sum "$file_path" | awk '{print $1}'
+        ;;
     esac
 }
 
@@ -246,14 +296,12 @@ verifiers::verify_checksum() {
     }
 
     if [[ "$expected" == "$actual" ]]; then
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✓ " "Checksum verified." \
-                "${COLOR_GREEN}"
+        verifiers::_has_func interfaces::on_verify_success &&
+            interfaces::on_verify_success "Checksum"
         return 0
     else
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✗ " \
-                "Checksum verification FAILED." "${COLOR_RED}"
+        verifiers::_has_func interfaces::on_verify_failure &&
+            interfaces::on_verify_failure "Checksum"
         return 1
     fi
 }
@@ -293,16 +341,14 @@ x-goog-hash header found for '$download_url'"
     }
 
     if [[ "$header_md5_hex" == "$local_md5" ]]; then
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✓ " "MD5 verified." \
-                "${COLOR_GREEN}"
+        verifiers::_has_func interfaces::on_verify_success &&
+            interfaces::on_verify_success "MD5"
         verifiers::_emit_verify_hook "md5" 1 "$header_md5_hex" "$local_md5" \
             "md5" "$app_name" "$file_path" "$download_url"
         return 0
     else
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✗ " "MD5 verification FAILED." \
-                "${COLOR_YELLOW}" # Changed to YELLOW for warning
+        verifiers::_has_func interfaces::on_verify_failure &&
+            interfaces::on_verify_failure "MD5"
         verifiers::_emit_verify_hook "md5" 0 "$header_md5_hex" "$local_md5" \
             "md5" "$app_name" "$file_path" "$download_url"
         verifiers::_has_func loggers::log && # Changed to log_message for warning
@@ -355,17 +401,15 @@ $local_file_size bytes"
     }
 
     if [[ "$header_content_length" == "$local_file_size" ]]; then
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✓ " "Content-Length verified." \
-                "${COLOR_GREEN}"
+        verifiers::_has_func interfaces::on_verify_success &&
+            interfaces::on_verify_success "Content-Length"
         verifiers::_emit_verify_hook "content-length" 1 \
             "$header_content_length" "$local_file_size" "content-length" \
             "$app_name" "$file_path" "$download_url"
         return 0
     else
-        verifiers::_has_func interfaces::print_ui_line &&
-            interfaces::print_ui_line "  " "✗ " \
-                "Content-Length verification FAILED." "${COLOR_RED}"
+        verifiers::_has_func interfaces::on_verify_failure &&
+            interfaces::on_verify_failure "Content-Length"
         verifiers::_emit_verify_hook "content-length" 0 \
             "$header_content_length" "$local_file_size" "content-length" \
             "$app_name" "$file_path" "$download_url"
@@ -384,11 +428,14 @@ verifiers::_verify_checksum_with_hooks() {
     local downloaded_file_path="$2"
     local download_url="$3"
     local direct_checksum="$4"
+    local algorithm_arg="$5"
 
     local -n cfg="$config_ref_name"
     local app_name="${cfg[name]:-unknown}"
     local checksum_algorithm
-    checksum_algorithm="$(verifiers::_lower "${cfg[checksum_algorithm]:-${VERIFIER_ALGO_SHA256}}")"
+    # Prioritize argument, then config, then default
+    local algo_source="${algorithm_arg:-${cfg[checksum_algorithm]:-}}"
+    checksum_algorithm="$(verifiers::_lower "${algo_source:-${VERIFIER_ALGO_SHA256}}")"
     local require_checksum="${cfg[require_checksum]:-false}"
 
     local expected
@@ -478,7 +525,7 @@ verification..."
                 "$csf" "$(basename "$downloaded_file_path" | cut -d'?' -f1)")
             local rc=$? # Capture rc here
             echo "${expected:-}"
-        } 2> /dev/null
+        } 2>/dev/null
         verifiers::_safe_unregister "$csf"
         return $rc
     fi
@@ -602,8 +649,8 @@ for '$app_name'." "$app_name"
 $gpg_fingerprint"
         interfaces::print_ui_line "  " "→ " "Actual GPG fingerprint:   \
 ${actual_signature:-<not-found>}"
-        interfaces::print_ui_line "  " "✓ " "Signature verified." \
-            "${COLOR_GREEN}"
+        verifiers::_has_func interfaces::on_verify_success &&
+            interfaces::on_verify_success "Signature"
     }
 
     verifiers::_emit_verify_hook "${VERIFIER_TYPE_SIGNATURE}" 1 \
@@ -665,6 +712,7 @@ verifiers::verify_artifact() {
     local download_url="$3"
     local direct_checksum="${4:-}"
     local expected_content_length_arg="${5:-}" # New: Optional pre-resolved content length from argument
+    local checksum_algorithm_arg="${6:-}"      # New: Optional override for algorithm
 
     local -n cfg="$config_ref_name"
     local app_name="${cfg[name]:-unknown}"
@@ -688,7 +736,7 @@ verifiers::verify_artifact() {
     if [[ "$skip_checksum" != "true" ]]; then
         verifiers::_verify_checksum_with_hooks \
             "$config_ref_name" "$downloaded_file_path" "$download_url" \
-            "$direct_checksum" || return 1
+            "$direct_checksum" "$checksum_algorithm_arg" || return 1
     fi
 
     # 3) MD5 from header (optional)
@@ -759,5 +807,9 @@ verifiers::extract_checksum_from_file() {
         head -n1)}
     [[ -z "$line" ]] && line=$(head -n1 "$checksum_file")
 
-    awk '{print $1}' <<< "$line"
+    awk '{print $1}' <<<"$line"
 }
+
+# ==============================================================================
+# END OF MODULE
+# ==============================================================================

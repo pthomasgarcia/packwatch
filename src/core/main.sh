@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# src/core/main.sh
 # shellcheck disable=SC1091
 
 # ==============================================================================
@@ -47,7 +48,7 @@ source "$INIT_DIR/interface.sh"
 
 # Setup environment variables and signal handlers
 main::setup_environment() {
-    : << 'DOC'
+    : <<'DOC'
   Sets up the environment variables and signal handlers for the application.
   
   This function hardens environment variables and sets up signal handlers
@@ -73,7 +74,7 @@ DOC
 
 # Validate initial application state
 main::validate_initial_state() {
-    : << 'DOC'
+    : <<'DOC'
   Validates the initial state of the application after module loading.
   
   This function checks for any errors during home directory determination,
@@ -104,7 +105,7 @@ DOC
 
 # Initialize application components
 main::init_components() {
-    : << 'DOC'
+    : <<'DOC'
   Initializes core application components and required files.
   
   This function resets counters, initializes the installed versions file,
@@ -157,7 +158,7 @@ DOC
 
 # Initialize the complete application environment and components
 main::init() {
-    : << 'DOC'
+    : <<'DOC'
   Orchestrates the complete initialization of the application.
   
   This function sets up the environment, validates the initial state,
@@ -191,7 +192,7 @@ DOC
 
 # Perform the main application workflow for checking and processing updates
 main::run() {
-    : << 'DOC'
+    : <<'DOC'
   Executes the main application workflow for checking and processing updates.
   
   This function validates the loaded app count, notifies the execution mode,
@@ -224,7 +225,7 @@ DOC
 # ==============================================================================
 
 main() {
-    : << 'DOC'
+    : <<'DOC'
   Orchestrates the entire application update check process.
 
   This function serves as the primary controller. It parses command-line
@@ -306,7 +307,7 @@ DOC
     interfaces::print_application_header
 
     # Optional Extension Init: Probe for specific extension readiness
-    if declare -F gpg::is_ready > /dev/null 2>&1; then
+    if declare -F gpg::is_ready >/dev/null 2>&1; then
         if ! gpg::is_ready; then
             loggers::warn \
                 "GPG might prompt or fail due to uninitialized keyring for the original user." \
@@ -343,3 +344,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"
     exit $?
 fi
+
+# ==============================================================================
+# END OF MODULE
+# ==============================================================================

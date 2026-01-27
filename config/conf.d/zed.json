@@ -3,10 +3,13 @@
   "app_key": "Zed",
   "enabled": true,
   "application": {
-    "name": "Zed",
-    "type": "custom",
-    "flatpak_app_id": "dev.zed.Zed",
-    "custom_checker_script": "zed.sh",
-    "custom_checker_func": "zed::check"
+    "type": "github_release",
+    "package_name": "zed",
+    "repo_owner": "zed-industries",
+    "repo_name": "zed",
+    "filename_pattern_template": "zed-linux-x86_64.tar.gz",
+    "install_strategy": "copy_root_contents",
+    "binary_name": "zed",
+    "checksum_from_github_release_digest": true
   }
 }

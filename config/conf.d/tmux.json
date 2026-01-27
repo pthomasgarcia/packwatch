@@ -1,0 +1,14 @@
+{
+  "$schema": "../schema.json",
+  "app_key": "Tmux",
+  "enabled": true,
+  "application": {
+    "type": "github_release",
+    "package_name": "tmux",
+    "repo_owner": "tmux",
+    "repo_name": "tmux",
+    "filename_pattern_template": "tmux-%s.tar.gz",
+    "install_strategy": "compile",
+    "checksum_from_github_release_digest": true
+  }
+}

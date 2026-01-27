@@ -59,21 +59,34 @@ updates::_perform_flatpak_installation() {
     fi
 
     # Update appstream data
+    # Update appstream data (quietly)
     interfaces::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
-    sudo flatpak update --appstream -y || {
-        loggers::warn "Failed to update Flatpak appstream data for $app_name. Installation might proceed but information could be stale."
-        interfaces::print_ui_line "  " "⚠ " "Failed to update Flatpak appstream data. Continuing anyway." "${COLOR_YELLOW}"
-    }
+    if ! sudo flatpak update --appstream -y >/dev/null 2>&1; then
+        interfaces::log_warn "Failed to update Flatpak appstream data. Installation might proceed but information could be stale."
+    fi
 
     # Perform installation or update in a single sudo session
-    if ! sudo bash -c "
-        flatpak install --or-update -y flathub '$flatpak_app_id'
-    "; then
-        errors::handle_error "INSTALLATION_ERROR" "Failed to install Flatpak app $app_name." "$app_name"
-        updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to install Flatpak app.\"}"
-        interfaces::print_ui_line "  " "✗ " "Failed to install Flatpak app." "${COLOR_RED}"
-        return 1
+    # Redirect output to void unless in verbose mode to prevent noise
+    local install_cmd="flatpak install --or-update -y flathub '$flatpak_app_id'"
+    
+    if [[ "${VERBOSE:-0}" -eq 1 ]]; then
+        if ! sudo bash -c "$install_cmd"; then
+             handle_flatpak_error "$app_name"
+             return 1
+        fi
+    else
+        if ! sudo bash -c "$install_cmd" >/dev/null 2>&1; then
+             handle_flatpak_error "$app_name"
+             return 1
+        fi
     fi
+}
+
+handle_flatpak_error() {
+    local app_name="$1"
+    errors::handle_error "INSTALLATION_ERROR" "Failed to install Flatpak app $app_name." "$app_name"
+    updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Failed to install Flatpak app.\"}"
+    interfaces::print_ui_line "  " "✗ " "Failed to install Flatpak app." "${COLOR_RED}"
 }
 
 # Updates module; checks for updates for a Flatpak application.

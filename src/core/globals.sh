@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# src/core/globals.sh
 # shellcheck disable=SC2034
 
 # --- Include Guard ---
@@ -80,13 +81,13 @@ HOME_ERROR=""                                # Stores error message if SUDO_USER
 if [[ -n "${SUDO_USER:-}" ]]; then
     DETERMINED_HOME=""
     # First, try the most reliable method: getent
-    if command -v getent > /dev/null 2>&1; then
+    if command -v getent >/dev/null 2>&1; then
         DETERMINED_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6 || true)
     fi
     # If getent fails or is not available, try a shell expansion fallback
     if [[ -z "${DETERMINED_HOME:-}" ]]; then
         # shellcheck disable=SC2086
-        DETERMINED_HOME=$(eval echo ~${SUDO_USER} 2> /dev/null || true)
+        DETERMINED_HOME=$(eval echo ~${SUDO_USER} 2>/dev/null || true)
     fi
 
     if [[ -n "${DETERMINED_HOME:-}" && -d "${DETERMINED_HOME}" ]]; then
@@ -258,3 +259,7 @@ globals::freeze() {
     # readonly SOME_CONFIG_VALUE
     return 0
 }
+
+# ==============================================================================
+# END OF MODULE
+# ==============================================================================

@@ -18,7 +18,7 @@
 # Constants for repo querying and version detection
 readonly WARP_APT_REPO_URL='https://releases.warp.dev/linux/deb/dists/stable/main/binary-amd64/Packages'
 readonly WARP_PACKAGE_NAME='warp-terminal'
-readonly WARP_VERSION_PATTERN="/^Package: $WARP_PACKAGE_NAME$/ {found=1} found && /^Version:/ {print \$2; exit}"
+
 
 # Validates presence of expected input value
 # $1: Value to test
@@ -34,9 +34,9 @@ _warp::validate_input() {
     return 0
 }
 
-# Fetches and parses latest available package version from official APT repo
-# Returns: Latest version string or fails if not parsable
-_warp::get_latest_version_from_repo() {
+# Fetches and parses latest available package version and checksum from official APT repo
+# Returns: "VERSION|SHA256" string or fails
+_warp::get_repo_metadata() {
     local packages_content
 
     # Download APT Packages file
@@ -52,17 +52,25 @@ _warp::get_latest_version_from_repo() {
         return 1
     fi
 
-    # Extract version using AWK
-    local version
-    version=$(echo "$packages_content" | awk "$WARP_VERSION_PATTERN")
+    # Extract version, checksum, and size using AWK
+    # Logic: Find the block for 'warp-terminal', then extract Version, SHA256, and Size
+    local metadata
+    metadata=$(echo "$packages_content" | awk '
+        /^Package: '"$WARP_PACKAGE_NAME"'$/ { in_block=1 }
+        /^Package:/ && !/^Package: '"$WARP_PACKAGE_NAME"'$/ { in_block=0 }
+        in_block && /^Version:/ { ver=$2 }
+        in_block && /^SHA256:/ { sha=$2 }
+        in_block && /^Size:/ { size=$2 }
+        END { if (ver && sha && size) print ver "|" sha "|" size }
+    ')
 
-    if [[ -z "$version" ]]; then
-        loggers::debug "WARP: Failed to extract version from APT Packages file."
+    if [[ -z "$metadata" ]]; then
+        loggers::debug "WARP: Failed to extract metadata from APT Packages file."
         return 1
     fi
 
-    # Return successfully parsed version
-    echo "$version"
+    # Return successfully parsed metadata
+    echo "$metadata"
 }
 
 # Main updater check entrypoint for Warp terminal.
@@ -111,16 +119,23 @@ warp::check() {
     # ---------------------------------------------------------------------------
     # STEP 2: Get latest version from APT repository
     # ---------------------------------------------------------------------------
-    local latest_version
-    if ! latest_version=$(_warp::get_latest_version_from_repo); then
+    local metadata
+    if ! metadata=$(_warp::get_repo_metadata); then
         responses::emit_error "PARSING_ERROR" \
             "Failed extracting upstream version for $name. May be source issue?" "$name"
         return 1
     fi
 
+    # Parse metadata "VERSION|SHA256|SIZE"
+    local raw_version latest_checksum latest_size
+    raw_version="${metadata%%|*}"
+    local rest="${metadata#*|}"
+    latest_checksum="${rest%%|*}"
+    latest_size="${rest##*|}"
+
     # Strip non-version components and normalize both sides
     installed_version=$(versions::strip_prefix "$installed_version")
-    latest_version=$(versions::strip_prefix "$latest_version" | sed 's/^0\.//')
+    latest_version=$(versions::strip_prefix "$raw_version" | sed 's/^0\.//')
 
     loggers::debug "WARP: installed='$installed_version' latest='$latest_version' base_url='$download_url_base'"
 
@@ -162,7 +177,9 @@ warp::check() {
         "Warp Apt Repo" \
         download_url "$validated_download_url" \
         filename "$(basename "$validated_download_url")" \
-        install_type "deb"
+        install_type "deb" \
+        expected_checksum "$latest_checksum" \
+        content_length "$latest_size"
 
     return 0
 }

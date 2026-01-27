@@ -1,12 +1,13 @@
 {
-    "$schema": "../schema.json",
-    "app_key": "Ghostty",
-    "enabled": true,
-    "application": {
-        "type": "github_release",
-        "package_name": "ghostty",
-        "repo_owner": "mkasberg",
-        "repo_name": "ghostty-ubuntu",
-        "filename_pattern_template": "ghostty_%s_amd64_%s.deb"
-    }
+  "$schema": "../schema.json",
+  "app_key": "Ghostty",
+  "enabled": true,
+  "application": {
+    "type": "github_release",
+    "package_name": "ghostty",
+    "repo_owner": "mkasberg",
+    "repo_name": "ghostty-ubuntu",
+    "filename_pattern_template": "ghostty_%s_amd64_%s.deb",
+    "checksum_from_github_release_digest": true
+  }
 }

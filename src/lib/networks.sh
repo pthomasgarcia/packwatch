@@ -141,22 +141,22 @@ networks::fetch_cached_data() {
         fi
 
         case "$expected_type" in
-            "json")
-                if ! jq . "$temp_download_file" > /dev/null 2>&1; then
-                    errors::handle_error "VALIDATION_ERROR" \
-                        "Fetched content for '$url' is not valid JSON."
-                    systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
-                    return 1
-                fi
-                ;;
-            "html")
-                if ! grep -q '<html' "$temp_download_file" > /dev/null 2>&1 &&
-                    ! grep -q '<!DOCTYPE html>' "$temp_download_file" > \
-                        /dev/null 2>&1; then
-                    loggers::warn "Fetched content for '$url' might not be \
+        "json")
+            if ! jq . "$temp_download_file" >/dev/null 2>&1; then
+                errors::handle_error "VALIDATION_ERROR" \
+                    "Fetched content for '$url' is not valid JSON."
+                systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
+                return 1
+            fi
+            ;;
+        "html")
+            if ! grep -q '<html' "$temp_download_file" >/dev/null 2>&1 &&
+                ! grep -q '<!DOCTYPE html>' "$temp_download_file" > \
+                    /dev/null 2>&1; then
+                loggers::warn "Fetched content for '$url' might not be \
 valid HTML, but continuing."
-                fi
-                ;;
+            fi
+            ;;
         esac
 
         mv -f "$temp_download_file" "$cache_file" || {
@@ -191,7 +191,7 @@ networks::download_text_to_cache() {
     tmp=$(systems::create_temp_file "sidecar") || return 1
 
     # Reuse download_file logic but suppress its UI output for silent operation
-    if ! networks::download_file "$url" "$tmp" "" "" "${ALLOW_INSECURE_HTTP:-false}" > /dev/null 2>&1; then
+    if ! networks::download_file "$url" "$tmp" "" "" "${ALLOW_INSECURE_HTTP:-false}" >/dev/null 2>&1; then
         # Error is already handled by download_file, just need to clean up and fail
         systems::unregister_temp_file "$tmp"
         return 1
@@ -240,7 +240,7 @@ networks::fast_head_status() {
     local mt="${PW_MAX_TIME}"        # Now a global
     curl -sS -o /dev/null -I \
         --connect-timeout "$ct" --max-time "$mt" \
-        -w '%{http_code}' "$url" 2> /dev/null || true
+        -w '%{http_code}' "$url" 2>/dev/null || true
 }
 
 # Boolean: quick existence check (2xx/3xx considered alive)
@@ -261,7 +261,7 @@ networks::fast_resolve_url() {
     # Use HEAD with -L and capture final effective URL
     curl -sS -I -L --max-redirs 5 \
         --connect-timeout "$ct" --max-time "$rt" \
-        -o /dev/null -w '%{url_effective}' "$url" 2> /dev/null || true
+        -o /dev/null -w '%{url_effective}' "$url" 2>/dev/null || true
 }
 
 # ------------------------------------------------------------------------------
@@ -273,37 +273,29 @@ networks::fast_resolve_url() {
 networks::download_file() {
     local url="$1"
     local dest_path="$2"
-    # Checksum parameters are handled by the calling function (e.g., updates module)
-    local allow_http="${5:-false}" # New parameter for allowing HTTP
+    local allow_http="${5:-false}"
+    local part_file="${dest_path}.part"
 
     networks::require_https_or_fail "$url" "$allow_http" || return 1
 
-    interfaces::print_ui_line "  " "→ " \
-        "Downloading $(basename "$dest_path")..." >&2 # Redirect to stderr
-
-    if [[ ${DRY_RUN:-0} -eq 1 ]]; then
-        interfaces::print_ui_line "    " "[DRY RUN] " \
-            "Would download: '$url'" "${COLOR_YELLOW}" >&2 # Redirect to stderr
-        return 0
-    fi
-
     if [[ -z "$url" ]]; then
-        errors::handle_error "NETWORK_ERROR" \
-            "Download URL is empty for destination: '$dest_path'."
+        errors::handle_error "NETWORK_ERROR" "Download URL is empty."
         return 1
     fi
 
+    # RESTORE: Use your original curl arg builder to keep it silent/formatted
     local -a curl_args
-    mapfile -t curl_args < <(networks::build_curl_args "$dest_path" \
-        "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-10}")
-    # Use configurable timeout multiplier
+    mapfile -t curl_args < <(networks::build_curl_args "$part_file" "${NETWORK_CONFIG[TIMEOUT_MULTIPLIER]:-10}")
+
+    # ADD: Resume flag and Fail flag for reliability
+    curl_args+=("-C" "-" "--fail")
 
     if ! systems::reattempt_command "${NETWORK_CONFIG[MAX_RETRIES]:-3}" "${NETWORK_CONFIG[RETRY_DELAY]:-5}" curl "${curl_args[@]}" "$url"; then
-        errors::handle_error "NETWORK_ERROR" \
-            "Failed to download '$url' after multiple attempts."
+        errors::handle_error "NETWORK_ERROR" "Failed to download '$url'."
         return 1
     fi
 
+    mv "$part_file" "$dest_path"
     return 0
 }
 
@@ -344,7 +336,7 @@ networks::validate_url() {
 
     # Fallback to networks::get_effective_url (may be slower)
     local resolved
-    resolved=$(networks::get_effective_url "$decoded" 2> /dev/null || true)
+    resolved=$(networks::get_effective_url "$decoded" 2>/dev/null || true)
     if [[ -n "$resolved" ]] && validators::check_url_format "$resolved"; then
         printf '%s' "$resolved"
         return 0
@@ -368,7 +360,7 @@ networks::fetch_cached_or_error() {
         # Ideally, emit_error would be in a more generic error handling
         # module.
         # For now, we'll keep the dependency for functional correctness.
-        responses::emit_error "NETWORK_ERROR" "$fail_msg" "$app" > /dev/null
+        responses::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >/dev/null
         return 1
     fi
     printf '%s' "$path"
@@ -382,7 +374,7 @@ networks::load_cached_content_or_error() {
     local fail_msg="${3:-Cached file missing or unreadable: $path}"
     if [[ ! -f "$path" ]]; then
         # Use responses::emit_error for consistency with custom checkers
-        responses::emit_error "CACHE_ERROR" "$fail_msg" "$app" > /dev/null
+        responses::emit_error "CACHE_ERROR" "$fail_msg" "$app" >/dev/null
         return 1
     fi
     cat "$path"

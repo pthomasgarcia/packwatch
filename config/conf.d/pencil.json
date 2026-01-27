@@ -1,0 +1,18 @@
+{
+  "$schema": "../schema.json",
+  "app_key": "Pencil",
+  "enabled": true,
+  "application": {
+    "type": "github_release",
+    "name": "Pencil",
+    "repo_owner": "highagency",
+    "repo_name": "pencil-desktop-releases",
+    "filename_pattern_template": "Pencil-%s-linux-x86_64.AppImage",
+    "binary_name": "pencil",
+    "install_path": "$HOME/Applications/pencil",
+    "install_strategy": "move_appimage",
+    "checksum_algorithm": "sha256",
+    "checksum_from_github_release_digest": true,
+    "prompt_to_kill_running_processes": true
+  }
+}

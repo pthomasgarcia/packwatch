@@ -1,14 +1,14 @@
 {
-  "$schema": "../schema.json",
-  "app_key": "Ollama",
-  "enabled": true,
-  "application": {
-    "type": "github_release",
-    "package_name": "ollama",
-    "repo_owner": "ollama",
-    "repo_name": "ollama",
-    "filename_pattern_template": "ollama-linux-amd64.tgz",
-    "install_strategy": "move_binary",
-    "checksum_from_github_release_digest": true
-  }
+    "$schema": "../schema.json",
+    "app_key": "Ollama",
+    "enabled": true,
+    "application": {
+        "type": "github_release",
+        "package_name": "ollama",
+        "repo_owner": "ollama",
+        "repo_name": "ollama",
+        "filename_pattern_template": "ollama-linux-amd64.tar.zst",
+        "install_strategy": "move_binary",
+        "checksum_from_github_release_digest": true
+    }
 }

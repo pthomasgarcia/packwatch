@@ -185,23 +185,31 @@ _cursor::_download::from_api() {
 
     # Prefer the AppImage asset
     local version url content_len=""
-    version=$(jq -r '.version // empty' "$api_response" 2> /dev/null)
-    url=$(jq -r '.downloadUrl // empty' "$api_response" 2> /dev/null)
+    version=$(jq -r '.version // empty' "$api_response" 2>/dev/null)
+    url=$(jq -r '.downloadUrl // empty' "$api_response" 2>/dev/null)
 
     if [[ -z "$version" || -z "$url" ]]; then
         loggers::debug "CURSOR: JSON missing version or downloadUrl"
         return 1
     fi
 
-    # 🔑 Perform HEAD request on downloadUrl to capture Content-Length
-    content_len=$(curl -sI -A "$CURSOR_USER_AGENT" "$url" |
-        awk '/[Cc]ontent-[Ll]ength/ {print $2}' | tr -d '\r')
+    # 🔑 Perform HEAD request on downloadUrl to capture Content-Length and ETag
+    # We pipe curl output (headers on stdout via -I) to awk
+    local headers
+    if ! headers=$(curl -sI -A "$CURSOR_USER_AGENT" "$url"); then
+        loggers::debug "CURSOR: Failed HEAD request for metadata"
+        return 1
+    fi
+
+    local content_len etag
+    content_len=$(echo "$headers" | awk '/[Cc]ontent-[Ll]ength/ {print $2}' | tr -d '\r')
+    etag=$(echo "$headers" | awk '/[Ee][Tt]ag/ {print $2}' | tr -d '\r"' | sed 's/^W\///') # Strip quotes and weak indicator
 
     # Detect artifact type from filename in URL
     local inferred_type
     inferred_type="$(web_parsers::detect_artifact_type "$(basename -- "$url")")"
 
-    printf '%s\n%s\n%s\n%s\n' "$url" "$version" "$inferred_type" "$content_len"
+    printf '%s\n%s\n%s\n%s\n%s\n' "$url" "$version" "$inferred_type" "$content_len" "$etag"
 }
 
 # Attempt manual traversal of download pages + redirects and extract assets
@@ -256,19 +264,20 @@ _cursor::_download::resolve() {
     local result
     if result=$(_cursor::_download::from_api "$tempdir" "$label"); then
         local -a rdata
-        mapfile -t rdata <<< "$result"
+        mapfile -t rdata <<<"$result"
 
         local url="${rdata[0]:-}"
         local ver="${rdata[1]:-}"
         local type="${rdata[2]:-}"
         local leng="${rdata[3]:-}"
+        local etag="${rdata[4]:-}"
 
         # If API didn't provide type, infer from URL if available
         if [[ -z "$type" && -n "$url" ]]; then
             type="$(web_parsers::detect_artifact_type "$(basename -- "$url")")"
         fi
 
-        printf '%s\n%s\n%s\n%s\n' "$url" "$ver" "$type" "$leng"
+        printf '%s\n%s\n%s\n%s\n%s\n' "$url" "$ver" "$type" "$leng" "$etag"
         return 0
     fi
 
@@ -298,12 +307,12 @@ _cursor::validate_artifact_type() {
 # Returns: Suggested filename ("cursor.AppImage" etc.)
 _cursor::get_artifact_filename() {
     case "$1" in
-        appimage) printf %s "$CURSOR_DEFAULT_APPIMAGE_NAME" ;;
-        deb) printf %s "$CURSOR_DEFAULT_DEB_NAME" ;;
-        *)
-            loggers::error "CURSOR: Cannot resolve artifact type for filename"
-            return 1
-            ;;
+    appimage) printf %s "$CURSOR_DEFAULT_APPIMAGE_NAME" ;;
+    deb) printf %s "$CURSOR_DEFAULT_DEB_NAME" ;;
+    *)
+        loggers::error "CURSOR: Cannot resolve artifact type for filename"
+        return 1
+        ;;
     esac
 }
 
@@ -367,6 +376,7 @@ cursor::check() {
         [version]="${meta_lines[1]:-}"
         [type]="${meta_lines[2]:-"unknown"}"
         [length]="${meta_lines[3]:-}"
+        [etag]="${meta_lines[4]:-}"
     )
 
     # --------------------------------------------------------------------------
@@ -376,6 +386,7 @@ cursor::check() {
     local pkgver="${meta[version]}"
     local pkgtype="${meta[type]}"
     local pgleng="${meta[length]}"
+    local pgetag="${meta[etag]}"
 
     if [[ -z "$pkgurl" || -z "$pkgver" || -z "$pkgtype" ]]; then
         responses::emit_error "MISSING_DEPENDENCY" "Incomplete information from server for $name" "$name"
@@ -411,6 +422,11 @@ cursor::check() {
         args+=(content_length "$pgleng")
     fi
 
+    if [[ -n "$pgetag" ]]; then
+        args+=(expected_checksum "$pgetag")
+        args+=(checksum_algorithm "s3_etag")
+    fi
+
     if [[ "$status_code" == "success" ]]; then
         local final_validated_url
         if ! final_validated_url="$(networks::validate_url "$pkgurl")"; then
@@ -433,3 +449,7 @@ cursor::check() {
     responses::emit_success "${args[@]}"
     return 0
 }
+
+# ==============================================================================
+# END OF MODULE
+# ==============================================================================

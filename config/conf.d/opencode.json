@@ -1,0 +1,14 @@
+{
+  "$schema": "../schema.json",
+  "app_key": "Opencode",
+  "enabled": true,
+  "application": {
+    "type": "github_release",
+    "package_name": "opencode",
+    "repo_owner": "anomalyco",
+    "repo_name": "opencode",
+    "filename_pattern_template": "opencode-linux-x64.tar.gz",
+    "install_strategy": "move_binary",
+    "checksum_from_github_release_digest": true
+  }
+}

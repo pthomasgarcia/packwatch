@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# src/core/configs.sh
 # shellcheck disable=SC2034
 # ==============================================================================
 # MODULE: configs.sh
@@ -81,9 +82,9 @@ configs::load_network_settings() {
     # Overlay JSON if present and valid
     if [[ -f "$network_settings_file" ]]; then
         local settings_content
-        settings_content=$(< "$network_settings_file")
+        settings_content=$(<"$network_settings_file")
 
-        if ! jq -e . "$network_settings_file" > /dev/null 2>&1; then
+        if ! jq -e . "$network_settings_file" >/dev/null 2>&1; then
             errors::handle_error "CONFIG_ERROR" "Invalid JSON syntax in network settings file: '$network_settings_file'"
             # Even on error, keep defaults, then apply ENV overrides below
         else
@@ -147,7 +148,7 @@ configs::validate_single_config_file() {
     filename="$(basename "$config_file_path")"
     local schema_file="$CONFIG_ROOT/schema.json"
 
-    if ! command -v ajv &> /dev/null; then
+    if ! command -v ajv &>/dev/null; then
         errors::handle_error "DEPENDENCY_ERROR" "ajv-cli is not installed. Please run 'npm install -g ajv-cli'." "$filename"
         return 1
     fi
@@ -196,7 +197,7 @@ configs::get_validated_apps_json() {
     for file in "${config_files[@]}"; do
         if configs::validate_single_config_file "$file"; then
             local file_content
-            file_content=$(< "$file")
+            file_content=$(<"$file")
             local enabled_status_check
             enabled_status_check=$(systems::fetch_json "$file_content" '.enabled' "$(basename "$file")")
             if [[ "$enabled_status_check" == "true" ]]; then
@@ -321,7 +322,7 @@ configs::create_default_files() {
 
     local default_app_configs
     default_app_configs=$(
-        cat << 'EOF'
+        cat <<'EOF'
 {
        "VeraCrypt": {
            "app_key": "VeraCrypt",
@@ -416,7 +417,7 @@ EOF
         local target_file="${target_conf_dir}/$filename"
 
         if [[ ! -f "$target_file" ]]; then
-            echo "$default_app_configs" | jq --arg key "$app_key" '.[$key]' > "$target_file"
+            echo "$default_app_configs" | jq --arg key "$app_key" '.[$key]' >"$target_file"
             if configs::validate_single_config_file "$target_file"; then
                 loggers::log "INFO" "Created default config file: '$target_file'"
             else
@@ -440,7 +441,7 @@ EOF
 configs::get_app_config() {
     local app_key="$1"
     local app_config_nameref="$2"
-    if [[ -z "$app_config_nameref" ]] || ! declare -p "$app_config_nameref" 2> /dev/null | grep -q 'declare -A'; then
+    if [[ -z "$app_config_nameref" ]] || ! declare -p "$app_config_nameref" 2>/dev/null | grep -q 'declare -A'; then
         loggers::log "ERROR" "configs::get_app_config: Second argument '$app_config_nameref' is missing or not an associative array for app_key '$app_key'"
         return 1
     fi
@@ -481,7 +482,7 @@ configs::get_cached_app_info() {
     local app_config_json="$1"
     local app_info_nameref="$2"
 
-    if [[ -z "$app_info_nameref" ]] || ! declare -p "$app_info_nameref" 2> /dev/null | grep -q 'declare -A'; then
+    if [[ -z "$app_info_nameref" ]] || ! declare -p "$app_info_nameref" 2>/dev/null | grep -q 'declare -A'; then
         loggers::log "ERROR" "configs::get_cached_app_info: Second argument '$app_info_nameref' is missing or not an associative array."
         return 1
     fi

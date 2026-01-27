@@ -1,0 +1,13 @@
+{
+  "$schema": "../schema.json",
+  "app_key": "Zellij",
+  "enabled": true,
+  "application": {
+    "type": "github_release",
+    "package_name": "zellij",
+    "repo_owner": "zellij-org",
+    "repo_name": "zellij",
+    "filename_pattern_template": "zellij-aarch64-unknown-linux-musl.tar.gz",
+    "checksum_from_github_release_digest": true
+  }
+}

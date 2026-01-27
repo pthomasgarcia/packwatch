@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# src/core/updates/common.sh
 # ==============================================================================
 # MODULE: src/core/updates/common.sh
 # ==============================================================================
@@ -16,51 +17,35 @@ updates::process_installation() {
     local latest_version="$3"
     local install_command_func="$4"
     shift 4
-    local -a install_command_args=("$@")
+    # The remaining arguments ($@) are passed to the worker (e.g., process_archive_package)
 
     local current_installed_version
-    current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key") # DI applied
-    # Normalize empty provider result to sentinel version
-    if [[ -z "$current_installed_version" ]]; then
-        current_installed_version="0.0.0"
-    fi
+    current_installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key")
+    [[ -z "$current_installed_version" ]] && current_installed_version="0.0.0"
 
-    local prompt_msg
-    prompt_msg="Do you want to install ${FORMAT_BOLD}${app_name}${FORMAT_RESET} v${latest_version}?"
-    if [[ "$current_installed_version" != "0.0.0" ]]; then
-        prompt_msg="Do you want to update ${FORMAT_BOLD}${app_name}${FORMAT_RESET} to v${latest_version}?"
-    fi
+    local prompt_msg="Do you want to install ${FORMAT_BOLD}${app_name}${FORMAT_RESET} v${latest_version}?"
+    [[ "$current_installed_version" != "0.0.0" ]] && prompt_msg="Do you want to update ${FORMAT_BOLD}${app_name}${FORMAT_RESET} to v${latest_version}?"
 
-    notifiers::send_notification "$app_name Update Available" "v$latest_version ready for install" "normal"
+    if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then
+        updates::on_install_start "$app_name"
 
-    if "$UPDATES_PROMPT_CONFIRM_IMPL" "$prompt_msg" "Y"; then # DI applied
-        if ! updates::trigger_hooks PRE_INSTALL_HOOKS "$app_name"; then
-            updates::on_install_skipped "$app_name" # Hook
-            counters::inc_skipped
-            return 0
-        fi
-        updates::on_install_start "$app_name" # Hook
-        if ((${DRY_RUN:-0})); then
-            loggers::debug "  [DRY RUN] Would execute installation command: '$install_command_func ${install_command_args[*]}'."
-            # Do not mutate state during dry runs.
-            interfaces::print_ui_line "  " "[DRY RUN] " "Installation simulated for ${FORMAT_BOLD}$app_name${FORMAT_RESET}." "${COLOR_YELLOW}"
+        if [[ ${DRY_RUN:-0} -eq 1 ]]; then
+            interfaces::print_ui_line "  " "[DRY RUN] " "Simulated install for $app_name." "${COLOR_YELLOW}"
             return 0
         fi
 
-        if "$install_command_func" "${install_command_args[@]}"; then
-            if ! "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"; then # DI applied
-                loggers::warn "Failed to update installed version JSON for '$app_name', but installation was successful."
-            fi
-            updates::on_install_complete "$app_name" "$latest_version" # Hook (now includes version)
+        # Execute the worker function (e.g., process_archive_package or process_appimage_file)
+        if "$install_command_func" "$@"; then
+            "$UPDATES_UPDATE_INSTALLED_VERSION_JSON_IMPL" "$app_key" "$latest_version"
+            updates::on_install_complete "$app_name" "$latest_version"
             counters::inc_updated
             return 0
         else
             errors::handle_error "INSTALLATION_ERROR" "Installation failed for '$app_name'." "$app_name"
-            updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Installation failed.\"}"
             return 1
         fi
     else
-        updates::on_install_skipped "$app_name" # Hook
+        updates::on_install_skipped "$app_name"
         counters::inc_skipped
         return 0
     fi
@@ -92,9 +77,9 @@ _format_bytes() {
 # Placeholder functions for download/install progress.
 updates::on_download_start() {
     local app_name="$1"
-    local file_size="$2"                                                                            # Can be 'unknown' or actual size
-    interfaces::print_ui_line "  " "→ " "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
-    loggers::info "Starting download for $app_name (Size: $file_size)."
+    local file_size="$2"
+    interfaces::on_download_start "$app_name" "$file_size" >&2
+    interfaces::log_info "Starting download for $app_name (Size: $file_size)."
 }
 
 updates::on_download_progress() {
@@ -102,48 +87,47 @@ updates::on_download_progress() {
     local downloaded="$2"
     local total="$3"
     local percent=0
-    local total_disp="unknown"
-    local downloaded_disp="unknown"
+    
+    # Simple percentage calc for UI delegation
+    if [[ "$total" =~ ^[0-9]+$ ]] && ((total > 0)) && [[ "$downloaded" =~ ^[0-9]+$ ]]; then
+        percent=$((downloaded * 100 / total))
+        ((percent > 100)) && percent=100
+    fi
+    
+    # Format bytes for UI
+    local downloaded_disp="$downloaded"
+    local total_disp="$total"
+    if [[ "$downloaded" =~ ^[0-9]+$ ]]; then downloaded_disp="$(_format_bytes "$downloaded")"; fi
+    if [[ "$total" =~ ^[0-9]+$ ]]; then total_disp="$(_format_bytes "$total")"; fi
 
-    if [[ "$downloaded" =~ ^[0-9]+$ ]]; then
-        downloaded_disp="$(_format_bytes "$downloaded")"
-    fi
-    if [[ "$total" =~ ^[0-9]+$ ]] && ((total > 0)); then
-        total_disp="$(_format_bytes "$total")"
-        if [[ "$downloaded" =~ ^[0-9]+$ ]]; then
-            percent=$((downloaded * 100 / total))
-            ((percent > 100)) && percent=100
-        fi
-    fi
-    interfaces::print_ui_line "  " "⤓ " \
-        "Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: ${percent}% (${downloaded_disp} / ${total_disp})" >&2
-    # Note: Requires underlying networks::download_file to call this callback.
+    interfaces::on_download_progress "$app_name" "$percent" "$downloaded_disp" "$total_disp" >&2
 }
+
 updates::on_download_complete() {
     local app_name="$1"
     local file_path="$2"
-    interfaces::print_ui_line "  " "✓ " "Download for ${FORMAT_BOLD}$app_name${FORMAT_RESET} complete." "${COLOR_GREEN}" >&2 # Redirect to stderr
-    loggers::info "Download complete for $app_name: $file_path"
+    interfaces::on_download_complete "$app_name" "$file_path" >&2
+    interfaces::log_info "Download complete for $app_name: $file_path"
 }
 
 updates::on_install_start() {
     local app_name="$1"
-    interfaces::print_ui_line "  " "→ " "Preparing to install ${FORMAT_BOLD}$app_name${FORMAT_RESET}..." >&2 # Redirect to stderr
-    loggers::info "Starting installation for $app_name."
+    interfaces::on_install_start "$app_name" >&2
+    # interfaces::log_info "Starting installation for $app_name."
 }
 
 updates::on_install_complete() {
     local app_name="$1"
     local latest_version="$2"
-    interfaces::print_ui_line "  " "✓ " "${FORMAT_BOLD}$app_name${FORMAT_RESET} installed/updated successfully (v${latest_version})." "${COLOR_GREEN}" >&2
-    loggers::info "Installation complete for $app_name (version ${latest_version})."
+    interfaces::on_install_success "$app_name" "$latest_version" >&2
+    # interfaces::log_info "Installation complete for $app_name (version ${latest_version})."
     notifiers::send_notification "${app_name} Updated" "Installed v${latest_version}." "normal"
 }
 
 updates::on_install_skipped() {
     local app_name="$1"
-    interfaces::print_ui_line "  " "🞨 " "Installation for ${FORMAT_BOLD}$app_name${FORMAT_RESET} skipped." "${COLOR_YELLOW}" >&2 # Redirect to stderr
-    loggers::info "Installation skipped for $app_name."
+    interfaces::on_install_skipped "$app_name" >&2
+    interfaces::log_info "Installation skipped for $app_name."
 }
 
 # Determine if an update is needed by comparing versions.
@@ -237,3 +221,7 @@ updates::pre_install_check_running_processes() {
         return 1 # User declined, skip installation.
     fi
 }
+
+# ==============================================================================
+# END OF MODULE
+# ==============================================================================
