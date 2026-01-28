@@ -72,13 +72,13 @@ updates::register_hook() {
     local hook_type="$1"
     local function_name="$2"
     case "$hook_type" in
-    "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
-    "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
-    "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
-    "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
-    "error") ERROR_HOOKS+=("$function_name") ;;
-    "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;
-    *) loggers::warn "Unknown hook type: $hook_type" ;;
+        "pre_check") PRE_CHECK_HOOKS+=("$function_name") ;;
+        "post_check") POST_CHECK_HOOKS+=("$function_name") ;;
+        "pre_install") PRE_INSTALL_HOOKS+=("$function_name") ;;
+        "post_install") POST_INSTALL_HOOKS+=("$function_name") ;;
+        "error") ERROR_HOOKS+=("$function_name") ;;
+        "post_verify") POST_VERIFY_HOOKS+=("$function_name") ;;
+        *) loggers::warn "Unknown hook type: $hook_type" ;;
     esac
 }
 
@@ -95,14 +95,14 @@ updates::trigger_hooks() {
     fi
 
     # Check if the variable exists
-    if ! (declare -p "$hooks_array_name" >/dev/null 2>&1); then
+    if ! (declare -p "$hooks_array_name" > /dev/null 2>&1); then
         loggers::warn "Hooks array '$hooks_array_name' does not exist"
         return 1
     fi
 
     # Bash-specific: use nameref to avoid eval and safely iterate hooks.
     # If POSIX sh compatibility is needed, this function requires a shim.
-    if [[ $(declare -p "$hooks_array_name" 2>/dev/null) != declare*'-a '* ]]; then
+    if [[ $(declare -p "$hooks_array_name" 2> /dev/null) != declare*'-a '* ]]; then
         # Not a regular indexed array (could be empty, unset, or different type)
         return 0
     fi
@@ -111,7 +111,7 @@ updates::trigger_hooks() {
     declare -n hook_array_ref="$hooks_array_name"
     local hook_func
     for hook_func in "${hook_array_ref[@]}"; do
-        if [[ -n "$hook_func" ]] && declare -F "$hook_func" >/dev/null; then
+        if [[ -n "$hook_func" ]] && declare -F "$hook_func" > /dev/null; then
             if ! "$hook_func" "$app_name" "$details_json"; then
                 loggers::warn "Hook function '$hook_func' failed for '$app_name'. Halting hook chain."
                 return 1 # Propagate failure

@@ -185,8 +185,8 @@ _cursor::_download::from_api() {
 
     # Prefer the AppImage asset
     local version url content_len=""
-    version=$(jq -r '.version // empty' "$api_response" 2>/dev/null)
-    url=$(jq -r '.downloadUrl // empty' "$api_response" 2>/dev/null)
+    version=$(jq -r '.version // empty' "$api_response" 2> /dev/null)
+    url=$(jq -r '.downloadUrl // empty' "$api_response" 2> /dev/null)
 
     if [[ -z "$version" || -z "$url" ]]; then
         loggers::debug "CURSOR: JSON missing version or downloadUrl"
@@ -264,7 +264,7 @@ _cursor::_download::resolve() {
     local result
     if result=$(_cursor::_download::from_api "$tempdir" "$label"); then
         local -a rdata
-        mapfile -t rdata <<<"$result"
+        mapfile -t rdata <<< "$result"
 
         local url="${rdata[0]:-}"
         local ver="${rdata[1]:-}"
@@ -307,12 +307,12 @@ _cursor::validate_artifact_type() {
 # Returns: Suggested filename ("cursor.AppImage" etc.)
 _cursor::get_artifact_filename() {
     case "$1" in
-    appimage) printf %s "$CURSOR_DEFAULT_APPIMAGE_NAME" ;;
-    deb) printf %s "$CURSOR_DEFAULT_DEB_NAME" ;;
-    *)
-        loggers::error "CURSOR: Cannot resolve artifact type for filename"
-        return 1
-        ;;
+        appimage) printf %s "$CURSOR_DEFAULT_APPIMAGE_NAME" ;;
+        deb) printf %s "$CURSOR_DEFAULT_DEB_NAME" ;;
+        *)
+            loggers::error "CURSOR: Cannot resolve artifact type for filename"
+            return 1
+            ;;
     esac
 }
 

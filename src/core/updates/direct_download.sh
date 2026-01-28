@@ -77,46 +77,46 @@ updates::check_direct_download() {
         artifact_type=$(web_parsers::detect_artifact_type "$filename")
 
         case "$artifact_type" in
-        deb)
-            updates::process_installation \
-                "$name" \
-                "$app_key" \
-                "$latest_version" \
-                "packages::install_deb_package" \
-                "$temp_download_file" \
-                "${package_name:-$name}" \
-                "$latest_version" \
-                "$app_key"
-            ;;
-        tgz | tar.gz)
-            local binary_name="${package_name:-$(echo "$app_key" | tr '[:upper:]' '[:lower:]')}"
-            updates::process_installation \
-                "$name" \
-                "$app_key" \
-                "$latest_version" \
-                "packages::install_archive" \
-                "$temp_download_file" \
-                "$name" \
-                "$latest_version" \
-                "$app_key" \
-                "$binary_name"
-            ;;
-        appimage)
-            local install_target_full_path="${app_config_ref[install_path]:-$HOME/Applications/${name}.AppImage}"
-            updates::process_installation \
-                "$name" \
-                "$app_key" \
-                "$latest_version" \
-                "updates::_install_appimage_file_command" \
-                "$temp_download_file" \
-                "$install_target_full_path" \
-                "$name"
-            ;;
-        *)
-            errors::handle_error "INSTALLATION_ERROR" "Unsupported file type for direct download: .$artifact_type" "$name"
-            updates::trigger_hooks "ERROR_HOOKS" "$name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Unsupported file type for direct download.\"}"
-            return 1
-            ;;
+            deb)
+                updates::process_installation \
+                    "$name" \
+                    "$app_key" \
+                    "$latest_version" \
+                    "packages::install_deb_package" \
+                    "$temp_download_file" \
+                    "${package_name:-$name}" \
+                    "$latest_version" \
+                    "$app_key"
+                ;;
+            tgz | tar.gz)
+                local binary_name="${package_name:-$(echo "$app_key" | tr '[:upper:]' '[:lower:]')}"
+                updates::process_installation \
+                    "$name" \
+                    "$app_key" \
+                    "$latest_version" \
+                    "packages::install_archive" \
+                    "$temp_download_file" \
+                    "$name" \
+                    "$latest_version" \
+                    "$app_key" \
+                    "$binary_name"
+                ;;
+            appimage)
+                local install_target_full_path="${app_config_ref[install_path]:-$HOME/Applications/${name}.AppImage}"
+                updates::process_installation \
+                    "$name" \
+                    "$app_key" \
+                    "$latest_version" \
+                    "updates::_install_appimage_file_command" \
+                    "$temp_download_file" \
+                    "$install_target_full_path" \
+                    "$name"
+                ;;
+            *)
+                errors::handle_error "INSTALLATION_ERROR" "Unsupported file type for direct download: .$artifact_type" "$name"
+                updates::trigger_hooks "ERROR_HOOKS" "$name" "{\"phase\": \"install\", \"error_type\": \"INSTALLATION_ERROR\", \"message\": \"Unsupported file type for direct download.\"}"
+                return 1
+                ;;
         esac
     else
         updates::handle_up_to_date

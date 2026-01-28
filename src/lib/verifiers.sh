@@ -52,12 +52,12 @@ PACKWATCH_VERIFIERS_LOADED=1
 
 # Lowercase helper (portable to Bash 3)
 verifiers::_lower() {
-    tr '[:upper:]' '[:lower:]' <<<"$1"
+    tr '[:upper:]' '[:lower:]' <<< "$1"
 }
 
 # Safe check for function existence
 verifiers::_has_func() {
-    declare -F "$1" >/dev/null 2>&1
+    declare -F "$1" > /dev/null 2>&1
 }
 
 # Safe unregister wrapper
@@ -74,7 +74,7 @@ verifiers::_require_cmds() {
     local missing=0
     local cmds=(jq awk grep cut head date sha256sum sha512sum curl base64 xxd md5sum)
     for c in "${cmds[@]}"; do
-        if ! command -v "$c" >/dev/null 2>&1; then
+        if ! command -v "$c" > /dev/null 2>&1; then
             missing=1
             if verifiers::_has_func errors::handle_error; then
                 errors::handle_error "MISSING_DEP" \
@@ -210,42 +210,42 @@ verifiers::_handle_sig_download_failure() {
 # --------------------------------------------------------------------
 verifiers::_compute_s3_etag() {
     local file_path="$1"
-    
+
     if [[ ! -f "$file_path" ]]; then
         return 1
     fi
 
     local tmp_dir
     tmp_dir=$(mktemp -d) || return 1
-    
+
     # Split file into chunks
     # We use split because it's standard.
     split -b "$VERIFIERS_S3_CHUNK_SIZE" "$file_path" "${tmp_dir}/chunk_"
-    
+
     # Calculate MD5 for each chunk, combine binary digests, then hash the combination
     local calculated_hash part_count
-    
+
     # Note: openssl dgst -md5 -binary outputs raw bytes.
     # We need to concat them.
     # find sorts by name (chunk_aa, chunk_ab...) which is correct for split default suffixes.
-    
+
     # Using a subshell pipeline to avoid temp files for the concatenation if possible,
     # but `xargs` is tricky with binary content.
     # Safer: loop and append to a single temp file? Or use the user's find | xargs approach which is elegant.
-    
+
     # User provided:
     # find . -name "CURSOR_CHUNK_*" | sort | xargs -I {} openssl dgst -md5 -binary {} | openssl dgst -md5 -hex
-    
+
     # We need strictly sorted list. `split` generates suffix 'aa', 'ab', etc.
     # `find` order isn't guaranteed, need `sort`.
-    
+
     calculated_hash=$(find "$tmp_dir" -type f -name "chunk_*" | sort | xargs -I {} openssl dgst -md5 -binary "{}" | openssl dgst -md5 -hex | awk '{print $NF}')
-    
+
     part_count=$(find "$tmp_dir" -type f -name "chunk_*" | wc -l)
-    
+
     # Cleanup
     rm -rf "$tmp_dir"
-    
+
     # Output format: HASH-PART_COUNT
     echo "${calculated_hash}-${part_count}"
 }
@@ -262,15 +262,15 @@ verifiers::compute_checksum() {
     algo_lc="$(verifiers::_lower "$algorithm")"
 
     case "$algo_lc" in
-    "${VERIFIER_ALGO_SHA512}")
-        sha512sum "$file_path" | awk '{print $1}'
-        ;;
-    "s3_etag")
-        verifiers::_compute_s3_etag "$file_path"
-        ;;
-    "${VERIFIER_ALGO_SHA256}" | *)
-        sha256sum "$file_path" | awk '{print $1}'
-        ;;
+        "${VERIFIER_ALGO_SHA512}")
+            sha512sum "$file_path" | awk '{print $1}'
+            ;;
+        "s3_etag")
+            verifiers::_compute_s3_etag "$file_path"
+            ;;
+        "${VERIFIER_ALGO_SHA256}" | *)
+            sha256sum "$file_path" | awk '{print $1}'
+            ;;
     esac
 }
 
@@ -525,7 +525,7 @@ verification..."
                 "$csf" "$(basename "$downloaded_file_path" | cut -d'?' -f1)")
             local rc=$? # Capture rc here
             echo "${expected:-}"
-        } 2>/dev/null
+        } 2> /dev/null
         verifiers::_safe_unregister "$csf"
         return $rc
     fi
@@ -807,7 +807,7 @@ verifiers::extract_checksum_from_file() {
         head -n1)}
     [[ -z "$line" ]] && line=$(head -n1 "$checksum_file")
 
-    awk '{print $1}' <<<"$line"
+    awk '{print $1}' <<< "$line"
 }
 
 # ==============================================================================

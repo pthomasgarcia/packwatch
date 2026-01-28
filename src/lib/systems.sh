@@ -395,7 +395,10 @@ prompt."
             "Requesting sudo privileges for $app_name..."
         # Attempt to refresh the sudo timestamp, prompting for password if needed.
         # This command is often used for its side effect of prompting for credentials.
-        if ! { printf "  "; sudo -v; }; then
+        if ! {
+            printf "  "
+            sudo -v
+        }; then
             errors::handle_error "PERMISSION_ERROR" \
                 "Sudo privileges are required but could not be obtained for \
 '$app_name'. Please ensure you have sudo installed and configured correctly." \
@@ -505,10 +508,10 @@ systems::kill_processes_by_file_path() {
         loggers::warn "Processes for '$app_name' (PIDs: ${pids_array[*]}) did not terminate gracefully. Attempting to force kill."
         # Try user force kill first
         if ! kill -KILL "${pids_array[@]}" 2> /dev/null; then
-             if ! sudo kill -KILL "${pids_array[@]}" 2> /dev/null; then
+            if ! sudo kill -KILL "${pids_array[@]}" 2> /dev/null; then
                 errors::handle_error "SYSTEM_ERROR" "Failed to force-terminate processes for '$app_name' (PIDs: ${pids_array[*]})." "$app_name"
                 return 1
-             fi
+            fi
         fi
         sleep 1 # Brief pause after force kill
         if pids_string=$(systems::is_file_in_use "$file_path"); then

@@ -141,22 +141,22 @@ networks::fetch_cached_data() {
         fi
 
         case "$expected_type" in
-        "json")
-            if ! jq . "$temp_download_file" >/dev/null 2>&1; then
-                errors::handle_error "VALIDATION_ERROR" \
-                    "Fetched content for '$url' is not valid JSON."
-                systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
-                return 1
-            fi
-            ;;
-        "html")
-            if ! grep -q '<html' "$temp_download_file" >/dev/null 2>&1 &&
-                ! grep -q '<!DOCTYPE html>' "$temp_download_file" > \
-                    /dev/null 2>&1; then
-                loggers::warn "Fetched content for '$url' might not be \
+            "json")
+                if ! jq . "$temp_download_file" > /dev/null 2>&1; then
+                    errors::handle_error "VALIDATION_ERROR" \
+                        "Fetched content for '$url' is not valid JSON."
+                    systems::unregister_temp_file "$temp_download_file" # Clean up invalid content
+                    return 1
+                fi
+                ;;
+            "html")
+                if ! grep -q '<html' "$temp_download_file" > /dev/null 2>&1 &&
+                    ! grep -q '<!DOCTYPE html>' "$temp_download_file" > \
+                        /dev/null 2>&1; then
+                    loggers::warn "Fetched content for '$url' might not be \
 valid HTML, but continuing."
-            fi
-            ;;
+                fi
+                ;;
         esac
 
         mv -f "$temp_download_file" "$cache_file" || {
@@ -191,7 +191,7 @@ networks::download_text_to_cache() {
     tmp=$(systems::create_temp_file "sidecar") || return 1
 
     # Reuse download_file logic but suppress its UI output for silent operation
-    if ! networks::download_file "$url" "$tmp" "" "" "${ALLOW_INSECURE_HTTP:-false}" >/dev/null 2>&1; then
+    if ! networks::download_file "$url" "$tmp" "" "" "${ALLOW_INSECURE_HTTP:-false}" > /dev/null 2>&1; then
         # Error is already handled by download_file, just need to clean up and fail
         systems::unregister_temp_file "$tmp"
         return 1
@@ -240,7 +240,7 @@ networks::fast_head_status() {
     local mt="${PW_MAX_TIME}"        # Now a global
     curl -sS -o /dev/null -I \
         --connect-timeout "$ct" --max-time "$mt" \
-        -w '%{http_code}' "$url" 2>/dev/null || true
+        -w '%{http_code}' "$url" 2> /dev/null || true
 }
 
 # Boolean: quick existence check (2xx/3xx considered alive)
@@ -261,7 +261,7 @@ networks::fast_resolve_url() {
     # Use HEAD with -L and capture final effective URL
     curl -sS -I -L --max-redirs 5 \
         --connect-timeout "$ct" --max-time "$rt" \
-        -o /dev/null -w '%{url_effective}' "$url" 2>/dev/null || true
+        -o /dev/null -w '%{url_effective}' "$url" 2> /dev/null || true
 }
 
 # ------------------------------------------------------------------------------
@@ -336,7 +336,7 @@ networks::validate_url() {
 
     # Fallback to networks::get_effective_url (may be slower)
     local resolved
-    resolved=$(networks::get_effective_url "$decoded" 2>/dev/null || true)
+    resolved=$(networks::get_effective_url "$decoded" 2> /dev/null || true)
     if [[ -n "$resolved" ]] && validators::check_url_format "$resolved"; then
         printf '%s' "$resolved"
         return 0
@@ -360,7 +360,7 @@ networks::fetch_cached_or_error() {
         # Ideally, emit_error would be in a more generic error handling
         # module.
         # For now, we'll keep the dependency for functional correctness.
-        responses::emit_error "NETWORK_ERROR" "$fail_msg" "$app" >/dev/null
+        responses::emit_error "NETWORK_ERROR" "$fail_msg" "$app" > /dev/null
         return 1
     fi
     printf '%s' "$path"
@@ -374,7 +374,7 @@ networks::load_cached_content_or_error() {
     local fail_msg="${3:-Cached file missing or unreadable: $path}"
     if [[ ! -f "$path" ]]; then
         # Use responses::emit_error for consistency with custom checkers
-        responses::emit_error "CACHE_ERROR" "$fail_msg" "$app" >/dev/null
+        responses::emit_error "CACHE_ERROR" "$fail_msg" "$app" > /dev/null
         return 1
     fi
     cat "$path"

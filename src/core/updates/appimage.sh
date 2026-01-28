@@ -185,10 +185,10 @@ updates::_install_appimage_file_command() {
 
         # Ownership management (Handling root vs user context)
         # Only attempt chown if we are root or if ownership is incorrect/needed
-        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &>/dev/null; then
+        if [[ -n "$ORIGINAL_USER" ]] && getent passwd "$ORIGINAL_USER" &> /dev/null; then
             if [[ $(id -u) -eq 0 ]]; then
                 # Running as root, fix ownership to original user
-                chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2>/dev/null
+                chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$install_target_full_path" 2> /dev/null
             fi
         fi
 

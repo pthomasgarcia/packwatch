@@ -61,23 +61,23 @@ updates::_perform_flatpak_installation() {
     # Update appstream data
     # Update appstream data (quietly)
     interfaces::print_ui_line "  " "→ " "Updating Flatpak appstream data..."
-    if ! sudo flatpak update --appstream -y >/dev/null 2>&1; then
+    if ! sudo flatpak update --appstream -y > /dev/null 2>&1; then
         interfaces::log_warn "Failed to update Flatpak appstream data. Installation might proceed but information could be stale."
     fi
 
     # Perform installation or update in a single sudo session
     # Redirect output to void unless in verbose mode to prevent noise
     local install_cmd="flatpak install --or-update -y flathub '$flatpak_app_id'"
-    
+
     if [[ "${VERBOSE:-0}" -eq 1 ]]; then
         if ! sudo bash -c "$install_cmd"; then
-             handle_flatpak_error "$app_name"
-             return 1
+            handle_flatpak_error "$app_name"
+            return 1
         fi
     else
-        if ! sudo bash -c "$install_cmd" >/dev/null 2>&1; then
-             handle_flatpak_error "$app_name"
-             return 1
+        if ! sudo bash -c "$install_cmd" > /dev/null 2>&1; then
+            handle_flatpak_error "$app_name"
+            return 1
         fi
     fi
 }

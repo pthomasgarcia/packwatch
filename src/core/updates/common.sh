@@ -87,13 +87,13 @@ updates::on_download_progress() {
     local downloaded="$2"
     local total="$3"
     local percent=0
-    
+
     # Simple percentage calc for UI delegation
     if [[ "$total" =~ ^[0-9]+$ ]] && ((total > 0)) && [[ "$downloaded" =~ ^[0-9]+$ ]]; then
         percent=$((downloaded * 100 / total))
         ((percent > 100)) && percent=100
     fi
-    
+
     # Format bytes for UI
     local downloaded_disp="$downloaded"
     local total_disp="$total"

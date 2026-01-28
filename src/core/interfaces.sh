@@ -31,7 +31,7 @@
 
 interfaces::log_info() {
     [[ "${VERBOSE:-0}" -eq 1 ]] || return 0
-    ( loggers::info "$@" ) 2>&1 | sed 's/^/  /' >&2
+    (loggers::info "$@") 2>&1 | sed 's/^/  /' >&2
 }
 
 interfaces::log_warn() {
@@ -43,16 +43,16 @@ interfaces::log_warn() {
     # I will treat INFO and DEBUG as verbose-only. WARN/ERROR should probably stay?
     # User said "i want all logging centralized and able to turn off".
     # Let's gate INFO. Keep WARN/ERROR visible but indented.
-    ( loggers::warn "$@" ) 2>&1 | sed 's/^/  /' >&2
+    (loggers::warn "$@") 2>&1 | sed 's/^/  /' >&2
 }
 
 interfaces::log_error() {
-    ( loggers::error "$@" ) 2>&1 | sed 's/^/  /' >&2
+    (loggers::error "$@") 2>&1 | sed 's/^/  /' >&2
 }
 
 interfaces::log_debug() {
     [[ "${VERBOSE:-0}" -eq 1 ]] || return 0
-    ( loggers::debug "$@" ) 2>&1 | sed 's/^/  /' >&2
+    (loggers::debug "$@") 2>&1 | sed 's/^/  /' >&2
 }
 
 # ------------------------------------------------------------------------------
@@ -92,7 +92,7 @@ interfaces::on_check_start() {
     local version="${2:-}" # Optional
     local msg="Checking ${FORMAT_BOLD}$app_name${FORMAT_RESET}..."
     [[ -n "$version" ]] && msg="Checking ${FORMAT_BOLD}$app_name${FORMAT_RESET} for v$version..."
-    
+
     interfaces::print_ui_line "  " "→ " "$msg"
 }
 
@@ -100,11 +100,11 @@ interfaces::on_download_start() {
     local app_name="$1"
     local _size_str="${2:-unknown}"
     local msg="Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}..."
-    
+
     if [[ -n "$_size_str" && "$_size_str" != "unknown" ]]; then
         msg="Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET} (Size: $_size_str)..."
     fi
-    
+
     interfaces::print_ui_line "  " "→ " "$msg"
 }
 
@@ -120,7 +120,7 @@ interfaces::on_download_progress() {
     local total="$4"
     # Matches: "⤓ Downloading AppName: 45% (1.2 MB / 2.7 MB)"
     local msg="Downloading ${FORMAT_BOLD}$app_name${FORMAT_RESET}: ${percent}% ($downloaded / $total)"
-    
+
     # Use direct printf for in-place update (no newline)
     printf "\r%s%s%s%s" "${CLEAR_LINE}" "  " "⤓ " "$msg"
 }

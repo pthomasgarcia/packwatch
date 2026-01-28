@@ -65,20 +65,20 @@ packages::_validate_file_type() {
     [[ ! -f "$filepath" ]] && return 1
 
     local file_output
-    file_output=$(file -b "$filepath" 2>/dev/null) || return 1
+    file_output=$(file -b "$filepath" 2> /dev/null) || return 1
 
     case "$expected_type" in
-    archive)
-        if [[ "$file_output" =~ (gzip|XZ|bzip2|Zstandard|Zip) ]] ||
-            [[ "$file_output" =~ "POSIX tar archive" ]]; then
-            return 0
-        fi
-        ;;
-    deb)
-        if [[ "$file_output" =~ "Debian binary package" ]]; then
-            return 0
-        fi
-        ;;
+        archive)
+            if [[ "$file_output" =~ (gzip|XZ|bzip2|Zstandard|Zip) ]] ||
+                [[ "$file_output" =~ "POSIX tar archive" ]]; then
+                return 0
+            fi
+            ;;
+        deb)
+            if [[ "$file_output" =~ "Debian binary package" ]]; then
+                return 0
+            fi
+            ;;
     esac
 
     return 1
@@ -94,20 +94,20 @@ packages::_validate_extraction() {
     }
 
     # Check directory is not empty
-    if [[ -z $(ls -A "$dir" 2>/dev/null) ]]; then
+    if [[ -z $(ls -A "$dir" 2> /dev/null) ]]; then
         errors::handle_error "VALIDATION_ERROR" "Extraction resulted in empty directory" "$app_name"
         return 1
     fi
 
     # Check for path traversal attempts in extracted content
-    if [[ -n $(find "$dir" -name '..*' -o -path '*/../*' 2>/dev/null) ]]; then
+    if [[ -n $(find "$dir" -name '..*' -o -path '*/../*' 2> /dev/null) ]]; then
         errors::handle_error "SECURITY_ERROR" "Path traversal detected in extracted content" "$app_name"
         return 1
     fi
 
     # Check extracted size doesn't exceed limits (protection against zip bombs)
     local size_mb
-    size_mb=$(du -sm "$dir" 2>/dev/null | cut -f1)
+    size_mb=$(du -sm "$dir" 2> /dev/null | cut -f1)
     if [[ -n "$size_mb" ]] && [[ "$size_mb" -gt "$PACKAGES_MAX_EXTRACT_SIZE_MB" ]]; then
         errors::handle_error "VALIDATION_ERROR" "Extracted size (${size_mb}MB) exceeds limit (${PACKAGES_MAX_EXTRACT_SIZE_MB}MB)" "$app_name"
         return 1
@@ -118,15 +118,15 @@ packages::_validate_extraction() {
 
 packages::_strategy_requires_sudo() {
     case "$1" in
-    compile | copy_root_contents | move_binary)
-        return 0
-        ;;
-    move_appimage)
-        return 1 # No sudo needed for $HOME/Applications
-        ;;
-    *)
-        return 1
-        ;;
+        compile | copy_root_contents | move_binary)
+            return 0
+            ;;
+        move_appimage)
+            return 1 # No sudo needed for $HOME/Applications
+            ;;
+        *)
+            return 1
+            ;;
     esac
 }
 
@@ -157,8 +157,8 @@ packages::_acquire_lock() {
 
 packages::_release_lock() {
     local fd="${1:-200}"
-    flock -u "$fd" 2>/dev/null || true
-    eval "exec $fd>&-" 2>/dev/null || true
+    flock -u "$fd" 2> /dev/null || true
+    eval "exec $fd>&-" 2> /dev/null || true
 }
 
 # ------------------------------------------------------------------------------
@@ -212,7 +212,7 @@ packages::update_installed_version_json() {
     }
 
     mkdir -p "$(dirname "$versions_file")"
-    [[ ! -f "$versions_file" ]] && echo '{}' >"$versions_file"
+    [[ ! -f "$versions_file" ]] && echo '{}' > "$versions_file"
 
     # Acquire write lock with timeout
     packages::_acquire_lock "$lockfile" 10 202 || {
@@ -227,15 +227,15 @@ packages::update_installed_version_json() {
     }
 
     local result=0
-    if jq --arg key "$app_key" --arg ver "$new_version" '.[$key] = $ver' "$versions_file" >"$temp_file" 2>/dev/null; then
-        if mv "$temp_file" "$versions_file" 2>/dev/null; then
+    if jq --arg key "$app_key" --arg ver "$new_version" '.[$key] = $ver' "$versions_file" > "$temp_file" 2> /dev/null; then
+        if mv "$temp_file" "$versions_file" 2> /dev/null; then
             systems::unregister_temp_file "$temp_file"
-            
+
             # Only fix ownership if running as root
             if [[ $(id -u) -eq 0 ]] && [[ -n "$ORIGINAL_USER" ]]; then
-                sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2>/dev/null
+                sudo chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$versions_file" 2> /dev/null
             fi
-            
+
             loggers::debug "Updated version for '$app_key' to '$new_version'"
         else
             errors::handle_error "FILE_ERROR" "Failed to move temporary file to versions file" "$app_key"
@@ -259,7 +259,7 @@ packages::initialize_installed_versions_file() {
             errors::handle_error "FILE_ERROR" "Cannot create config directory"
             return 1
         }
-        echo '{}' >"$versions_file" || {
+        echo '{}' > "$versions_file" || {
             errors::handle_error "FILE_ERROR" "Cannot create versions file"
             return 1
         }
@@ -285,7 +285,7 @@ packages::extract_deb_version() {
     }
 
     local version
-    version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null)
+    version=$(dpkg-deb -f "$deb_file" Version 2> /dev/null)
 
     if [[ -z "$version" ]]; then
         loggers::debug "Could not extract version from DEB metadata, trying filename"
@@ -311,7 +311,7 @@ packages::verify_deb_sanity() {
     fi
 
     # Validate package structure
-    if ! dpkg-deb --info "$deb_file" &>/dev/null; then
+    if ! dpkg-deb --info "$deb_file" &> /dev/null; then
         errors::handle_error "VALIDATION_ERROR" "DEB package structure is invalid: $deb_file" "$app_name"
         return 1
     fi
@@ -393,28 +393,29 @@ packages::install_archive() {
         fi
 
         case "$strategy" in
-        compile)
-            packages::_install_via_compile "$tmp_dir" "$app_name" "$version" || exit 1
-            ;;
-        move_binary)
-            packages::_install_via_binary "$tmp_dir" "$binary_name" "$app_name" || exit 1
-            ;;
-        copy_root_contents)
-            packages::_install_via_tree_copy "$tmp_dir" "$binary_name" "$app_name" || exit 1
-            ;;
-        move_appimage)
-            packages::_install_via_appimage "$tmp_dir" "$binary_name" "$app_name" || exit 1
-            ;;
-        *)
-            errors::handle_error "VALIDATION_ERROR" "Unknown installation strategy: $strategy" "$app_name"
-            exit 1
-            ;;
+            compile)
+                packages::_install_via_compile "$tmp_dir" "$app_name" "$version" || exit 1
+                ;;
+            move_binary)
+                packages::_install_via_binary "$tmp_dir" "$binary_name" "$app_name" || exit 1
+                ;;
+            copy_root_contents)
+                packages::_install_via_tree_copy "$tmp_dir" "$binary_name" "$app_name" || exit 1
+                ;;
+            move_appimage)
+                packages::_install_via_appimage "$tmp_dir" "$binary_name" "$app_name" || exit 1
+                ;;
+            *)
+                errors::handle_error "VALIDATION_ERROR" "Unknown installation strategy: $strategy" "$app_name"
+                exit 1
+                ;;
         esac
     )
     exit_code=$?
 
     # Additional cleanup outside subshell as safety measure
-    [[ -d "$tmp_dir" ]] && rm -rf "$tmp_dir" 2>/dev/null || true
+
+    rm -rf "$tmp_dir" 2> /dev/null || true
 
     return $exit_code
 }
@@ -451,12 +452,12 @@ packages::_extract_archive() {
 
             # Use the command from array - unquoted for word splitting
             if [[ "$cmd" == "tar"* ]]; then
-                if ! $cmd "$file" -C "$dest" --no-same-owner 2>"$error_log"; then
+                if ! $cmd "$file" -C "$dest" --no-same-owner 2> "$error_log"; then
                     errors::handle_error "EXTRACTION_ERROR" "tar extraction failed. Log: $error_log" "$app"
                     return 1
                 fi
             else
-                if ! $cmd "$file" -d "$dest" 2>"$error_log"; then
+                if ! $cmd "$file" -d "$dest" 2> "$error_log"; then
                     errors::handle_error "EXTRACTION_ERROR" "extraction failed. Log: $error_log" "$app"
                     return 1
                 fi
@@ -507,7 +508,7 @@ packages::_install_via_compile() {
     # Run compilation in timeout wrapper
     local compile_result
     (
-        exec >"$build_log" 2>&1
+        exec > "$build_log" 2>&1
         cd "$root" || exit 1
 
         # Configure if present
@@ -560,7 +561,7 @@ packages::_install_via_binary() {
     interfaces::log_info "Found binary at: $path"
     interfaces::log_info "Installing binary to /usr/local/bin/$bin"
 
-    if ! sudo install -m 755 "$path" "/usr/local/bin/$bin" 2>/dev/null; then
+    if ! sudo install -m 755 "$path" "/usr/local/bin/$bin" 2> /dev/null; then
         errors::handle_error "INSTALLATION_ERROR" "Failed to install binary to /usr/local/bin/$bin" "$app"
         return 1
     fi
@@ -592,11 +593,11 @@ packages::_install_via_tree_copy() {
     if [[ $found -eq 0 ]]; then
         # Get directory contents for error message using find
         local contents
-        contents=$(find "$root" -maxdepth 1 \( ! -name "." \) -printf "%f\n" 2>/dev/null | head -20)
+        contents=$(find "$root" -maxdepth 1 \( ! -name "." \) -printf "%f\n" 2> /dev/null | head -20)
 
         local msg
         if [[ -z "$contents" ]]; then
-            read -r -d '' msg <<EOF || true
+            read -r -d '' msg << EOF || true
 Archive structure mismatch. Expected standard directories (bin/, lib/, share/, include/, etc/).
 Found in: $root
 Directory appears to be empty.
@@ -605,7 +606,7 @@ EOF
             # Add indentation to each line using Bash parameter expansion
             local indented_contents="${contents//$'\n'/$'\n'  }"
 
-            read -r -d '' msg <<EOF || true
+            read -r -d '' msg << EOF || true
 Archive structure mismatch. Expected standard directories (bin/, lib/, share/, include/, etc/).
 Found in: $root
 Contents (first 20 items):
@@ -622,7 +623,7 @@ EOF
     # Optional: Log detailed contents for debugging
     if [[ "${DEBUG:-0}" -eq 1 ]]; then
         loggers::debug "Detailed directory contents of $root:"
-        find "$root" -maxdepth 1 -exec stat -c "%A %h %U %G %8s %y %n" {} \; 2>/dev/null |
+        find "$root" -maxdepth 1 -exec stat -c "%A %h %U %G %8s %y %n" {} \; 2> /dev/null |
             while read -r line; do
                 loggers::debug "  $line"
             done
@@ -636,7 +637,7 @@ EOF
     mkdir -p "$(dirname "$error_log")"
 
     # Use --strip-trailing-slashes and explicit directory handling for safety
-    if ! sudo cp -r --preserve=timestamps --no-target-directory "$root"/. "/usr/local/" 2>"$error_log"; then
+    if ! sudo cp -r --preserve=timestamps --no-target-directory "$root"/. "/usr/local/" 2> "$error_log"; then
         errors::handle_error "INSTALLATION_ERROR" "Failed to copy directory tree. Log: $error_log" "$app"
 
         # Show first few lines of error log for context
@@ -652,7 +653,7 @@ EOF
     # Ensure binary is executable if specified
     if [[ -n "$bin" ]] && [[ -f "/usr/local/bin/$bin" ]]; then
         loggers::debug "Setting executable permissions on /usr/local/bin/$bin"
-        sudo chmod +x "/usr/local/bin/$bin" 2>/dev/null || {
+        sudo chmod +x "/usr/local/bin/$bin" 2> /dev/null || {
             loggers::warning "Failed to set executable permissions on /usr/local/bin/$bin"
         }
     fi
@@ -661,7 +662,7 @@ EOF
 
     # Clean up error log if empty
     if [[ ! -s "$error_log" ]]; then
-        rm -f "$error_log" 2>/dev/null || true
+        rm -f "$error_log" 2> /dev/null || true
     fi
 
     return 0

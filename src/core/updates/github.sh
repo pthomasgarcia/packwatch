@@ -38,7 +38,7 @@ updates::_fetch_github_version() {
         updates::trigger_hooks ERROR_HOOKS "$app_name" "{\"phase\": \"check\", \"error_type\": \"SYSTEM_ERROR\", \"message\": \"Failed to create temp file.\"}"
         return 1
     fi
-    printf '%s' "$latest_release_json" >"$latest_release_json_path"
+    printf '%s' "$latest_release_json" > "$latest_release_json_path"
 
     # Parse version from the temp file (function expects a file path)
     local latest_version
@@ -137,13 +137,15 @@ updates::check_github_release() {
     interfaces::print_ui_line "  " "→ " "Checking GitHub releases for ${FORMAT_BOLD}$name${FORMAT_RESET}..."
 
     local installed_version
-    installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key" 2>/dev/null || echo "0.0.0")
+    installed_version=$("$UPDATES_GET_INSTALLED_VERSION_IMPL" "$app_key" 2> /dev/null || echo "0.0.0")
     installed_version=$(echo -n "$installed_version" | tr -d '\r' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
     local fetch_result
     fetch_result=$(updates::_fetch_github_version "$repo_owner" "$repo_name" "$name") || return 1
-    local latest_version=$(echo "$fetch_result" | head -n1)
-    local latest_release_json_path=$(echo "$fetch_result" | tail -n +2)
+    local latest_version
+    latest_version=$(echo "$fetch_result" | head -n1)
+    local latest_release_json_path
+    latest_release_json_path=$(echo "$fetch_result" | tail -n +2)
 
     updates::print_version_info "$installed_version" "GitHub Releases" "$latest_version"
 
@@ -156,10 +158,13 @@ updates::check_github_release() {
         # Correct Size Extraction
         local exact_size
         exact_size=$(jq -r --arg url "$download_url" '.assets[] | select(.browser_download_url == $url) | .size' "$latest_release_json_path")
-        [[ -n "$exact_size" && "$exact_size" != "null" ]] && app_config_ref[content_length]="$exact_size"
+        [[ -n "$exact_size" && "$exact_size" != "null" ]] && app_config_ref["content_length"]="$exact_size"
 
-        local expected_checksum=$(updates::_extract_release_checksum "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name" "$config_ref_name")
-        local download_filename=$(printf "$filename_pattern_template" "$latest_version")
+        local expected_checksum
+        expected_checksum=$(updates::_extract_release_checksum "$latest_release_json_path" "$filename_pattern_template" "$latest_version" "$name" "$config_ref_name")
+        local download_filename
+        # shellcheck disable=SC2059
+        download_filename=$(printf "$filename_pattern_template" "$latest_version")
 
         # --- CORRECTED ROUTING ---
         if [[ "$download_filename" == *.deb ]]; then

@@ -19,7 +19,6 @@
 readonly WARP_APT_REPO_URL='https://releases.warp.dev/linux/deb/dists/stable/main/binary-amd64/Packages'
 readonly WARP_PACKAGE_NAME='warp-terminal'
 
-
 # Validates presence of expected input value
 # $1: Value to test
 # $2: Name of expected field (for logging purposes)
@@ -134,7 +133,7 @@ warp::check() {
     latest_size="${rest##*|}"
 
     # Strip non-version components and normalize both sides
-    installed_version=$(versions::strip_prefix "$installed_version")
+    installed_version=$(versions::strip_prefix "$installed_version" | sed 's/^0\.//')
     latest_version=$(versions::strip_prefix "$raw_version" | sed 's/^0\.//')
 
     loggers::debug "WARP: installed='$installed_version' latest='$latest_version' base_url='$download_url_base'"
